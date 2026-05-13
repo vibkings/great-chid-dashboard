@@ -2967,17 +2967,19 @@ function renderInvoiceItems(){
   }
   var rows=invoiceItems.map(function(l,i){
     var subtotal=l.price*l.qty;
-    var invItem=DB.inventory.find(function(i){return i.id==l.itemId;});
+    var invItem=DB.inventory.find(function(inv){return inv.id==l.itemId;});
     var stockQty=invItem?invItem.qty:0;
     var willSupply=Math.min(l.qty,Math.max(0,stockQty));
     var willPend=l.qty-willSupply;
-    var stockBadge=willPend>0
-      ?'<div style="font-size:10px;margin-top:2px"><span style="color:#16a34a">✅ '+willSupply+' supply</span> <span style="color:#dc2626">⏳ '+willPend+' pending</span></div>'
-      :'<div style="font-size:10px;color:#16a34a;margin-top:2px">✅ Full supply</div>';
+    var supplyCell=willPend>0
+      ?'<span style="color:#16a34a;font-weight:700">'+willSupply+'</span>'
+      +'<br><span style="font-size:10px;color:#dc2626">⏳ '+willPend+' pending</span>'
+      :'<span style="color:#16a34a;font-weight:700">'+willSupply+'</span><br><span style="font-size:10px;color:#16a34a">✅ Full</span>';
     return '<tr>'+
       '<td>'+(i+1)+'</td>'+
-      '<td><b>'+l.name+'</b>'+stockBadge+'</td>'+
-      '<td style="text-align:center">'+l.qty+'</td>'+
+      '<td><b>'+l.name+'</b></td>'+
+      '<td style="text-align:center;font-weight:700">'+l.qty+'</td>'+
+      '<td style="text-align:center">'+supplyCell+'</td>'+
       '<td style="text-align:right">'+fmt(l.price)+'</td>'+
       '<td style="text-align:right"><b>'+fmt(subtotal)+'</b></td>'+
       '<td style="text-align:right;color:var(--success);font-size:11px">'+fmt(l.profit)+'</td>'+
@@ -2988,7 +2990,8 @@ function renderInvoiceItems(){
     '<thead><tr>'+
       '<th style="width:32px">#</th>'+
       '<th>Item</th>'+
-      '<th style="text-align:center;width:60px">Qty</th>'+
+      '<th style="text-align:center;width:60px">Ordered</th>'+
+      '<th style="text-align:center;width:80px">Supply / Pending</th>'+
       '<th style="text-align:right;width:100px">Unit price</th>'+
       '<th style="text-align:right;width:110px">Subtotal</th>'+
       '<th style="text-align:right;width:90px">Profit</th>'+
