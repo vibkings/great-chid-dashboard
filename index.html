@@ -2748,7 +2748,7 @@ function printCustomerInvoice(invNum,custId){
   var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum&&s.custId==custId;});
   if(!invSales.length){alert('Invoice not found.');return;}
   var s0=invSales[0];
-  var d=new Date(s0.date),day=d.getDate(),mon=d.getMonth()+1,yr=d.getFullYear();
+  var d=new Date(s0.date);var day=isNaN(d.getTime())?new Date().getDate():d.getDate();var mon=isNaN(d.getTime())?new Date().getMonth()+1:d.getMonth()+1;var yr=isNaN(d.getTime())?new Date().getFullYear():d.getFullYear();
   var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+s.name+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:#fff5f5;color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var emptyRows='';var minRI=Math.max(12,invSales.length);for(var i=invSales.length;i<minRI;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
@@ -2886,9 +2886,9 @@ function buildInvoiceHTML(inv){
     '<div class="mr">'+
     '<div style="flex:1;margin-right:10px"><div style="font-size:9px;font-weight:600;margin-bottom:1px">Name:</div><div class="fl">'+inv.custName+'</div>'+
     '<div style="font-size:9px;font-weight:600;margin-top:6px;margin-bottom:1px">Address:</div><div class="fl">'+(inv.custAddr||'')+'</div></div>'+
-    '<div style="text-align:right"><div class="in">No: '+inv.year+'/I &nbsp;&nbsp;<span style="font-size:16px;font-weight:900">'+inv.invoiceNum+'</span></div>'+
+    '<div style="text-align:right"><div class="in">No: '+(inv.year&&!isNaN(inv.year)?inv.year:new Date().getFullYear())+'/ &nbsp;&nbsp;<span style="font-size:16px;font-weight:900">'+inv.invoiceNum+'</span></div>'+
     '<div class="dg" style="margin-top:4px"><div class="dh">DAY</div><div class="dh">MONTH</div><div class="dh">YEAR</div>'+
-    '<div class="dv">'+inv.day+'</div><div class="dv">'+inv.month+'</div><div class="dv">'+inv.year+'</div></div></div></div>'+
+    '<div class="dv">'+inv.day+'</div><div class="dv">'+inv.month+'</div><div class="dv">'+(inv.year&&!isNaN(inv.year)?inv.year:new Date().getFullYear())+'</div></div></div></div>'+
     '<table><thead>'+
       '<tr><td colspan="6" style="padding:0;border:none;background:transparent">'+
         // Continuation header shown on pages 2+ via thead repeat
