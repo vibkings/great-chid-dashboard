@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html  <button class=\'btn\' style=\'font-size:13px;padding:8px 14px;margin-left:10px;color:#6366f1;border-color:#a5b4fc\' onclick=\'resetFirebaseSetup()\'>🔧 Reconfigure Firebase</button>lang="en">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<!-- v29 - Second Branch (no Firebase pre-configured) -->
+<!-- v28 - Partial qty supply modal | Firebase via REST API (no SDK) -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Great Chid Electro — Business Dashboard v29 · Second Branch</title>
+<title>Great Chid Electro — Business Dashboard v28</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -243,20 +243,6 @@ input.inline-edit{border:1.5px solid var(--primary);border-radius:5px;padding:4p
 .vn-history-item{display:flex;align-items:center;gap:10px;padding:.5rem 0;border-top:1px solid var(--border2);font-size:12px;color:var(--text3)}
 .vn-history-ver{font-weight:700;color:var(--text2);min-width:35px}
 
-/* ===== SETUP SCREEN ===== */
-.setup-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#1a237e 0%,#0d47a1 50%,#1565c0 100%);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
-.setup-box{background:#fff;border-radius:16px;padding:36px;max-width:480px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,.35)}
-.setup-logo{text-align:center;margin-bottom:20px}
-.setup-title{font-size:20px;font-weight:800;color:#1a237e;text-align:center;margin-bottom:4px}
-.setup-sub{font-size:13px;color:#666;text-align:center;margin-bottom:24px}
-.setup-field{margin-bottom:14px}
-.setup-field label{display:block;font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
-.setup-field input{width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;font-family:monospace}
-.setup-field input:focus{border-color:#0d6efd;outline:none}
-.setup-field .hint{font-size:10px;color:#999;margin-top:3px}
-.setup-btn{width:100%;padding:12px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px}
-.setup-btn:hover{background:#0d47a1}
-.setup-skip{display:block;text-align:center;margin-top:12px;font-size:12px;color:#999;cursor:pointer;text-decoration:underline}
 /* ===== FIREBASE SYNC ===== */
 .fb-modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:99999;display:none}
 .fb-modal{background:var(--white);border-radius:14px;padding:2rem;width:520px;max-width:95vw;box-shadow:var(--shadow-lg)}
@@ -319,7 +305,7 @@ input.inline-edit{border:1.5px solid var(--primary);border-radius:5px;padding:4p
 var DB={
   users:[{id:1,name:'Admin',username:'admin',password:'admin123',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
-  adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],shopTransferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],
+  adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],
   warehouse:[],recycleBin:[],
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
@@ -388,17 +374,13 @@ function dateInRange(storedDateStr, fromStr, toStr){
 // FIREBASE SYNC — Pure REST API (no SDK, no external scripts)
 // Works from file://, offline-first, no CDN dependency
 // ============================================================
-// ── Firebase config loaded from localStorage (set on first run) ──
-(function(){
-  var cfg={};
-  try{cfg=JSON.parse(localStorage.getItem('gce_v29_firebase_cfg')||'{}');}catch(e){}
-  window.GCE_PROJECT_ID = cfg.projectId || '';
-  window.GCE_API_KEY    = cfg.apiKey    || '';
-  window.GCE_DOC_PATH   = cfg.docPath   || 'gce_business/data';
-  window.GCE_REST_BASE  = GCE_PROJECT_ID ? 'https://firestore.googleapis.com/v1/projects/'+GCE_PROJECT_ID+'/databases/(default)/documents/' : '';
-  window.GCE_DOC_URL    = GCE_REST_BASE ? GCE_REST_BASE + GCE_DOC_PATH + '?key=' + GCE_API_KEY : '';
-  window.STORAGE_KEY    = cfg.storageKey || 'gce_v29_data';
-}());
+var GCE_PROJECT_ID   = 'new-great-chid-dashboard';
+var GCE_API_KEY      = 'AIzaSyDtSPRgy3EVf9SdPGUj1fd2xxfOpYjzRvU';
+var GCE_DOC_PATH     = 'gce_business/data';
+var GCE_REST_BASE    = 'https://firestore.googleapis.com/v1/projects/' + GCE_PROJECT_ID + '/databases/(default)/documents/';
+var GCE_DOC_URL      = GCE_REST_BASE + GCE_DOC_PATH + '?key=' + GCE_API_KEY;
+
+var STORAGE_KEY      = 'gce_business_data';
 var FB_DEVICE_ID     = 'dev_' + Math.random().toString(36).slice(2, 9);
 
 var fbConfigured     = true;   // REST always "configured"
@@ -775,7 +757,6 @@ function applySnapshot(snapshot) {
   DB.adjLog = snapshot.adjLog || [];
   DB.salesReturns = snapshot.salesReturns || [];
   DB.transferLog = snapshot.transferLog || [];
-  DB.shopTransferLog = snapshot.shopTransferLog || [];
   DB.warehouse = snapshot.warehouse || [];
   DB.stockCounts = snapshot.stockCounts || [];
   DB.banks = snapshot.banks || DB.banks;
@@ -797,7 +778,7 @@ function buildSnapshot() {
     pendingDeliveries: DB.pendingDeliveries || [],
     suppliers: DB.suppliers, customers: DB.customers,
     creditCustomers: DB.creditCustomers, adjLog: DB.adjLog, salesReturns: DB.salesReturns,
-    transferLog: DB.transferLog, shopTransferLog: DB.shopTransferLog || [], warehouse: DB.warehouse,
+    transferLog: DB.transferLog, warehouse: DB.warehouse,
     stockCounts: DB.stockCounts, banks: DB.banks,
     posTerminals: DB.posTerminals, categories: DB.categories,
     expenseCats: DB.expenseCats,
@@ -1299,56 +1280,6 @@ function buildVersionNotes(){
   '</div>';
 }
 
-// ============================================================
-// SHOP HELPERS
-// ============================================================
-function activeShop(){return DB.activeShopId||'shop1';}
-function isAllShops(){return DB.activeShopId==='all';}
-var DEFAULT_SHOPS=[{id:'shop1',name:'Main Branch'},{id:'shop2',name:'Second Branch'}];
-function getShops(){return (DB.shops&&DB.shops.length)?DB.shops:DEFAULT_SHOPS;}
-function shopName(id){
-  if(!id||id==='all')return 'Combined view';
-  var s=getShops().find(function(s){return s.id===id;});
-  return s?s.name:(id==='shop1'?'Main Branch':id==='shop2'?'Second Branch':id);
-}
-function canSeeAllShops(){
-  var u=DB.currentUser;
-  return u&&(u.role==='admin'||u.shopId==='all');
-}
-function toggleShopMenu(){
-  var m=document.getElementById('shop-switcher-menu');
-  if(!m)return;
-  var isOpen=m.style.display==='block';
-  m.style.display=isOpen?'none':'block';
-  if(!isOpen){
-    setTimeout(function(){
-      document.addEventListener('click',function _close(e){
-        var wrap=document.getElementById('shop-switcher-wrap');
-        if(wrap&&!wrap.contains(e.target)){
-          var m2=document.getElementById('shop-switcher-menu');
-          if(m2)m2.style.display='none';
-          document.removeEventListener('click',_close);
-        }
-      });
-    },0);
-  }
-}
-function switchShop(sid){
-  if(!canSeeAllShops())return;
-  DB.activeShopId=sid;
-  var m=document.getElementById('shop-switcher-menu');
-  if(m)m.style.display='none';
-  saveData();
-  renderApp();
-}
-function assignUserShop(userId,shopId){
-  var u=DB.users.find(function(x){return x.id==userId;});
-  if(!u)return;
-  u.shopId=shopId;
-  saveData();
-  renderApp();
-}
-
 function renderApp(){
   if(!DB.currentUser){renderAuth();return;}
   saveData();
@@ -1363,21 +1294,13 @@ function renderApp(){
   if(noCostItems.length&&canDo('inventory'))bannerParts.push(noCostItems.length+' item(s) with no cost price (cannot be sold)');
   if(belowCostItems.length&&canDo('inventory'))bannerParts.push(belowCostItems.length+' item(s) selling below cost price');
   var banner=bannerParts.length?'<div class="reminder-banner"><span>⚠️ <strong>Stock alert:</strong> '+bannerParts.join(' · ')+'</span><button class="btn sm" style="background:#fff;color:var(--danger);border-color:#f5c6cb" onclick="switchTab(\'inventory\')">View</button></div>':'';
-  if(isAllShops())banner='<div class="reminder-banner" style="background:#6366f1;border-color:#6366f1"><span>📊 <strong>Combined view</strong> — Showing aggregated data across all branches. Switch to a specific shop to manage operations.</span></div>';
   var lowCount=low.length+noCostItems.length+belowCostItems.length;
   var navHtml='';
-  var allSections=[
+  var sections=[
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases']},
     {label:'Finance',tabs:['expenses','finance','creditcust','reports']},
     {label:'Management',tabs:['suppliers','customers','settings','users','recyclebin']},
   ];
-  var combinedOnlyTabs=['finance','customers','creditcust','reports','settings','users'];
-  var sections;
-  if(isAllShops()){
-    sections=allSections.map(function(sec){return {label:sec.label,tabs:sec.tabs.filter(function(t){return combinedOnlyTabs.indexOf(t)>-1;})};}).filter(function(sec){return sec.tabs.length>0;});
-  } else {
-    sections=allSections;
-  }
   // Auto-purge bin items older than 30 days
   autoPurgeBin();
   var binCount=(DB.recycleBin||[]).length;
@@ -1431,17 +1354,6 @@ function renderApp(){
           '<div class="save-dot"><div class="save-dot-circle"></div><span>Saved</span></div>'+
         '</div>'+
         '<div class="topbar-actions">'+
-          (canSeeAllShops()?
-            '<div style="position:relative" id="shop-switcher-wrap">'+
-              '<button id="shop-switcher-btn" onclick="toggleShopMenu()" style="background:'+(DB.activeShopId==='all'?'#6366f1':DB.activeShopId==='shop2'?'#15803d':'#1a237e')+';color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px">'+(DB.activeShopId==='all'?'Combined view':shopName(DB.activeShopId||'shop1'))+' ▾</button>'+
-              '<div id="shop-switcher-menu" style="display:none;position:absolute;right:0;top:110%;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:190px;z-index:999;overflow:hidden">'+
-                getShops().map(function(s){
-                  return '<button onclick="switchShop(\''+s.id+'\')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:'+(DB.activeShopId===s.id?'#eff6ff':'#fff')+';cursor:pointer;font-size:13px;font-weight:'+(DB.activeShopId===s.id?'700':'400')+';border-bottom:1px solid #f1f3f5">'+(DB.activeShopId===s.id?'<b>✓ </b>':'')+s.name+'</button>';
-                }).join('')+
-                '<button onclick="switchShop(\'all\')" style="display:block;width:100%;text-align:left;padding:9px 14px;border:none;background:'+(DB.activeShopId==='all'?'#f0fdf4':'#fff')+';cursor:pointer;font-size:13px;font-weight:'+(DB.activeShopId==='all'?'700':'400')+'">📊 '+(DB.activeShopId==='all'?'✓ ':'')+' Combined view</button>'+
-              '</div>'+
-            '</div>'
-          :'')+
           '<div id="sync-indicator" class="sync-badge local">🔵 Connecting...</div>'+
           '<button class="btn sm" onclick="showFirebaseDiag()" title="Firebase diagnostics" style="font-size:11px;padding:4px 8px;color:var(--text3)">🔍 Sync</button>'+
           '<button class="btn sm" onclick="exportBackup()" title="Export data backup">&#11015; Backup</button>'+
@@ -1457,7 +1369,6 @@ function renderApp(){
   renderPanel();
 }
 function switchTab(t){activeTab=t;renderApp();}
-function switchShopAndTab(sid,tab){DB.activeShopId=sid;if(tab)activeTab=tab;saveData();renderApp();}
 function switchStockSub(s){activeStockSub=s;if(s!=='catcount')activeCountCat='';renderApp();}
 function switchCustSub(s){activeCustSub=s;renderApp();}
 function showTransferModal(direction){
@@ -1546,153 +1457,6 @@ function processTransfer(direction){
   renderApp();
   alert('✅ Transfer complete!\n\n'+transferred.map(function(t){return t.name+' × '+t.qty;}).join('\n')+'\n\n'+fromLabel+' → '+toLabel);
 }
-// ============================================================
-// SHOP-TO-SHOP TRANSFER
-// ============================================================
-function showShopTransferModal(){
-  var shops=DB.shops||[{id:'shop1',name:'Main Branch'},{id:'shop2',name:'Second Branch'}];
-  if(shops.length<2){alert('You need at least two shops configured.');return;}
-  var old=document.getElementById('shop-tr-modal');if(old)old.remove();
-  var m=document.createElement('div');
-  m.id='shop-tr-modal';
-  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem';
-  m.onclick=function(e){if(e.target===m)m.remove();};
-  var shopOpts=shops.map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('');
-  m.innerHTML=
-    '<div style="background:var(--white);border-radius:var(--radius-lg);width:100%;max-width:520px;box-shadow:var(--shadow-lg);overflow:hidden">'+
-      '<div style="background:#15803d;padding:1rem 1.25rem;display:flex;justify-content:space-between;align-items:center">'+
-        '<div><div style="font-size:14px;font-weight:700;color:#fff">🏪 → 🏪 Shop-to-Shop Transfer</div>'+
-        '<div style="font-size:11px;color:rgba(255,255,255,.8);margin-top:2px">Transfer goods between branches</div></div>'+
-        '<button onclick="document.getElementById(\'shop-tr-modal\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>'+
-      '</div>'+
-      '<div style="padding:1.25rem">'+
-        '<div class="fg c2" style="margin-bottom:1rem">'+
-          '<div class="form-group" style="margin:0">'+
-            '<label>From shop <span style="color:var(--danger)">*</span></label>'+
-            '<select id="str-from" onchange="loadShopTrItems()" style="margin-top:4px"><option value="">Select...</option>'+shopOpts+'</select>'+
-          '</div>'+
-          '<div class="form-group" style="margin:0">'+
-            '<label>To shop <span style="color:var(--danger)">*</span></label>'+
-            '<select id="str-to" style="margin-top:4px"><option value="">Select...</option>'+shopOpts+'</select>'+
-          '</div>'+
-        '</div>'+
-        '<div class="form-group">'+
-          '<label>Item to transfer <span style="color:var(--danger)">*</span></label>'+
-          '<div style="position:relative;margin-top:4px">'+
-            '<input type="text" id="str-item-search" placeholder="Search item..." oninput="filterShopTrItems(this.value)" autocomplete="off" style="width:100%">'+
-            '<input type="hidden" id="str-item-id">'+
-            '<div id="str-item-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);max-height:200px;overflow-y:auto;z-index:300;margin-top:2px"></div>'+
-          '</div>'+
-          '<div id="str-item-info" style="font-size:11px;color:#666;margin-top:3px;min-height:14px"></div>'+
-        '</div>'+
-        '<div class="fg c2">'+
-          '<div class="form-group" style="margin:0">'+
-            '<label>Qty to transfer <span style="color:var(--danger)">*</span></label>'+
-            '<input type="number" id="str-qty" min="1" placeholder="0" style="margin-top:4px;font-size:15px;font-weight:700;text-align:center">'+
-          '</div>'+
-          '<div class="form-group" style="margin:0">'+
-            '<label>Waybill No. <span style="color:var(--danger)">*</span></label>'+
-            '<input type="text" id="str-waybill" placeholder="e.g. WB-2026-001" style="margin-top:4px">'+
-          '</div>'+
-        '</div>'+
-        '<div class="form-group">'+
-          '<label>Note <span style="font-size:10px;color:var(--text3)">(optional)</span></label>'+
-          '<input type="text" id="str-note" placeholder="e.g. Emergency restock for Second Branch" style="margin-top:4px">'+
-        '</div>'+
-        '<div style="display:flex;gap:8px;margin-top:4px">'+
-          '<button class="btn" onclick="document.getElementById(\'shop-tr-modal\').remove()">Cancel</button>'+
-          '<button class="btn primary" style="background:#15803d;border-color:#15803d" onclick="processShopTransfer()">🏪 Confirm Shop Transfer</button>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
-  document.body.appendChild(m);
-}
-var _shopTrItems=[];
-function loadShopTrItems(){
-  var fromId=document.getElementById('str-from');
-  if(!fromId||!fromId.value)return;
-  _shopTrItems=DB.inventory.filter(function(i){return (!i.shopId||i.shopId===fromId.value)&&i.qty>0;});
-  document.getElementById('str-item-search').value='';
-  document.getElementById('str-item-id').value='';
-  document.getElementById('str-item-info').innerHTML='';
-  filterShopTrItems('');
-}
-function filterShopTrItems(term){
-  var dd=document.getElementById('str-item-dropdown');
-  if(!dd)return;
-  var items=term?_shopTrItems.filter(function(i){return i.name.toLowerCase().indexOf(term.toLowerCase())>-1;}):_shopTrItems;
-  if(!items.length){
-    dd.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text3);text-align:center">'+(term?'No items match':'Select a From shop first')+'</div>';
-    dd.style.display='block';return;
-  }
-  dd.innerHTML=items.map(function(i){
-    return '<div onclick="selectShopTrItem('+i.id+')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f3f5;display:flex;justify-content:space-between" onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'\'">'+
-      '<b>'+i.name+'</b>'+
-      '<span style="color:#15803d;font-weight:700;font-size:11px">'+i.qty+' in stock</span>'+
-    '</div>';
-  }).join('');
-  dd.style.display='block';
-  setTimeout(function(){
-    document.addEventListener('click',function _close(e){
-      var dd2=document.getElementById('str-item-dropdown');
-      var inp=document.getElementById('str-item-search');
-      if(dd2&&!dd2.contains(e.target)&&e.target!==inp){dd2.style.display='none';document.removeEventListener('click',_close);}
-    });
-  },0);
-}
-function selectShopTrItem(id){
-  var item=DB.inventory.find(function(i){return i.id==id;});
-  if(!item)return;
-  document.getElementById('str-item-id').value=item.id;
-  document.getElementById('str-item-search').value=item.name;
-  document.getElementById('str-item-info').innerHTML='<span style="color:#15803d;font-weight:600">'+item.qty+' in stock</span>';
-  document.getElementById('str-item-dropdown').style.display='none';
-  var qtyEl=document.getElementById('str-qty');
-  if(qtyEl){qtyEl.max=item.qty;qtyEl.focus();}
-}
-function processShopTransfer(){
-  var fromId=(document.getElementById('str-from').value||'').trim();
-  var toId=(document.getElementById('str-to').value||'').trim();
-  var itemId=document.getElementById('str-item-id').value;
-  var qty=parseInt(document.getElementById('str-qty').value)||0;
-  var waybill=(document.getElementById('str-waybill').value||'').trim();
-  var note=(document.getElementById('str-note').value||'').trim();
-  var shops=DB.shops||[{id:'shop1',name:'Main Branch'},{id:'shop2',name:'Second Branch'}];
-  if(!fromId){alert('Select the From shop.');return;}
-  if(!toId){alert('Select the To shop.');return;}
-  if(fromId===toId){alert('From and To shop cannot be the same.');return;}
-  if(!itemId){alert('Select an item to transfer.');return;}
-  if(qty<=0){alert('Enter a valid quantity.');return;}
-  if(!waybill){alert('Enter a Waybill Number.');return;}
-  var item=DB.inventory.find(function(i){return i.id==itemId;});
-  if(!item){alert('Item not found.');return;}
-  if(qty>item.qty){alert('Not enough stock. Available: '+item.qty);return;}
-  var fromShopName=shops.find(function(s){return s.id===fromId;})|{name:fromId};
-  var toShopName=shops.find(function(s){return s.id===toId;})||{name:toId};
-  // Deduct from source shop inventory
-  item.qty=Math.max(0,item.qty-qty);
-  // We record the transfer — the receiving shop will add to their inventory when they accept
-  if(!DB.shopTransferLog)DB.shopTransferLog=[];
-  DB.shopTransferLog.push({
-    id:uid(),date:new Date().toLocaleDateString(),
-    fromShopId:fromId,fromShop:fromShopName.name,
-    toShopId:toId,toShop:toShopName.name,
-    itemId:item.id,itemName:item.name,itemCat:item.cat||'',
-    qty:qty,waybill:waybill,note:note,
-    status:'sent',by:DB.currentUser.name
-  });
-  saveData();
-  document.getElementById('shop-tr-modal').remove();
-  renderApp();
-  showConfirm({
-    type:'success',
-    title:'Transfer recorded!',
-    msg:'',
-    detail:qty+' × '+item.name+' transferred from '+fromShopName.name+' to '+toShopName.name+'.\nWaybill: '+waybill+'\n\nStock deducted from '+fromShopName.name+'. The receiving branch should confirm receipt on their dashboard.',
-    confirmLabel:'OK',cancelLabel:null
-  },function(){});
-}
-
 var whSearch='';
 function buildWarehouse(){
   if(!canDo('warehouse'))return '<div class="empty">Access denied. Ask admin to grant Warehouse permission.</div>';
@@ -1737,7 +1501,6 @@ function buildWarehouse(){
     '<div style="display:flex;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap">'+
       '<button class="btn primary" onclick="showTransferModal(\'to_warehouse\')" style="font-size:13px;padding:10px 20px">📦 → 🏭 &nbsp;Shop to Warehouse</button>'+
       '<button class="btn" onclick="showTransferModal(\'to_shop\')" style="font-size:13px;padding:10px 20px;color:var(--primary);border-color:#b6d4fe">🏭 → 📦 &nbsp;Warehouse to Shop</button>'+
-      '<button class="btn" onclick="showShopTransferModal()" style="font-size:13px;padding:10px 20px;color:#15803d;border-color:#86efac;font-weight:700">🏪 → 🏪 &nbsp;Shop to Shop</button>'+
     '</div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">'+
       '<p class="sec-title" style="margin:0">Warehouse Stock</p>'+
@@ -1750,24 +1513,6 @@ function buildWarehouse(){
     '<div class="tbl-wrap"><table id="wh-stock-table"><thead><tr><th>Item</th><th>Category</th><th>Qty</th><th>Min Qty</th><th>Cost</th><th>Value</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:1.5rem 0 8px">'+
       '<p class="sec-title" style="margin:0">Transfer History ('+DB.transferLog.length+' records)</p>'+
-      (DB.shopTransferLog&&DB.shopTransferLog.length?
-        (function(){
-          var stRows=DB.shopTransferLog.slice().reverse().map(function(t){
-            return '<tr>'+
-              '<td>'+t.date+'</td>'+
-              '<td><span style="background:#dbeafe;color:#1e40af;border-radius:10px;font-size:10px;padding:2px 8px;font-weight:700">'+t.fromShop+'</span>'+
-              ' → <span style="background:#dcfce7;color:#15803d;border-radius:10px;font-size:10px;padding:2px 8px;font-weight:700">'+t.toShop+'</span></td>'+
-              '<td>'+t.itemName+'</td>'+
-              '<td style="text-align:center;font-weight:700">'+t.qty+'</td>'+
-              '<td>'+t.waybill+'</td>'+
-              '<td style="font-size:11px;color:#666">'+(t.note||'-')+'</td>'+
-              '<td>'+t.by+'</td></tr>';
-          }).join('');
-          return '<p class="sec-title" style="margin-top:1.5rem">🏪 Shop-to-Shop Transfer Log ('+DB.shopTransferLog.length+' records)</p>'+
-            '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Route</th><th>Item</th><th style="text-align:center">Qty</th><th>Waybill</th><th>Note</th><th>By</th></tr></thead>'+
-            '<tbody>'+stRows+'</tbody></table></div>';
-        }()):'')+
-
       '<div style="display:flex;gap:6px">'+
         '<button class="btn sm" onclick="window._whDirFilter=\'all\';renderApp()" style="'+(filterDir==='all'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+'">All</button>'+
         '<button class="btn sm" onclick="window._whDirFilter=\'in\';renderApp()" style="'+(filterDir==='in'?'background:var(--success);color:#fff;border-color:var(--success)':'')+'">⬇ In</button>'+
@@ -3526,28 +3271,22 @@ function submitInvoice(){
         // ── Deposit-as-collateral check ──
         var custDepBal=(DB.deposits||[]).filter(function(d){return String(d.custId)===String(custId);}).reduce(function(a,d){return a+d.amount;},0);
         if(custDepBal>0&&creditLimit===0){
-          // Customer has deposit but no credit limit — allow credit up to deposit balance
+          // Has deposit but no credit limit — allow credit only up to deposit balance
           if(finalGrandTotal>custDepBal){
-            showConfirm({
-              type:'warning',
-              title:'Deposit limit exceeded',
+            showConfirm({type:'warning',title:'Deposit limit exceeded',
               msg:rc.name+' has no credit limit but has a deposit balance.',
               detail:'Deposit balance: '+fmt(custDepBal)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nExceeds deposit by: '+fmt(finalGrandTotal-custDepBal)+'\n\nCredit cannot exceed the deposit balance.',
-              confirmLabel:'OK',cancelLabel:null
-            },function(){});
+              confirmLabel:'OK',cancelLabel:null},function(){});
             return;
           }
         } else if(custDepBal>0&&creditLimit>0){
-          // Customer has both deposit and credit limit — effective limit is creditLimit + depositBalance
+          // Has both deposit and credit limit — effective limit = credit limit + deposit
           var effectiveLimit=creditLimit+custDepBal;
           if((currentOwed+finalGrandTotal)>effectiveLimit){
-            showConfirm({
-              type:'warning',
-              title:'Credit + Deposit limit exceeded',
+            showConfirm({type:'warning',title:'Credit + Deposit limit exceeded',
               msg:rc.name+' has a credit limit and deposit balance.',
               detail:'Credit limit: '+fmt(creditLimit)+'\nDeposit balance: '+fmt(custDepBal)+'\nEffective limit: '+fmt(effectiveLimit)+'\nCurrently owes: '+fmt(currentOwed)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nOver by: '+fmt((currentOwed+finalGrandTotal)-effectiveLimit),
-              confirmLabel:'OK',cancelLabel:null
-            },function(){});
+              confirmLabel:'OK',cancelLabel:null},function(){});
             return;
           }
         } else {
@@ -5324,21 +5063,11 @@ function buildUsers(){
     return '<div class="card">'+
       '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+
         '<div style="width:42px;height:42px;border-radius:50%;background:'+ac[0]+';color:'+ac[1]+';display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">'+initials(usr.name)+'</div>'+
-        '<div><div style="font-size:14px;font-weight:700">'+usr.name+'</div><div style="font-size:11.5px;color:var(--text3)">@'+usr.username+' - '+(usr.role==='admin'?'<span style="color:var(--primary);font-weight:600">Administrator</span>':'Staff')+(usr.role!=='admin'?' - <span style="background:#dcfce7;color:#15803d;font-weight:700;font-size:10px;padding:2px 7px;border-radius:10px">'+(function(){var s=(DB.shops||[]).find(function(x){return x.id===usr.shopId;});return s?s.name:'No shop';})()+'</span>':' - <span style="background:#dbeafe;color:#1e40af;font-weight:700;font-size:10px;padding:2px 7px;border-radius:10px">All shops</span>')+'</div></div>'+
+        '<div><div style="font-size:14px;font-weight:700">'+usr.name+'</div><div style="font-size:11.5px;color:var(--text3)">@'+usr.username+' &nbsp;·&nbsp; '+(usr.role==='admin'?'<span style="color:var(--primary);font-weight:600">Administrator</span>':'Staff')+'</div></div>'+
         (isAdmin()&&usr.id!==u.id?'<button class="btn danger sm" style="margin-left:auto" onclick="removeUser('+usr.id+')">&#10005; Remove</button>':'')+
       '</div>'+
-      (usr.role!=='admin'?
-        '<div>'+
-          '<div style="margin-bottom:12px">'+
-            '<label style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Assigned shop</label>'+
-            '<select onchange="assignUserShop('+usr.id+',this.value)" style="font-size:13px;padding:7px 10px;border-radius:6px;border:1px solid var(--border);min-width:200px">'+
-            (DB.shops||[{id:'shop1',name:'Main Branch'},{id:'shop2',name:'Second Branch'}]).map(function(s){return '<option value="'+s.id+'"'+(s.id===(usr.shopId||'shop1')?' selected':'')+'>'+s.name+'</option>';}).join('')+
-            '</select>'+
-          '</div>'+
-          '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Permissions</div>'+
-          '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0 12px">'+permHtml+'</div>'+
-        '</div>':
-        '<div style="font-size:12px;color:var(--text3);font-style:italic">Administrators have full access to all features and all shops.</div>')+
+      (usr.role!=='admin'?'<div><div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Permissions</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0 12px">'+permHtml+'</div></div>':
+        '<div style="font-size:12px;color:var(--text3);font-style:italic">Administrators have full access to all features.</div>')+
     '</div>';
   }).join('');
   var profileSection='<div class="card"><p style="font-size:14px;font-weight:700;margin-bottom:1rem">&#128100; My profile</p>'+
@@ -5352,10 +5081,6 @@ function buildUsers(){
     '<div class="form-group"><label>Username</label><input type="text" id="nu-user" placeholder="e.g. john"></div></div>'+
     '<div class="fg c2"><div class="form-group"><label>Password</label><input type="password" id="nu-pass" placeholder="Password"></div>'+
     '<div class="form-group"><label>Role</label><select id="nu-role"><option value="staff">Staff</option><option value="admin">Admin</option></select></div></div>'+
-    '<div class="form-group"><label>Assigned shop</label>'+
-    '<select id="nu-shop" style="margin-top:4px">'+
-    (DB.shops||[{id:'shop1',name:'Main Branch'},{id:'shop2',name:'Second Branch'}]).map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('')+
-    '</select></div>'+
     '<button class="btn primary" onclick="addUser()">+ Add user</button></div>':'';
   return profileSection+addUserSection+'<p class="sec-title">All users ('+DB.users.length+')</p>'+userCards;
 }
@@ -5374,11 +5099,9 @@ function addUser(){
   if(!name||!uname||!pass){alert('All fields required.');return;}
   var dup=DB.users.find(function(x){return x.username===uname;});if(dup){alert('Username already taken.');return;}
   var perms={};Object.keys(ALL_PERMS).forEach(function(p){perms[p]=false;});
-  var shopId=document.getElementById('nu-shop')?document.getElementById('nu-shop').value:'shop1';
-  DB.users.push({id:uid(),name:name,username:uname,password:pass,role:role,shopId:shopId,permissions:perms});
+  DB.users.push({id:uid(),name:name,username:uname,password:pass,role:role,permissions:perms});
   saveData();renderApp();
 }
-
 function removeUser(id){
   var u=DB.users.find(function(x){return x.id===id;});
   if(!u)return;
@@ -5714,93 +5437,7 @@ function supplyAllNow(invoiceNum){
 // ============================================================
 // STARTUP
 // ============================================================
-// ============================================================
-// FIRST-RUN FIREBASE SETUP SCREEN
-// ============================================================
-function isFirebaseConfigured(){
-  try{
-    var cfg=JSON.parse(localStorage.getItem('gce_v29_firebase_cfg')||'{}');
-    return !!(cfg.projectId&&cfg.apiKey);
-  }catch(e){return false;}
-}
-function showSetupScreen(){
-  var ov=document.createElement('div');
-  ov.id='setup-overlay';
-  ov.className='setup-overlay';
-  ov.innerHTML=
-    '<div class="setup-box">'+
-      '<div class="setup-logo">'+
-        '<svg width="56" height="62" viewBox="0 0 72 80" fill="none" xmlns="http://www.w3.org/2000/svg">'+
-          '<path d="M36 2 L70 14 L70 48 Q70 68 36 78 Q2 68 2 48 L2 14 Z" fill="#c0392b" stroke="#fff" stroke-width="1.5"/>'+
-          '<text x="36" y="48" text-anchor="middle" fill="#ffd700" font-size="20" font-weight="900" font-family="Arial">GCE</text>'+
-        '</svg>'+
-      '</div>'+
-      '<div class="setup-title">Firebase Setup</div>'+
-      '<div class="setup-sub">Connect this dashboard to your Firebase project.<br>This only needs to be done once on this device.</div>'+
-      '<div class="setup-field">'+
-        '<label>Firebase Project ID</label>'+
-        '<input id="setup-project-id" type="text" placeholder="e.g. my-shop-firebase">'+
-        '<div class="hint">Found in Firebase Console → Project Settings</div>'+
-      '</div>'+
-      '<div class="setup-field">'+
-        '<label>API Key</label>'+
-        '<input id="setup-api-key" type="text" placeholder="AIzaSy...">'+
-        '<div class="hint">Firebase Console → Project Settings → Web API Key</div>'+
-      '</div>'+
-      '<div class="setup-field">'+
-        '<label>Firestore Document Path</label>'+
-        '<input id="setup-doc-path" type="text" value="gce_business/data" placeholder="collection/document">'+
-        '<div class="hint">Leave as default unless you changed it</div>'+
-      '</div>'+
-      '<div class="setup-field">'+
-        '<label>Local Storage Key (unique name for this shop)</label>'+
-        '<input id="setup-storage-key" type="text" value="gce_v29_data" placeholder="e.g. gce_branch2_data">'+
-        '<div class="hint">Use a unique name so data does not mix with other branches</div>'+
-      '</div>'+
-      '<button class="setup-btn" onclick="saveFirebaseSetup()">🔗 Connect & Start</button>'+
-      '<button class="setup-btn" onclick="skipFirebaseSetup()" style="background:#fff;color:#1a237e;border:2px solid #1a237e;margin-top:8px">🔓 Login without Firebase (local only)</button>'+
-      '<span class="setup-skip" onclick="skipFirebaseSetup()">Skip for now (offline / local only)</span>'+
-    '</div>';
-  document.body.appendChild(ov);
-  setTimeout(function(){var el=document.getElementById('setup-project-id');if(el)el.focus();},100);
-}
-function saveFirebaseSetup(){
-  var pid=(document.getElementById('setup-project-id').value||'').trim();
-  var key=(document.getElementById('setup-api-key').value||'').trim();
-  var doc=(document.getElementById('setup-doc-path').value||'gce_business/data').trim();
-  var sk=(document.getElementById('setup-storage-key').value||'gce_v29_data').trim();
-  if(!pid||!key){alert('Please enter both the Project ID and API Key.');return;}
-  var cfg={projectId:pid,apiKey:key,docPath:doc,storageKey:sk};
-  localStorage.setItem('gce_v29_firebase_cfg',JSON.stringify(cfg));
-  // Apply immediately
-  window.GCE_PROJECT_ID=pid;
-  window.GCE_API_KEY=key;
-  window.GCE_DOC_PATH=doc;
-  window.GCE_REST_BASE='https://firestore.googleapis.com/v1/projects/'+pid+'/databases/(default)/documents/';
-  window.GCE_DOC_URL=window.GCE_REST_BASE+doc+'?key='+key;
-  window.STORAGE_KEY=sk;
-  var ov=document.getElementById('setup-overlay');if(ov)ov.remove();
-  loadData();
-}
-function skipFirebaseSetup(){
-  // Mark as skipped so we don't show again this session
-  sessionStorage.setItem('gce_setup_skipped','1');
-  var ov=document.getElementById('setup-overlay');if(ov)ov.remove();
-  loadData();
-}
-function resetFirebaseSetup(){
-  if(!confirm('This will clear the Firebase config from this device and show the setup screen on next reload. Continue?'))return;
-  localStorage.removeItem('gce_v29_firebase_cfg');
-  location.reload();
-}
-
-window.onload=function(){
-  if(!isFirebaseConfigured()&&!sessionStorage.getItem('gce_setup_skipped')){
-    showSetupScreen();
-  } else {
-    loadData();
-  }
-};
+window.onload=function(){loadData();};
 
 </script>
 </body>
