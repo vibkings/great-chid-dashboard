@@ -1457,6 +1457,122 @@ function processTransfer(direction){
   renderApp();
   alert('✅ Transfer complete!\n\n'+transferred.map(function(t){return t.name+' × '+t.qty;}).join('\n')+'\n\n'+fromLabel+' → '+toLabel);
 }
+// ============================================================
+// WAREHOUSE — ADD EXISTING STOCK & EDIT MIN QTY
+// ============================================================
+function showAddWarehouseStockModal(){
+  var old=document.getElementById('wh-add-modal');if(old)old.remove();
+  var invOpts=DB.inventory.map(function(i){return '<option value="'+i.id+'">'+i.name+(i.cat?' ('+i.cat+')':'')+'</option>';}).join('');
+  var m=document.createElement('div');
+  m.id='wh-add-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem';
+  m.onclick=function(e){if(e.target===m)m.remove();};
+  m.innerHTML=
+    '<div style="background:var(--white);border-radius:var(--radius-lg);width:100%;max-width:500px;box-shadow:var(--shadow-lg);overflow:hidden">'+
+      '<div style="background:#15803d;padding:1rem 1.25rem;display:flex;justify-content:space-between;align-items:center">'+
+        '<div><div style="font-size:14px;font-weight:700;color:#fff">➕ Add Existing Warehouse Stock</div>'+
+        '<div style="font-size:11px;color:rgba(255,255,255,.8);margin-top:2px">Record goods already physically in the warehouse</div></div>'+
+        '<button onclick="document.getElementById(\'wh-add-modal\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>'+
+      '</div>'+
+      '<div style="padding:1.25rem">'+
+        '<div class="form-group">'+
+          '<label>Item <span style="color:var(--danger)">*</span></label>'+
+          '<div style="position:relative;margin-top:4px">'+
+            '<input type="text" id="wha-search" placeholder="Search inventory item..." oninput="filterWhaItems(this.value)" autocomplete="off" style="width:100%">'+
+            '<input type="hidden" id="wha-item-id">'+
+            '<div id="wha-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);max-height:200px;overflow-y:auto;z-index:300;margin-top:2px"></div>'+
+          '</div>'+
+          '<div id="wha-item-info" style="font-size:11px;color:#666;margin-top:3px;min-height:14px"></div>'+
+        '</div>'+
+        '<div class="fg c2">'+
+          '<div class="form-group" style="margin:0">'+
+            '<label>Qty in warehouse <span style="color:var(--danger)">*</span></label>'+
+            '<input type="number" id="wha-qty" min="1" placeholder="0" style="margin-top:4px;font-size:15px;font-weight:700;text-align:center">'+
+          '</div>'+
+          '<div class="form-group" style="margin:0">'+
+            '<label>Min qty (low stock alert)</label>'+
+            '<input type="number" id="wha-minqty" min="0" placeholder="e.g. 5" style="margin-top:4px;text-align:center">'+
+          '</div>'+
+        '</div>'+
+        '<div class="form-group">'+
+          '<label>Note <span style="font-size:10px;color:var(--text3)">(optional)</span></label>'+
+          '<input type="text" id="wha-note" placeholder="e.g. Opening stock, counted on hand..." style="margin-top:4px">'+
+        '</div>'+
+        '<div style="display:flex;gap:8px;margin-top:4px">'+
+          '<button class="btn" onclick="document.getElementById(\'wh-add-modal\').remove()">Cancel</button>'+
+          '<button class="btn primary" style="background:#15803d;border-color:#15803d" onclick="saveAddWarehouseStock()">➕ Add to Warehouse</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(m);
+  setTimeout(function(){var el=document.getElementById('wha-search');if(el)el.focus();},50);
+}
+function filterWhaItems(term){
+  var dd=document.getElementById('wha-dropdown');if(!dd)return;
+  var items=term?DB.inventory.filter(function(i){return i.name.toLowerCase().indexOf(term.toLowerCase())>-1;}):DB.inventory.slice(0,40);
+  if(!items.length){dd.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text3);text-align:center">No items found</div>';dd.style.display='block';return;}
+  dd.innerHTML=items.slice(0,50).map(function(i){
+    var inWh=DB.warehouse.find(function(w){return w.id===i.id;});
+    return '<div onclick="selectWhaItem('+i.id+')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f3f5;display:flex;justify-content:space-between;align-items:center" onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'\'">'+
+      '<span><b>'+i.name+'</b>'+(i.cat?' <span style="font-size:10px;color:#888">'+i.cat+'</span>':'')+'</span>'+
+      '<span style="font-size:11px;color:'+(inWh?'#15803d':'#6c757d')+';white-space:nowrap;margin-left:10px">'+(inWh?'In warehouse: '+inWh.qty:'Not in warehouse')+'</span>'+
+    '</div>';
+  }).join('');
+  dd.style.display='block';
+  setTimeout(function(){
+    document.addEventListener('click',function _c(e){
+      var d=document.getElementById('wha-dropdown');var inp=document.getElementById('wha-search');
+      if(d&&!d.contains(e.target)&&e.target!==inp){d.style.display='none';document.removeEventListener('click',_c);}
+    });
+  },0);
+}
+function selectWhaItem(id){
+  var item=DB.inventory.find(function(i){return i.id==id;});if(!item)return;
+  var inWh=DB.warehouse.find(function(w){return w.id===id;});
+  document.getElementById('wha-item-id').value=item.id;
+  document.getElementById('wha-search').value=item.name;
+  document.getElementById('wha-item-info').innerHTML=
+    '<span style="color:#15803d;font-weight:600">Shop stock: '+item.qty+'</span>'+
+    (inWh?' &nbsp;·&nbsp; <span style="color:#1a237e;font-weight:600">Already in warehouse: '+inWh.qty+'</span>':'');
+  document.getElementById('wha-dropdown').style.display='none';
+  var mq=document.getElementById('wha-minqty');
+  if(mq&&inWh)mq.value=inWh.minQty||0;
+  document.getElementById('wha-qty').focus();
+}
+function saveAddWarehouseStock(){
+  var itemId=document.getElementById('wha-item-id').value;
+  var qty=parseInt(document.getElementById('wha-qty').value)||0;
+  var minQty=parseInt(document.getElementById('wha-minqty').value)||0;
+  var note=(document.getElementById('wha-note').value||'').trim();
+  if(!itemId){alert('Please select an item.');return;}
+  if(qty<1){alert('Enter a valid quantity.');return;}
+  var item=DB.inventory.find(function(i){return i.id==itemId;});
+  if(!item){alert('Item not found.');return;}
+  var existing=DB.warehouse.find(function(w){return w.id==itemId;});
+  if(existing){
+    existing.qty+=qty;
+    existing.minQty=minQty;
+  } else {
+    DB.warehouse.push({id:item.id,name:item.name,cat:item.cat||'',qty:qty,minQty:minQty,cost:item.cost||0,supplierId:item.supplierId||''});
+  }
+  // Log the addition
+  DB.transferLog.push({id:uid(),date:new Date().toLocaleDateString(),direction:'to_warehouse',itemId:item.id,itemName:item.name,itemCat:item.cat||'',qty:qty,waybill:'OPENING-STOCK',note:note||'Existing stock added manually',by:DB.currentUser.name});
+  saveData();
+  document.getElementById('wh-add-modal').remove();
+  renderApp();
+}
+function editWhMinQty(itemId){
+  var item=DB.warehouse.find(function(i){return i.id==itemId;});
+  if(!item){alert('Item not found.');return;}
+  var val=prompt('Set minimum quantity for '+item.name+' (current: '+item.minQty+'):',item.minQty);
+  if(val===null)return;
+  var num=parseInt(val);
+  if(isNaN(num)||num<0){alert('Please enter a valid number (0 or more).');return;}
+  item.minQty=num;
+  saveData();
+  renderApp();
+}
+
 var whSearch='';
 function buildWarehouse(){
   if(!canDo('warehouse'))return '<div class="empty">Access denied. Ask admin to grant Warehouse permission.</div>';
@@ -1468,7 +1584,10 @@ function buildWarehouse(){
   var rows=filteredWh.length?filteredWh.map(function(i){
     var status=i.qty===0?'<span class="badge out">Out</span>':i.qty<=i.minQty?'<span class="badge low">Low</span>':'<span class="badge ok">OK</span>';
     return '<tr data-wh-name="'+i.name.toLowerCase()+'" data-wh-cat="'+(i.cat||'').toLowerCase()+'">'+
-      '<td>'+i.name+'</td><td>'+(i.cat||'-')+'</td><td>'+i.qty+'</td><td>'+i.minQty+'</td>'+
+      '<td>'+i.name+'</td><td>'+(i.cat||'-')+'</td><td>'+i.qty+'</td>'+
+      '<td><div style="display:flex;align-items:center;gap:5px">'+i.minQty+
+        '<button onclick="editWhMinQty(\''+i.id+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;color:#6c757d;padding:1px 4px" title="Edit min qty">✏️</button>'+
+      '</div></td>'+
       '<td>'+fmt(i.cost)+'</td><td>'+fmt(i.qty*i.cost)+'</td><td>'+status+'</td></tr>';
   }).join(''):(wsTerm?'<tr><td colspan="7" class="empty">No items match "'+whSearch+'".</td></tr>':'<tr><td colspan="7" class="empty">Warehouse is empty. Transfer goods from the Shop to get started.</td></tr>');
 
@@ -1501,6 +1620,7 @@ function buildWarehouse(){
     '<div style="display:flex;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap">'+
       '<button class="btn primary" onclick="showTransferModal(\'to_warehouse\')" style="font-size:13px;padding:10px 20px">📦 → 🏭 &nbsp;Shop to Warehouse</button>'+
       '<button class="btn" onclick="showTransferModal(\'to_shop\')" style="font-size:13px;padding:10px 20px;color:var(--primary);border-color:#b6d4fe">🏭 → 📦 &nbsp;Warehouse to Shop</button>'+
+      '<button class="btn" onclick="showAddWarehouseStockModal()" style="font-size:13px;padding:10px 20px;color:#15803d;border-color:#86efac;font-weight:700">➕ Add Existing Stock</button>'+
     '</div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">'+
       '<p class="sec-title" style="margin:0">Warehouse Stock</p>'+
