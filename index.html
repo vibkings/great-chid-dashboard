@@ -2753,24 +2753,42 @@ function printCustomerInvoice(invNum,custId){
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var emptyRows='';var minRI=Math.max(12,invSales.length);for(var i=invSales.length;i<minRI;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
   var outstandingBal=cust?(cust.creditBalance||0):0;
-  var prevInvTotal=outstandingBal-grandTotal; // balance before this invoice
+  // prevInvTotal = what the customer owed BEFORE this invoice (all other unpaid invoices)
+  var otherUnpaid=DB.sales.filter(function(s){
+    return s.custId==custId && s.payment==='credit' && (s.invoiceNum||s.id)!==invNum;
+  }).reduce(function(a,s){return a+s.total;},0);
+  var prevInvTotal=Math.max(0,otherUnpaid);
   function doPrint(withOutstanding){
     var html=buildInvoiceHTML({invoiceNum:invNum,custName:s0.printName||(cust?cust.name:'Unknown'),custAddr:cust?cust.address||'':'',day:day,month:mon,year:yr,rows:rows+emptyRows,itemCount:invSales.length,grandTotal:grandTotal,payment:s0.payment,payMode:s0.payMode,bankId:s0.bankId,posId:s0.posId,splitPayment:s0.splitPayment||null,seller:s0.seller,pendingSupply:s0.pendingSupply||false,wasEverPending:s0.wasEverPending||false,supplyDate:s0.supplyDate||null,
       outstandingBal:withOutstanding?outstandingBal:0,prevInvTotal:withOutstanding&&prevInvTotal>0?prevInvTotal:0});
     var w=window.open('','_blank','width=600,height=850');w.document.write(html);w.document.close();setTimeout(function(){w.print();},500);
   }
-  if(outstandingBal>0&&s0.payment==='credit'){
-    showConfirm({
-      type:'info',
-      title:'Print with outstanding balance?',
-      msg:cust.name+' has an outstanding balance.',
-      detail:'Previous balance: '+fmt(Math.max(0,prevInvTotal))+'\nThis invoice: '+fmt(grandTotal)+'\nTotal outstanding: '+fmt(outstandingBal),
-      confirmLabel:'Print with balance',
-      cancelLabel:'Print without balance'
-    },function(){doPrint(true);});
-    // Also handle the cancel (print without)
-    var origCancel=document.querySelector('.btn-cancel');
-    if(origCancel){var _oc=origCancel.onclick;origCancel.onclick=function(){if(_oc)_oc();doPrint(false);}; }
+  // Show choice prompt whenever customer has any outstanding balance
+  if(outstandingBal>0){
+    var old=document.getElementById('print-choice-overlay');if(old)old.remove();
+    var overlay=document.createElement('div');
+    overlay.id='print-choice-overlay';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    var detailLines=prevInvTotal>0
+      ?'Previous balance: '+fmt(prevInvTotal)+'<br>This invoice: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'+fmt(grandTotal)+'<br><hr style="margin:6px 0;border-color:#e5e7eb"><b>Total outstanding: '+fmt(outstandingBal)+'</b>'
+      :'This invoice: '+fmt(grandTotal)+'<br><hr style="margin:6px 0;border-color:#e5e7eb"><b>Total outstanding: '+fmt(outstandingBal)+'</b>';
+    overlay.innerHTML=
+      '<div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);text-align:center">'+
+        '<div style="font-size:28px;margin-bottom:8px">🖨️</div>'+
+        '<div style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:6px">Print options</div>'+
+        '<div style="font-size:13px;color:#64748b;margin-bottom:12px">'+(cust?cust.name:'Customer')+' has an outstanding balance.</div>'+
+        '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;text-align:left;margin-bottom:18px;line-height:1.8">'+detailLines+'</div>'+
+        '<div style="display:flex;flex-direction:column;gap:10px">'+
+          '<button id="pco-with-bal" style="padding:11px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Print with outstanding balance</button>'+
+          '<button id="pco-inv-only" style="padding:11px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Print current invoice only</button>'+
+          '<button id="pco-cancel" style="padding:9px;background:none;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;color:#64748b;cursor:pointer">Cancel</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('pco-with-bal').onclick=function(){overlay.remove();doPrint(true);};
+    document.getElementById('pco-inv-only').onclick=function(){overlay.remove();doPrint(false);};
+    document.getElementById('pco-cancel').onclick=function(){overlay.remove();};
+    overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
   } else {
     doPrint(false);
   }
