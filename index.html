@@ -5285,6 +5285,117 @@ function buildReports(){
   if(!canDo('reports'))return '<div class="empty">Access denied.</div>';
   var staffList=[...new Set(DB.sales.map(function(s){return s.seller;}))].filter(Boolean);
   var staffOpts=staffList.map(function(n){return '<option value="'+n+'"'+(reportStaff===n?' selected':'')+'>'+n+'</option>';}).join('');
+  // ── Paid Invoice Summary: one row per invoice, no credit ──────
+  if(reportTab==='paidinv'){
+  // ── Returns Report: one row per invoice, grouped ──────────────
+  if(reportTab==='returns'){
+    var retFiltered=(DB.salesReturns||[]).filter(function(r){
+      if(reportDateFrom&&!dateInRange(r.date,reportDateFrom,''))return false;
+      if(reportDateTo&&!dateInRange(r.date,'',reportDateTo))return false;
+      return true;
+    });
+    // Group by invoiceNum
+    var retMap={};
+    retFiltered.forEach(function(r){
+      var k=r.invoiceNum||r.invoiceId;
+      if(!retMap[k])retMap[k]={invoiceNum:k,date:r.date,custName:r.custName,items:[],totalRefund:0,refundType:r.refundType,by:r.by};
+      retMap[k].items.push(r.itemName+' ×'+r.qty);
+      retMap[k].totalRefund+=r.refundAmt||0;
+    });
+    var retList=Object.values(retMap).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date);});
+    var retGrandTotal=retList.reduce(function(a,g){return a+g.totalRefund;},0);
+    var retRows=retList.map(function(g,i){
+      var refundBadge=g.refundType==='cash'?'<span style="color:#15803d;font-weight:700">Cash refund</span>':g.refundType==='credit'?'<span style="color:#1a237e;font-weight:700">Store credit</span>':'Exchange';
+      return '<tr>'+
+        '<td>'+(i+1)+'</td>'+
+        '<td>'+g.date+'</td>'+
+        '<td style="font-weight:700">'+g.invoiceNum+'</td>'+
+        '<td>'+g.custName+'</td>'+
+        '<td style="font-size:11px">'+g.items.join(', ')+'</td>'+
+        '<td style="text-align:right;font-weight:700;color:#c0392b">'+fmt(g.totalRefund)+'</td>'+
+        '<td>'+refundBadge+'</td>'+
+        '<td>'+g.by+'</td>'+
+      '</tr>';
+    }).join('');
+    var retPrintBtn='<button class="btn sm" onclick="printReturnsReport()" style="color:#b45309;border-color:#fcd34d">&#128438; Print report</button>';
+    var retTabBtns='<div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">'+
+      '<button class="btn sm" onclick="reportTab=\'all\';renderPanel()">All sales</button>'+
+      '<button class="btn sm" onclick="reportTab=\'paid\';renderPanel()">Paid invoices</button>'+
+      '<button class="btn sm" onclick="reportTab=\'paidinv\';renderPanel()">Paid invoice summary</button>'+
+      '<button class="btn sm" onclick="reportTab=\'credit\';renderPanel()">Credit only</button>'+
+      '<button class="btn sm" onclick="reportTab=\'staff\';renderPanel()">By staff</button>'+
+      '<button class="btn sm" onclick="reportTab=\'returns\';renderPanel()" style="background:#b45309;color:#fff;border-color:#b45309">Returns</button>'+
+    '</div>';
+    return retTabBtns+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">'+
+      '<input type="date" value="'+reportDateFrom+'" onchange="reportDateFrom=this.value;renderPanel()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">'+
+      '<span style="font-size:12px;color:var(--text3)">to</span>'+
+      '<input type="date" value="'+reportDateTo+'" onchange="reportDateTo=this.value;renderPanel()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">'+
+      '<button class="btn sm" onclick="reportDateFrom=\'\';reportDateTo=\'\';renderPanel()">Clear</button>'+
+      retPrintBtn+
+    '</div>'+
+    '<div class="metrics">'+mc('Returns',retList.length,'Invoices','')+mc('Total refunded',fmt(retGrandTotal),'','red')+'</div>'+
+    (retRows?'<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th><th>Items returned</th><th style="text-align:right">Refund amt</th><th>Refund type</th><th>Processed by</th></tr></thead><tbody>'+retRows+'<tr style="background:#fff3cd;font-weight:700;border-top:2px solid #b45309"><td colspan="5">TOTAL — '+retList.length+' return(s)</td><td style="text-align:right;color:#c0392b">'+fmt(retGrandTotal)+'</td><td colspan="2"></td></tr></tbody></table></div>'
+    :'<div class="empty">No returns recorded for this period.</div>');
+  }
+
+    var piSales=DB.sales.filter(function(s){
+      if(s.payment==='credit')return false;
+      if(reportDateFrom&&!dateInRange(s.date,reportDateFrom,''))return false;
+      if(reportDateTo&&!dateInRange(s.date,'',reportDateTo))return false;
+      return true;
+    });
+    var piMap={};
+    piSales.forEach(function(s){
+      var k=s.invoiceNum||s.id;
+      if(!piMap[k])piMap[k]={invoiceNum:k,date:s.date,custName:s.printName||s.custName,itemCount:0,total:0,profit:0,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,splitPayment:s.splitPayment||null,seller:s.seller,partPayment:s.partPayment||0};
+      piMap[k].itemCount++;
+      piMap[k].total+=s.total;
+      piMap[k].profit+=s.profit;
+    });
+    var piList=Object.values(piMap).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date)||parseInvNum(b.invoiceNum)-parseInvNum(a.invoiceNum);});
+    var piGrandTotal=piList.reduce(function(a,g){return a+g.total;},0);
+    var piGrandProfit=piList.reduce(function(a,g){return a+g.profit;},0);
+    var piRows=piList.map(function(g,i){
+      var payType=g.payment==='part'?'Part pay':'Cash';
+      var amtPaid=g.payment==='part'?(g.partPayment||0):g.total;
+      var balDue=g.payment==='part'?Math.max(0,g.total-amtPaid):0;
+      return '<tr>'+
+        '<td>'+(i+1)+'</td>'+
+        '<td>'+g.date+'</td>'+
+        '<td style="font-weight:700">'+g.invoiceNum+'</td>'+
+        '<td>'+g.custName+'</td>'+
+        '<td style="text-align:center">'+g.itemCount+'</td>'+
+        '<td style="text-align:right;font-weight:700">'+fmt(g.total)+'</td>'+
+        (g.payment==='part'?
+          '<td style="text-align:right;color:#15803d">'+fmt(amtPaid)+'</td>'+
+          '<td style="text-align:right;color:#c0392b">'+fmt(balDue)+'</td>'
+          :'<td colspan="2" style="text-align:center;color:#15803d">Fully paid</td>')+
+        '<td style="text-align:right">'+fmt(g.profit)+'</td>'+
+        '<td>'+payModeLabel(g)+'</td>'+
+        '<td>'+g.seller+'</td>'+
+      '</tr>';
+    }).join('');
+    var piPrintBtn='<button class="btn sm" onclick="printPaidInvReport()" style="color:#0369a1;border-color:#93c5fd">&#128438; Print report</button>';
+    return '<div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">'+
+      '<button class="btn sm" onclick="reportTab=\'all\';renderPanel()">All sales</button>'+
+      '<button class="btn sm" onclick="reportTab=\'paid\';renderPanel()" style="background:none">Paid invoices</button>'+
+      '<button class="btn sm" onclick="reportTab=\'paidinv\';renderPanel()" style="background:#0369a1;color:#fff;border-color:#0369a1">Paid invoice summary</button>'+
+      '<button class="btn sm" onclick="reportTab=\'credit\';renderPanel()">Credit only</button>'+
+      '<button class="btn sm" onclick="reportTab=\'staff\';renderPanel()">By staff</button>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">'+
+      '<input type="date" value="'+reportDateFrom+'" onchange="reportDateFrom=this.value;renderPanel()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">'+
+      '<span style="font-size:12px;color:var(--text3)">to</span>'+
+      '<input type="date" value="'+reportDateTo+'" onchange="reportDateTo=this.value;renderPanel()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">'+
+      '<button class="btn sm" onclick="reportDateFrom=\'\';reportDateTo=\'\';renderPanel()">Clear</button>'+
+      piPrintBtn+
+    '</div>'+
+    '<div class="metrics">'+mc('Invoices',piList.length,'','')+mc('Total revenue',fmt(piGrandTotal),'','')+mc('Total profit',fmt(piGrandProfit),pct(piGrandProfit,piGrandTotal)+' margin',piGrandProfit>=0?'green':'red')+'</div>'+
+    (piRows?'<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th><th style="text-align:center">Items</th><th style="text-align:right">Invoice total</th><th style="text-align:right">Amt paid</th><th style="text-align:right">Bal due</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+piRows+'<tr style="background:#f5f5f5;font-weight:700;border-top:2px solid #1a237e"><td colspan="5">TOTAL — '+piList.length+' invoices</td><td style="text-align:right">'+fmt(piGrandTotal)+'</td><td colspan="2"></td><td style="text-align:right">'+fmt(piGrandProfit)+'</td><td colspan="2"></td></tr></tbody></table></div>'
+    :'<div class="empty">No paid invoices for this period.</div>');
+  }
+
   var filtered=DB.sales.filter(function(s){
     if(reportDateFrom&&!dateInRange(s.date,reportDateFrom,''))return false;
     if(reportDateTo&&!dateInRange(s.date,'',reportDateTo))return false;
@@ -5315,8 +5426,10 @@ function buildReports(){
   return '<div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">'+
     '<button class="btn sm" onclick="reportTab=\'all\';renderPanel()" style="'+(reportTab==='all'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+'">All sales</button>'+
     '<button class="btn sm" onclick="reportTab=\'paid\';renderPanel()" style="'+(reportTab==='paid'?'background:#15803d;color:#fff;border-color:#15803d':'')+'">Paid invoices</button>'+
+    '<button class="btn sm" onclick="reportTab=\'paidinv\';renderPanel()" style="'+(reportTab==='paidinv'?'background:#0369a1;color:#fff;border-color:#0369a1':'')+'">Paid invoice summary</button>'+
     '<button class="btn sm" onclick="reportTab=\'credit\';renderPanel()" style="'+(reportTab==='credit'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+'">Credit only</button>'+
     '<button class="btn sm" onclick="reportTab=\'staff\';renderPanel()" style="'+(reportTab==='staff'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+'">By staff</button>'+
+    '<button class="btn sm" onclick="reportTab=\'returns\';renderPanel()" style="'+(reportTab==='returns'?'background:#b45309;color:#fff;border-color:#b45309':'')+'">Returns</button>'+
   '</div>'+
   '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">'+
     '<input type="date" value="'+reportDateFrom+'" onchange="reportDateFrom=this.value;renderPanel()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">'+
@@ -5350,6 +5463,139 @@ function printReport(){
 }
 
 // ============================================================
+function printPaidInvReport(){
+  var piSales=DB.sales.filter(function(s){
+    if(s.payment==='credit')return false;
+    if(reportDateFrom&&!dateInRange(s.date,reportDateFrom,''))return false;
+    if(reportDateTo&&!dateInRange(s.date,'',reportDateTo))return false;
+    return true;
+  });
+  var piMap={};
+  piSales.forEach(function(s){
+    var k=s.invoiceNum||s.id;
+    if(!piMap[k])piMap[k]={invoiceNum:k,date:s.date,custName:s.printName||s.custName,itemCount:0,total:0,profit:0,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,splitPayment:s.splitPayment||null,seller:s.seller,partPayment:s.partPayment||0};
+    piMap[k].itemCount++;
+    piMap[k].total+=s.total;
+    piMap[k].profit+=s.profit;
+  });
+  var piList=Object.values(piMap).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date)||parseInvNum(b.invoiceNum)-parseInvNum(a.invoiceNum);});
+  var piGrandTotal=piList.reduce(function(a,g){return a+g.total;},0);
+  var piGrandProfit=piList.reduce(function(a,g){return a+g.profit;},0);
+  var dateRange=(reportDateFrom||reportDateTo)?(reportDateFrom||'...')+' to '+(reportDateTo||'...'):'All time';
+  var rows=piList.map(function(g,i){
+    var amtPaid=g.payment==='part'?(g.partPayment||0):g.total;
+    var balDue=g.payment==='part'?Math.max(0,g.total-amtPaid):0;
+    return '<tr>'+
+      '<td>'+(i+1)+'</td>'+
+      '<td>'+g.date+'</td>'+
+      '<td style="font-weight:700">'+g.invoiceNum+'</td>'+
+      '<td>'+g.custName+'</td>'+
+      '<td style="text-align:center">'+g.itemCount+'</td>'+
+      '<td style="text-align:right;font-weight:700">'+fmt(g.total)+'</td>'+
+      (g.payment==='part'?
+        '<td style="text-align:right;color:green">'+fmt(amtPaid)+'</td>'+
+        '<td style="text-align:right;color:#c0392b">'+fmt(balDue)+'</td>'
+        :'<td colspan="2" style="text-align:center;color:green">Fully paid</td>')+
+      '<td style="text-align:right">'+fmt(g.profit)+'</td>'+
+      '<td>'+payModeLabel(g)+'</td>'+
+      '<td>'+g.seller+'</td>'+
+    '</tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Paid Invoice Report</title>'+
+    '<style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px}'+
+    '.h{text-align:center;border-bottom:2px solid #c0392b;padding-bottom:6px;margin-bottom:10px}'+
+    '.co{font-size:16px;font-weight:900;color:#c0392b}.co2{font-size:16px;font-weight:900;color:#1a237e}'+
+    'table{width:100%;border-collapse:collapse}'+
+    'th{background:#0369a1;color:#fff;padding:4px 6px;font-size:9px;text-align:left}'+
+    'td{border:1px solid #ddd;padding:3px 6px}'+
+    'tr:nth-child(even) td{background:#f7fbff}'+
+    '.tr td{font-weight:700;background:#e0f0ff;border-top:2px solid #0369a1}'+
+    '</style></head><body>'+
+    '<div class="h">'+
+      '<div class="co">GREAT CHID ELECTRO (NIG.)</div>'+
+      '<div class="co2">GLOBAL DOORS LTD</div>'+
+      '<div style="font-size:11px;font-weight:700;margin-top:4px;color:#0369a1">PAID INVOICE SUMMARY REPORT</div>'+
+      '<div style="font-size:9px;margin-top:2px;color:#555">Period: '+dateRange+' &nbsp;|&nbsp; Printed: '+new Date().toLocaleString()+'</div>'+
+    '</div>'+
+    '<table><thead><tr>'+
+      '<th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th>'+
+      '<th style="text-align:center">Items</th>'+
+      '<th style="text-align:right">Invoice total</th>'+
+      '<th style="text-align:right">Amt paid</th>'+
+      '<th style="text-align:right">Bal due</th>'+
+      '<th style="text-align:right">Profit</th>'+
+      '<th>Mode</th><th>Staff</th>'+
+    '</tr></thead><tbody>'+
+    rows+
+    '<tr class="tr"><td colspan="5">TOTAL — '+piList.length+' invoice(s)</td>'+
+      '<td style="text-align:right">'+fmt(piGrandTotal)+'</td>'+
+      '<td colspan="2"></td>'+
+      '<td style="text-align:right">'+fmt(piGrandProfit)+'</td>'+
+      '<td colspan="2"></td>'+
+    '</tr>'+
+    '</tbody></table></body></html>';
+  var w=window.open('','_blank');w.document.write(html);w.document.close();setTimeout(function(){w.print();},400);
+}
+
+function printReturnsReport(){
+  var retFiltered=(DB.salesReturns||[]).filter(function(r){
+    if(reportDateFrom&&!dateInRange(r.date,reportDateFrom,''))return false;
+    if(reportDateTo&&!dateInRange(r.date,'',reportDateTo))return false;
+    return true;
+  });
+  var retMap={};
+  retFiltered.forEach(function(r){
+    var k=r.invoiceNum||r.invoiceId;
+    if(!retMap[k])retMap[k]={invoiceNum:k,date:r.date,custName:r.custName,items:[],totalRefund:0,refundType:r.refundType,by:r.by};
+    retMap[k].items.push(r.itemName+' ×'+r.qty);
+    retMap[k].totalRefund+=r.refundAmt||0;
+  });
+  var retList=Object.values(retMap).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date);});
+  var retGrandTotal=retList.reduce(function(a,g){return a+g.totalRefund;},0);
+  var dateRange=(reportDateFrom||reportDateTo)?(reportDateFrom||'...')+' to '+(reportDateTo||'...'):'All time';
+  var rows=retList.map(function(g,i){
+    return '<tr>'+
+      '<td>'+(i+1)+'</td>'+
+      '<td>'+g.date+'</td>'+
+      '<td style="font-weight:700">'+g.invoiceNum+'</td>'+
+      '<td>'+g.custName+'</td>'+
+      '<td style="font-size:10px">'+g.items.join(', ')+'</td>'+
+      '<td style="text-align:right;font-weight:700;color:#c0392b">'+fmt(g.totalRefund)+'</td>'+
+      '<td>'+(g.refundType==='cash'?'Cash refund':g.refundType==='credit'?'Store credit':'Exchange')+'</td>'+
+      '<td>'+g.by+'</td>'+
+    '</tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Returns Report</title>'+
+    '<style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px}'+
+    '.h{text-align:center;border-bottom:2px solid #c0392b;padding-bottom:6px;margin-bottom:10px}'+
+    '.co{font-size:16px;font-weight:900;color:#c0392b}.co2{font-size:16px;font-weight:900;color:#1a237e}'+
+    'table{width:100%;border-collapse:collapse}'+
+    'th{background:#b45309;color:#fff;padding:4px 6px;font-size:9px;text-align:left}'+
+    'td{border:1px solid #ddd;padding:3px 6px}'+
+    'tr:nth-child(even) td{background:#fffbf0}'+
+    '.tr td{font-weight:700;background:#fff3cd;border-top:2px solid #b45309}'+
+    '</style></head><body>'+
+    '<div class="h">'+
+      '<div class="co">GREAT CHID ELECTRO (NIG.)</div>'+
+      '<div class="co2">GLOBAL DOORS LTD</div>'+
+      '<div style="font-size:11px;font-weight:700;margin-top:4px;color:#b45309">GOODS RETURN REPORT — BY INVOICE</div>'+
+      '<div style="font-size:9px;margin-top:2px;color:#555">Period: '+dateRange+' &nbsp;|&nbsp; Printed: '+new Date().toLocaleString()+'</div>'+
+    '</div>'+
+    '<table><thead><tr>'+
+      '<th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th>'+
+      '<th>Items returned</th>'+
+      '<th style="text-align:right">Refund amount</th>'+
+      '<th>Refund type</th><th>Processed by</th>'+
+    '</tr></thead><tbody>'+
+    rows+
+    '<tr class="tr"><td colspan="5">TOTAL — '+retList.length+' return(s)</td>'+
+      '<td style="text-align:right;color:#c0392b">'+fmt(retGrandTotal)+'</td>'+
+      '<td colspan="2"></td>'+
+    '</tr>'+
+    '</tbody></table></body></html>';
+  var w=window.open('','_blank');w.document.write(html);w.document.close();setTimeout(function(){w.print();},400);
+}
+
 // USERS TAB
 // ============================================================
 function buildUsers(){
