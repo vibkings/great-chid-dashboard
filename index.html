@@ -2919,17 +2919,34 @@ function buildInvoiceHTML(inv){
       '<div class="pay-row">'+
         '<div class="pay-cell">'+
           '<div class="pay-label">Payment type</div>'+
-          '<div class="pay-val">'+(inv.payment==='credit'?'⚠ CREDIT (amount owed)':inv.payment==='part'?'PART PAYMENT':inv.payMode==='split'?'SPLIT PAYMENT':'CASH SALE')+'</div>'+
+          '<div class="pay-val">'+(inv.payment==='credit'?'\u26a0 CREDIT (amount owed)':inv.payment==='part'?'PART PAYMENT':inv.payMode==='split'?'SPLIT PAYMENT':'CASH SALE')+'</div>'+
         '</div>'+
         '<div class="pay-cell">'+
           '<div class="pay-label">Payment mode</div>'+
           '<div class="pay-val">'+(inv.payment==='credit'?'Credit':
-            inv.payMode==='split'&&inv.splitPayment?(function(){var sp=inv.splitPayment;function ml(m,a,b,p){return(m==='pos'?'POS'+(p?'('+getPosName(p)+')':''):m==='transfer'?'Transfer'+(b?'('+getBankName(b)+')':''):'Cash')+' &#8358;'+Math.round(a).toLocaleString();}return ml(sp.mode1,sp.amt1,sp.bankId,sp.posId)+' + '+ml(sp.mode2,sp.amt2,sp.bankId,sp.posId);})():
             inv.payMode==='pos'?'POS terminal':
             inv.payMode==='transfer'?'Bank transfer'+(inv.bankId?' ('+getBankName(inv.bankId)+')':''):
+            inv.payMode==='split'?'Split payment':
             'Cash')+'</div>'+
         '</div>'+
       '</div>'+
+      // Split payment — show each leg on its own clearly labelled row
+      (inv.payMode==='split'&&inv.splitPayment?(function(){
+        var sp=inv.splitPayment;
+        function modeLabel(m,b,p){if(m==='pos')return 'POS'+(p&&getPosName(p)?' ('+getPosName(p)+')':'');if(m==='transfer')return 'Bank Transfer'+(b&&getBankName(b)?' ('+getBankName(b)+')':'');return 'Cash';}
+        return '<div style="border-top:1px solid #eee">'+
+          '<div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #eee">'+
+            '<div style="padding:4px 8px;background:#f0f7ff">'+
+              '<div class="pay-label" style="color:#1a237e">Payment 1 — '+modeLabel(sp.mode1,sp.bankId,sp.posId)+'</div>'+
+              '<div class="pay-val" style="color:#1a237e;font-size:12px">'+fmt(sp.amt1)+'</div>'+
+            '</div>'+
+            '<div style="padding:4px 8px;background:#f0f7ff">'+
+              '<div class="pay-label" style="color:#1a237e">Payment 2 — '+modeLabel(sp.mode2,sp.bankId,sp.posId)+'</div>'+
+              '<div class="pay-val" style="color:#1a237e;font-size:12px">'+fmt(sp.amt2)+'</div>'+
+            '</div>'+
+          '</div>'+
+        '</div>';
+      })():'')+
       // Part payment breakdown
       (isPartPay?
         '<div style="border-top:1px solid #eee">'+
@@ -3700,9 +3717,9 @@ function submitInvoice(){
 
       if(overpayment > 0){
         // Customer paid MORE than the invoice — excess becomes store credit (we owe them)
-        // Invoice is fully settled, and they have credit on account
+        // Invoice is fully settled; full partPayment already recorded as cash-in above
+        // No cashflow entry needed — this is a liability (store credit), not an expense
         regC.creditBalance = (regC.creditBalance||0) - overpayment; // negative = we owe them
-        DB.cashflow.push({id:uid(),desc:'Overpayment store credit — '+custName+' Invoice #'+invNum+' (excess: '+fmt(overpayment)+')',amount:overpayment,type:'out',cat:'Sales',payMode:payMode,bankId:bankId,posId:posId,date:date,month:month,isOverpayment:true});
       } else if(creditAmount > 0){
         // Customer still owes us the remaining amount
         var existingCredit=Math.abs(Math.min(0,regC.creditBalance||0)); // store credit we already owe them
