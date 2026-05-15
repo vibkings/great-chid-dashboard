@@ -2743,6 +2743,88 @@ function buildCustomers(){
   return nav+content;
 }
 
+// ── Date-aware outstanding balance helper ─────────────────────
+// Parses a locale date string (e.g. "5/13/2026") → timestamp for comparison
+function parseSaleDate(str){
+  if(!str)return 0;
+  // Try native parse first (works for ISO strings)
+  var t=new Date(str).getTime();
+  if(!isNaN(t))return t;
+  // Fallback: handle M/D/YYYY or D/M/YYYY (locale)
+  var parts=str.split('/');
+  if(parts.length===3){
+    // Assume M/D/YYYY (US locale — matches toLocaleDateString() default in Nigeria)
+    return new Date(parseInt(parts[2]),parseInt(parts[0])-1,parseInt(parts[1])).getTime();
+  }
+  return 0;
+}
+
+// Returns {prevInvTotal, outstandingAtDate} for a given customer + invoice
+//   prevInvTotal     = credit owed BEFORE this invoice date (other invoices before this date, minus payments before this date)
+//   outstandingAtDate = prevInvTotal + net of this invoice (what was owed right after this invoice was created)
+// invDate  = date string of the invoice being printed
+// invNum   = invoice number/id of this invoice (to exclude from prevInvTotal)
+// invNet   = grandTotal - partPayment (what this invoice added to the balance)
+function calcOutstandingAtDate(custId, invDate, invNum, invNet){
+  var invTs=parseSaleDate(invDate);
+  // All credit invoices for this customer strictly BEFORE this invoice date
+  var prevCreditInvoices=DB.sales.filter(function(s){
+    return s.custId==custId && s.payment==='credit' && (s.invoiceNum||s.id)!==invNum && parseSaleDate(s.date)<invTs;
+  });
+  // Part payments on credit invoices from BEFORE this date (their net credit contribution)
+  var prevPartPayInvoices=DB.sales.filter(function(s){
+    return s.custId==custId && s.payment==='part' && parseSaleDate(s.date)<invTs;
+  });
+  // Credit payments (actual money paid toward balance) made BEFORE this invoice date
+  var prevCreditPayments=(DB.creditPayments||[]).filter(function(p){
+    return p.custId==custId && parseSaleDate(p.date)<invTs;
+  });
+  var prevCreditOwed=prevCreditInvoices.reduce(function(a,s){return a+s.total;},0);
+  var prevPartOwed=prevPartPayInvoices.reduce(function(a,s){
+    var paid=s.partPayment||0;
+    var owed=Math.max(0,s.total-paid);
+    return a+owed;
+  },0);
+  var prevPaid=prevCreditPayments.reduce(function(a,p){return a+p.amount;},0);
+  var prevInvTotal=Math.max(0,prevCreditOwed+prevPartOwed-prevPaid);
+  var outstandingAtDate=prevInvTotal+Math.max(0,invNet);
+  return {prevInvTotal:prevInvTotal,outstandingAtDate:outstandingAtDate};
+}
+
+// ── Shared print-choice modal ────────────────────────────────
+// Shows "Print with outstanding balance / Print invoice only / Cancel"
+// outstandingBal = total the customer owed AT THE TIME of this invoice
+// prevInvTotal   = what they owed BEFORE this invoice
+// grandTotal     = this invoice amount
+// custName       = display name
+// onWithBal / onInvOnly = callbacks
+function showPrintChoiceModal(custName, outstandingBal, prevInvTotal, grandTotal, onWithBal, onInvOnly){
+  var old=document.getElementById('print-choice-overlay');if(old)old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='print-choice-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  var detailLines=prevInvTotal>0
+    ?'Previous balance: &nbsp;'+fmt(prevInvTotal)+'<br>This invoice: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'+fmt(grandTotal)+'<br><hr style="margin:6px 0;border-color:#e5e7eb"><b>Total outstanding: '+fmt(outstandingBal)+'</b>'
+    :'This invoice: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'+fmt(grandTotal)+'<br><hr style="margin:6px 0;border-color:#e5e7eb"><b>Total outstanding: '+fmt(outstandingBal)+'</b>';
+  overlay.innerHTML=
+    '<div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);text-align:center">'+
+      '<div style="font-size:28px;margin-bottom:8px">🖨️</div>'+
+      '<div style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:6px">Print options</div>'+
+      '<div style="font-size:13px;color:#64748b;margin-bottom:12px">'+custName+' has an outstanding balance.</div>'+
+      '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;text-align:left;margin-bottom:18px;line-height:1.9">'+detailLines+'</div>'+
+      '<div style="display:flex;flex-direction:column;gap:10px">'+
+        '<button id="pco-with-bal" style="padding:11px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Print with outstanding balance</button>'+
+        '<button id="pco-inv-only" style="padding:11px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Print current invoice only</button>'+
+        '<button id="pco-cancel" style="padding:9px;background:none;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;color:#64748b;cursor:pointer">Cancel</button>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('pco-with-bal').onclick=function(){overlay.remove();onWithBal();};
+  document.getElementById('pco-inv-only').onclick=function(){overlay.remove();onInvOnly();};
+  document.getElementById('pco-cancel').onclick=function(){overlay.remove();};
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+
 function printCustomerInvoice(invNum,custId){
   var cust=DB.customers.find(function(c){return c.id==custId;});
   var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum&&s.custId==custId;});
@@ -2752,44 +2834,21 @@ function printCustomerInvoice(invNum,custId){
   var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+s.name+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:#fff5f5;color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var emptyRows='';var minRI=Math.max(12,invSales.length);for(var i=invSales.length;i<minRI;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
-  var outstandingBal=cust?Math.max(0,cust.creditBalance||0):0;
-  // prevInvTotal = total outstanding BEFORE this invoice = total of all other unpaid credit invoices for this customer
-  // We derive it from creditBalance minus this invoice's contribution
-  // Since creditBalance already reflects all invoices, we show it as-is for the total,
-  // and use grandTotal as this invoice's share, previous = total - grandTotal (floored at 0)
-  var prevInvTotal=Math.max(0,outstandingBal-grandTotal);
+  // Date-aware: only count invoices/payments that existed at the time of this invoice
+  var partPaid=s0.partPayment||0;
+  var invNet=s0.payment==='credit'?grandTotal:Math.max(0,grandTotal-partPaid);
+  var bal=cust?calcOutstandingAtDate(custId,s0.date,invNum,invNet):{prevInvTotal:0,outstandingAtDate:0};
+  var prevInvTotal=bal.prevInvTotal;
+  var outstandingBal=bal.outstandingAtDate;
   function doPrint(withOutstanding){
     var html=buildInvoiceHTML({invoiceNum:invNum,custName:s0.printName||(cust?cust.name:'Unknown'),custAddr:cust?cust.address||'':'',day:day,month:mon,year:yr,rows:rows+emptyRows,itemCount:invSales.length,grandTotal:grandTotal,payment:s0.payment,payMode:s0.payMode,bankId:s0.bankId,posId:s0.posId,splitPayment:s0.splitPayment||null,seller:s0.seller,pendingSupply:s0.pendingSupply||false,wasEverPending:s0.wasEverPending||false,supplyDate:s0.supplyDate||null,
-      partPayment:s0.partPayment||0,
+      partPayment:partPaid,
       outstandingBal:withOutstanding?outstandingBal:0,prevInvTotal:withOutstanding&&prevInvTotal>0?prevInvTotal:0});
     var w=window.open('','_blank','width=600,height=850');w.document.write(html);w.document.close();setTimeout(function(){w.print();},500);
   }
-  // Show choice prompt whenever customer has any outstanding balance
   if(outstandingBal>0){
-    var old=document.getElementById('print-choice-overlay');if(old)old.remove();
-    var overlay=document.createElement('div');
-    overlay.id='print-choice-overlay';
-    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
-    var detailLines=prevInvTotal>0
-      ?'Previous balance: '+fmt(prevInvTotal)+'<br>This invoice: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'+fmt(grandTotal)+'<br><hr style="margin:6px 0;border-color:#e5e7eb"><b>Total outstanding: '+fmt(outstandingBal)+'</b>'
-      :'This invoice: '+fmt(grandTotal)+'<br><hr style="margin:6px 0;border-color:#e5e7eb"><b>Total outstanding: '+fmt(outstandingBal)+'</b>';
-    overlay.innerHTML=
-      '<div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);text-align:center">'+
-        '<div style="font-size:28px;margin-bottom:8px">🖨️</div>'+
-        '<div style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:6px">Print options</div>'+
-        '<div style="font-size:13px;color:#64748b;margin-bottom:12px">'+(cust?cust.name:'Customer')+' has an outstanding balance.</div>'+
-        '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;text-align:left;margin-bottom:18px;line-height:1.8">'+detailLines+'</div>'+
-        '<div style="display:flex;flex-direction:column;gap:10px">'+
-          '<button id="pco-with-bal" style="padding:11px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Print with outstanding balance</button>'+
-          '<button id="pco-inv-only" style="padding:11px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Print current invoice only</button>'+
-          '<button id="pco-cancel" style="padding:9px;background:none;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;color:#64748b;cursor:pointer">Cancel</button>'+
-        '</div>'+
-      '</div>';
-    document.body.appendChild(overlay);
-    document.getElementById('pco-with-bal').onclick=function(){overlay.remove();doPrint(true);};
-    document.getElementById('pco-inv-only').onclick=function(){overlay.remove();doPrint(false);};
-    document.getElementById('pco-cancel').onclick=function(){overlay.remove();};
-    overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+    showPrintChoiceModal(cust?cust.name:'Customer',outstandingBal,prevInvTotal,grandTotal,
+      function(){doPrint(true);},function(){doPrint(false);});
   } else {
     doPrint(false);
   }
@@ -4451,8 +4510,26 @@ function reprintInvoice(invNum){
   var subtotalAll=invSales.reduce(function(a,s){return a+(s.salePrice*s.qty);},0);
   var invoiceDiscAmt=subtotalAll-grandTotal;
   var emptyRows='';var minR=Math.max(12,invSales.length);for(var i=invSales.length;i<minR;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
-  var html=buildInvoiceHTML({invoiceNum:invNum,custName:s0.printName||s0.custName,custAddr:s0.custAddr||'',day:day,month:mon,year:yr,rows:rows+emptyRows,itemCount:invSales.length,subtotalAll:subtotalAll,invoiceDiscAmt:invoiceDiscAmt>0.01?invoiceDiscAmt:0,grandTotal:grandTotal,payment:s0.payment,payMode:s0.payMode,bankId:s0.bankId,posId:s0.posId,splitPayment:s0.splitPayment||null,seller:s0.seller,pendingSupply:s0.pendingSupply||false,wasEverPending:s0.wasEverPending||false,supplyDate:s0.supplyDate||null});
-  var w=window.open('','_blank','width=600,height=850');w.document.write(html);w.document.close();setTimeout(function(){w.print();},500);
+  var custId=s0.custId;
+  var cust=custId?DB.customers.find(function(c){return c.id==custId;}):null;
+  // Date-aware: only count invoices/payments that existed at the time of this invoice
+  var partPaid=s0.partPayment||0;
+  var invNet=s0.payment==='credit'?grandTotal:Math.max(0,grandTotal-partPaid);
+  var bal=cust?calcOutstandingAtDate(custId,s0.date,invNum,invNet):{prevInvTotal:0,outstandingAtDate:0};
+  var prevInvTotal=bal.prevInvTotal;
+  var outstandingBal=bal.outstandingAtDate;
+  function doPrint(withOutstanding){
+    var html=buildInvoiceHTML({invoiceNum:invNum,custName:s0.printName||s0.custName,custAddr:s0.custAddr||'',day:day,month:mon,year:yr,rows:rows+emptyRows,itemCount:invSales.length,subtotalAll:subtotalAll,invoiceDiscAmt:invoiceDiscAmt>0.01?invoiceDiscAmt:0,grandTotal:grandTotal,payment:s0.payment,payMode:s0.payMode,bankId:s0.bankId,posId:s0.posId,splitPayment:s0.splitPayment||null,seller:s0.seller,pendingSupply:s0.pendingSupply||false,wasEverPending:s0.wasEverPending||false,supplyDate:s0.supplyDate||null,
+      partPayment:partPaid,
+      outstandingBal:withOutstanding?outstandingBal:0,prevInvTotal:withOutstanding&&prevInvTotal>0?prevInvTotal:0});
+    var w=window.open('','_blank','width=600,height=850');w.document.write(html);w.document.close();setTimeout(function(){w.print();},500);
+  }
+  if(outstandingBal>0){
+    showPrintChoiceModal(cust?cust.name:(s0.printName||s0.custName||'Customer'),outstandingBal,prevInvTotal,grandTotal,
+      function(){doPrint(true);},function(){doPrint(false);});
+  } else {
+    doPrint(false);
+  }
 }
 
 
