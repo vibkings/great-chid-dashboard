@@ -5289,6 +5289,7 @@ function buildReports(){
     if(reportDateFrom&&!dateInRange(s.date,reportDateFrom,''))return false;
     if(reportDateTo&&!dateInRange(s.date,'',reportDateTo))return false;
     if(reportTab==='credit'&&s.payment!=='credit')return false;
+    if(reportTab==='paid'&&s.payment==='credit')return false;
     if(reportTab==='staff'&&reportStaff&&s.seller!==reportStaff)return false;
     return true;
   });
@@ -5313,6 +5314,7 @@ function buildReports(){
   var printBtn='<button class="btn sm" onclick="printReport()" style="color:#1a237e;border-color:#93c5fd">&#128438; Print report</button>';
   return '<div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">'+
     '<button class="btn sm" onclick="reportTab=\'all\';renderPanel()" style="'+(reportTab==='all'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+'">All sales</button>'+
+    '<button class="btn sm" onclick="reportTab=\'paid\';renderPanel()" style="'+(reportTab==='paid'?'background:#15803d;color:#fff;border-color:#15803d':'')+'">Paid invoices</button>'+
     '<button class="btn sm" onclick="reportTab=\'credit\';renderPanel()" style="'+(reportTab==='credit'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+'">Credit only</button>'+
     '<button class="btn sm" onclick="reportTab=\'staff\';renderPanel()" style="'+(reportTab==='staff'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+'">By staff</button>'+
   '</div>'+
@@ -5332,6 +5334,7 @@ function printReport(){
     if(reportDateFrom&&!dateInRange(s.date,reportDateFrom,''))return false;
     if(reportDateTo&&!dateInRange(s.date,'',reportDateTo))return false;
     if(reportTab==='credit'&&s.payment!=='credit')return false;
+    if(reportTab==='paid'&&s.payment==='credit')return false;
     if(reportTab==='staff'&&reportStaff&&s.seller!==reportStaff)return false;
     return true;
   });
