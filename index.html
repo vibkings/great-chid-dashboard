@@ -2747,43 +2747,52 @@ function buildCustomers(){
 // Parses a locale date string (e.g. "5/13/2026") → timestamp for comparison
 function parseSaleDate(str){
   if(!str)return 0;
-  // Try native parse first (works for ISO strings)
   var t=new Date(str).getTime();
   if(!isNaN(t))return t;
-  // Fallback: handle M/D/YYYY or D/M/YYYY (locale)
   var parts=str.split('/');
   if(parts.length===3){
-    // Assume M/D/YYYY (US locale — matches toLocaleDateString() default in Nigeria)
     return new Date(parseInt(parts[2]),parseInt(parts[0])-1,parseInt(parts[1])).getTime();
   }
   return 0;
 }
 
+// Extract numeric part of invoice number for ordering (e.g. "0546" → 546)
+function parseInvNum(n){
+  if(!n)return 0;
+  var m=String(n).match(/\d+/);
+  return m?parseInt(m[0]):0;
+}
+
 // Returns {prevInvTotal, outstandingAtDate} for a given customer + invoice
-//   prevInvTotal     = credit owed BEFORE this invoice date (other invoices before this date, minus payments before this date)
-//   outstandingAtDate = prevInvTotal + net of this invoice (what was owed right after this invoice was created)
-// invDate  = date string of the invoice being printed
-// invNum   = invoice number/id of this invoice (to exclude from prevInvTotal)
-// invNet   = grandTotal - partPayment (what this invoice added to the balance)
+// Uses date + invoice number as tiebreaker: lower invoice number on same date = earlier
 function calcOutstandingAtDate(custId, invDate, invNum, invNet){
   var invTs=parseSaleDate(invDate);
-  // All credit invoices for this customer strictly BEFORE this invoice date
+  var invN=parseInvNum(invNum);
+
+  // "came before this invoice" = earlier date, OR same date with lower invoice number
+  function isBefore(sDate, sInvNum){
+    var sTs=parseSaleDate(sDate);
+    if(sTs < invTs) return true;
+    if(sTs === invTs) return parseInvNum(sInvNum) < invN;
+    return false;
+  }
+
+  // All credit invoices for this customer that came before this one
   var prevCreditInvoices=DB.sales.filter(function(s){
-    return s.custId==custId && s.payment==='credit' && (s.invoiceNum||s.id)!==invNum && parseSaleDate(s.date)<invTs;
+    return s.custId==custId && s.payment==='credit' && (s.invoiceNum||s.id)!==invNum && isBefore(s.date, s.invoiceNum||s.id);
   });
-  // Part payments on credit invoices from BEFORE this date (their net credit contribution)
+  // Part-payment invoices that came before this one
   var prevPartPayInvoices=DB.sales.filter(function(s){
-    return s.custId==custId && s.payment==='part' && parseSaleDate(s.date)<invTs;
+    return s.custId==custId && s.payment==='part' && isBefore(s.date, s.invoiceNum||s.id);
   });
-  // Credit payments (actual money paid toward balance) made BEFORE this invoice date
+  // Credit payments made before this invoice date (payments don't have invoice numbers)
   var prevCreditPayments=(DB.creditPayments||[]).filter(function(p){
-    return p.custId==custId && parseSaleDate(p.date)<invTs;
+    return p.custId==custId && parseSaleDate(p.date)<=invTs;
   });
   var prevCreditOwed=prevCreditInvoices.reduce(function(a,s){return a+s.total;},0);
   var prevPartOwed=prevPartPayInvoices.reduce(function(a,s){
     var paid=s.partPayment||0;
-    var owed=Math.max(0,s.total-paid);
-    return a+owed;
+    return a+Math.max(0,s.total-paid);
   },0);
   var prevPaid=prevCreditPayments.reduce(function(a,p){return a+p.amount;},0);
   var prevInvTotal=Math.max(0,prevCreditOwed+prevPartOwed-prevPaid);
