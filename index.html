@@ -5631,59 +5631,58 @@ function buildReports(){
   // ── Paid Invoice Summary: one row per invoice, no credit ──────
   // ── Returns Report: one row per invoice, grouped ──────────────
   if(reportTab==='returns'){
-    var retFiltered=(DB.salesReturns||[]).filter(function(r){
+    var allReturns=(DB.salesReturns||[]);
+    var retFiltered=allReturns.filter(function(r){
       if(reportDateFrom&&!dateInRange(r.date,reportDateFrom,''))return false;
       if(reportDateTo&&!dateInRange(r.date,'',reportDateTo))return false;
       return true;
     });
-    // Group by invoiceNum
     var retMap={};
     retFiltered.forEach(function(r){
-      var k=r.invoiceNum||r.invoiceId;
-      if(!retMap[k])retMap[k]={invoiceNum:k,date:r.date,custName:r.custName,items:[],totalRefund:0,refundType:r.refundType,by:r.by};
-      retMap[k].items.push(r.itemName+' ×'+r.qty);
-      retMap[k].totalRefund+=r.refundAmt||0;
+      var k=(r.invoiceNum||r.invoiceId||r.id);
+      if(!retMap[k])retMap[k]={invoiceNum:k,date:r.date,custName:r.custName||'Walk-in',items:[],totalRefund:0,refundType:r.refundType,by:r.by};
+      retMap[k].items.push((r.itemName||r.name||'Item')+' ×'+(r.qty||1));
+      retMap[k].totalRefund+=(r.refundAmt||0);
     });
     var retList=Object.values(retMap).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date);});
     var retGrandTotal=retList.reduce(function(a,g){return a+g.totalRefund;},0);
     var retRows=retList.map(function(g,i){
-      var refundBadge=g.refundType==='cash'?'<span style="color:#15803d;font-weight:700">Cash refund</span>':g.refundType==='credit'?'<span style="color:#1a237e;font-weight:700">Store credit</span>':'Exchange';
-      return '<tr>'+
-        '<td>'+(i+1)+'</td>'+
-        '<td>'+g.date+'</td>'+
-        '<td style="font-weight:700">'+g.invoiceNum+'</td>'+
-        '<td>'+g.custName+'</td>'+
-        '<td style="font-size:11px">'+g.items.join(', ')+'</td>'+
-        '<td style="text-align:right;font-weight:700;color:#c0392b">'+fmt(g.totalRefund)+'</td>'+
-        '<td>'+refundBadge+'</td>'+
-        '<td>'+g.by+'</td>'+
-      '</tr>';
+      var rb=g.refundType==='cash'?'<span style="color:#15803d;font-weight:700">Cash refund</span>':g.refundType==='credit'?'<span style="color:#1a237e;font-weight:700">Store credit</span>':'Exchange';
+      return '<tr><td>'+(i+1)+'</td><td>'+g.date+'</td><td style="font-weight:700">'+g.invoiceNum+'</td><td>'+g.custName+'</td><td style="font-size:11px">'+g.items.join(', ')+'</td><td style="text-align:right;font-weight:700;color:#c0392b">'+fmt(g.totalRefund)+'</td><td>'+rb+'</td><td>'+g.by+'</td></tr>';
     }).join('');
-    var retPrintBtn='<button class="btn sm" onclick="printReturnsReport()" style="color:#b45309;border-color:#fcd34d">&#128438; Print report</button>';
-    var retTabBtns='<div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">'+
-      '<button class="btn sm" onclick="reportTab=\'all\';renderPanel()">All sales</button>'+
-      '<button class="btn sm" onclick="reportTab=\'paid\';renderPanel()">Paid invoices</button>'+
-      '<button class="btn sm" onclick="reportTab=\'paidinv\';renderPanel()">Paid invoice summary</button>'+
-      '<button class="btn sm" onclick="reportTab=\'credit\';renderPanel()">Credit only</button>'+
-      '<button class="btn sm" onclick="reportTab=\'staff\';renderPanel()">By staff</button>'+
-      '<button class="btn sm" onclick="reportTab=\'returns\';renderPanel()" style="background:#b45309;color:#fff;border-color:#b45309">Returns</button>'+
-    '</div>';
-    return retTabBtns+
-    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">'+
-      '<input type="date" value="'+reportDateFrom+'" onchange="reportDateFrom=this.value;renderPanel()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">'+
-      '<span style="font-size:12px;color:var(--text3)">to</span>'+
-      '<input type="date" value="'+reportDateTo+'" onchange="reportDateTo=this.value;renderPanel()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">'+
-      '<button class="btn sm" onclick="reportDateFrom=\'\';reportDateTo=\'\';renderPanel()">Clear</button>'+
-      retPrintBtn+
-    '</div>'+
-    '<div class="metrics">'+mc('Returns',retList.length,'Invoices','')+mc('Total refunded',fmt(retGrandTotal),'','red')+'</div>'+
-    (retRows?'<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th><th>Items returned</th><th style="text-align:right">Refund amt</th><th>Refund type</th><th>Processed by</th></tr></thead><tbody>'+retRows+'<tr style="background:#fff3cd;font-weight:700;border-top:2px solid #b45309"><td colspan="5">TOTAL — '+retList.length+' return(s)</td><td style="text-align:right;color:#c0392b">'+fmt(retGrandTotal)+'</td><td colspan="2"></td></tr></tbody></table></div>'
-    :'<div class="empty">No returns recorded for this period.</div>');
+    var retTabBtns=
+      '<button class="btn sm" onclick="reportTab=\'all\';renderPanel()">All sales</button> '+
+      '<button class="btn sm" onclick="reportTab=\'paid\';renderPanel()">Paid invoices</button> '+
+      '<button class="btn sm" onclick="reportTab=\'paidinv\';renderPanel()">Paid invoice summary</button> '+
+      '<button class="btn sm" onclick="reportTab=\'credit\';renderPanel()">Credit only</button> '+
+      '<button class="btn sm" onclick="reportTab=\'staff\';renderPanel()">By staff</button> '+
+      '<button class="btn sm" onclick="reportTab=\'returns\';renderPanel()" style="background:#b45309;color:#fff;border-color:#b45309">Returns</button>';
+    var out='<div style="display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap">'+retTabBtns+'</div>';
+    out+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">';
+    out+='<input type="date" value="'+reportDateFrom+'" onchange="reportDateFrom=this.value;renderPanel()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">';
+    out+='<span style="font-size:12px;color:var(--text3)">to</span>';
+    out+='<input type="date" value="'+reportDateTo+'" onchange="reportDateTo=this.value;renderPanel()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">';
+    out+='<button class="btn sm" onclick="reportDateFrom=\'\';reportDateTo=\'\';renderPanel()">Clear</button>';
+    out+='<button class="btn sm" onclick="printReturnsReport()" style="color:#b45309;border-color:#fcd34d">&#128438; Print report</button>';
+    out+='<span style="font-size:12px;color:#6b7280">Total records in DB: '+allReturns.length+' | Showing: '+retFiltered.length+'</span>';
+    out+='</div>';
+    out+='<div class="metrics">'+mc('Returns',retList.length,'Invoices','')+mc('Total refunded',fmt(retGrandTotal),'','red')+'</div>';
+    if(retRows){
+      out+='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th><th>Items returned</th><th style="text-align:right">Refund amt</th><th>Refund type</th><th>By</th></tr></thead><tbody>';
+      out+=retRows;
+      out+='<tr style="background:#fff3cd;font-weight:700;border-top:2px solid #b45309"><td colspan="5">TOTAL — '+retList.length+' return(s)</td><td style="text-align:right;color:#c0392b">'+fmt(retGrandTotal)+'</td><td colspan="2"></td></tr>';
+      out+='</tbody></table></div>';
+    } else {
+      out+='<div class="empty">No returns recorded'+(allReturns.length>0?' for this date range ('+allReturns.length+' total exist — try clearing the date filter)':'')+'.</div>';
+    }
+    return out;
   }
+
 
   if(reportTab==='paidinv'){
     var piSales=DB.sales.filter(function(s){
       if(s.payment==='credit')return false;
+      if(s.payment==='deposit'||s.payMode==='deposit')return false;
       if(reportDateFrom&&!dateInRange(s.date,reportDateFrom,''))return false;
       if(reportDateTo&&!dateInRange(s.date,'',reportDateTo))return false;
       return true;
@@ -5743,7 +5742,7 @@ function buildReports(){
     if(reportDateFrom&&!dateInRange(s.date,reportDateFrom,''))return false;
     if(reportDateTo&&!dateInRange(s.date,'',reportDateTo))return false;
     if(reportTab==='credit'&&s.payment!=='credit')return false;
-    if(reportTab==='paid'&&s.payment==='credit')return false;
+    if(reportTab==='paid'&&(s.payment==='credit'||s.payment==='deposit'||s.payMode==='deposit'))return false;
     if(reportTab==='staff'&&reportStaff&&s.seller!==reportStaff)return false;
     return true;
   });
@@ -5790,7 +5789,7 @@ function printReport(){
     if(reportDateFrom&&!dateInRange(s.date,reportDateFrom,''))return false;
     if(reportDateTo&&!dateInRange(s.date,'',reportDateTo))return false;
     if(reportTab==='credit'&&s.payment!=='credit')return false;
-    if(reportTab==='paid'&&s.payment==='credit')return false;
+    if(reportTab==='paid'&&(s.payment==='credit'||s.payment==='deposit'||s.payMode==='deposit'))return false;
     if(reportTab==='staff'&&reportStaff&&s.seller!==reportStaff)return false;
     return true;
   });
@@ -5809,6 +5808,7 @@ function printReport(){
 function printPaidInvReport(){
   var piSales=DB.sales.filter(function(s){
     if(s.payment==='credit')return false;
+    if(s.payment==='deposit'||s.payMode==='deposit')return false;
     if(reportDateFrom&&!dateInRange(s.date,reportDateFrom,''))return false;
     if(reportDateTo&&!dateInRange(s.date,'',reportDateTo))return false;
     return true;
