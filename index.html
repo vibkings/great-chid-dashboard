@@ -1107,6 +1107,7 @@ function initials(name){return name.split(' ').map(function(w){return w[0];}).sl
 function getBankName(id){var b=DB.banks.find(function(b){return b.id==id;});return b?b.name:' - ';}
 function getPosName(id){var p=DB.posTerminals.find(function(p){return p.id==id;});return p?p.name:' - ';}
 function payModeLabel(s){
+  if(s.payment==='deposit'||s.payMode==='deposit') return 'Deposit';
   if(s.payMode==='split'&&s.splitPayment){
     var sp=s.splitPayment;
     function modeStr(m,amt,bid,pid){var l=m==='pos'?'POS'+(pid?' ('+getPosName(pid)+')':''):m==='transfer'?'Transfer'+(bid?' ('+getBankName(bid)+')':''):'Cash';return l+' '+fmt(amt);}
@@ -2853,7 +2854,7 @@ function buildCustomers(){
       var invRows=invKeys.length?invKeys.map(function(k){
         var g=invGroups[k];
         var itemList=g.items.map(function(s){return s.name+' ×'+s.qty+'  @'+fmt(s.salePrice);}).join('<br>');
-        var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':'<span class="badge ok">Cash</span>';
+        var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':'<span class="badge ok">Cash</span>';
         return '<tr><td><b>'+g.invoiceNum+'</b></td><td>'+g.date+'</td><td style="font-size:11px">'+itemList+'</td><td style="text-align:right"><b>'+fmt(g.total)+'</b></td><td>'+payModeLabel(g)+'</td><td>'+pt+'</td><td>'+g.seller+'</td>'+
           '<td><button class="btn sm" style="color:#1a237e;border-color:#93c5fd;font-size:11px" onclick="printCustomerInvoice(\''+k+'\','+cust.id+')">Print ↗</button></td></tr>';
       }).join(''):'<tr><td colspan="8" class="empty">No purchases yet.</td></tr>';
@@ -3843,37 +3844,49 @@ function submitInvoice(){
       printName=(printNameEl&&printNameEl.value.trim())||'';
       // Check credit limit
       if(payment==='credit'){
-        var grandTotalCheck=finalGrandTotal;
         var currentOwed=rc.creditBalance||0;
         var creditLimit=rc.creditLimit||0;
-        // ── Deposit-as-collateral check ──
         var custDepBal=(DB.deposits||[]).filter(function(d){return String(d.custId)===String(custId);}).reduce(function(a,d){return a+d.amount;},0);
         if(custDepBal>0&&creditLimit===0){
-          // Has deposit but no credit limit — allow credit only up to deposit balance
           if(finalGrandTotal>custDepBal){
-            showConfirm({type:'warning',title:'Deposit limit exceeded',
-              msg:rc.name+' has no credit limit but has a deposit balance.',
-              detail:'Deposit balance: '+fmt(custDepBal)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nExceeds deposit by: '+fmt(finalGrandTotal-custDepBal)+'\n\nCredit cannot exceed the deposit balance.',
-              confirmLabel:'OK',cancelLabel:null},function(){});
+            alert('\u26d4 Sale blocked.\n\nCustomer: '+rc.name+'\nDeposit balance: '+fmt(custDepBal)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nShortfall: '+fmt(finalGrandTotal-custDepBal)+'\n\nDeposit does not cover the full amount and there is no credit limit set.');
             return;
           }
         } else if(custDepBal>0&&creditLimit>0){
-          // Has both deposit and credit limit — effective limit = credit limit + deposit
           var effectiveLimit=creditLimit+custDepBal;
           if((currentOwed+finalGrandTotal)>effectiveLimit){
-            showConfirm({type:'warning',title:'Credit + Deposit limit exceeded',
-              msg:rc.name+' has a credit limit and deposit balance.',
-              detail:'Credit limit: '+fmt(creditLimit)+'\nDeposit balance: '+fmt(custDepBal)+'\nEffective limit: '+fmt(effectiveLimit)+'\nCurrently owes: '+fmt(currentOwed)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nOver by: '+fmt((currentOwed+finalGrandTotal)-effectiveLimit),
-              confirmLabel:'OK',cancelLabel:null},function(){});
+            alert('\u26d4 Credit + Deposit limit exceeded.\n\nCustomer: '+rc.name+'\nDeposit: '+fmt(custDepBal)+'\nCredit limit: '+fmt(creditLimit)+'\nEffective limit: '+fmt(effectiveLimit)+'\nCurrently owes: '+fmt(currentOwed)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nOver by: '+fmt((currentOwed+finalGrandTotal)-effectiveLimit));
             return;
           }
         } else {
-          // No deposit — standard credit limit check
           if(creditLimit>0&&(currentOwed+finalGrandTotal)>creditLimit){
-            alert('Credit limit exceeded!\nCustomer: '+rc.name+'\nCredit limit: '+fmt(creditLimit)+'\nCurrently owes: '+fmt(currentOwed)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nOver by: '+fmt((currentOwed+finalGrandTotal)-creditLimit)+'\n\nReduce the purchase or increase the credit limit.');
+            alert('\u26d4 Credit limit exceeded!\nCustomer: '+rc.name+'\nCredit limit: '+fmt(creditLimit)+'\nCurrently owes: '+fmt(currentOwed)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nOver by: '+fmt((currentOwed+finalGrandTotal)-creditLimit)+'\n\nReduce the purchase or increase the credit limit.');
             return;
           }
           if(creditLimit===0){alert('This customer has no credit limit set. Please set a credit limit in the Customers tab before allowing credit purchases.');return;}
+        }
+      }
+      // Deposit payment validation
+      if(payment==='deposit'){
+        var depBal2=(DB.deposits||[]).filter(function(d){return String(d.custId)===String(custId);}).reduce(function(a,d){return a+d.amount;},0);
+        var creditLimit2=rc.creditLimit||0;
+        var currentOwed2=rc.creditBalance||0;
+        if(depBal2<=0){
+          alert('\u26d4 Cannot process deposit payment.\n\nCustomer: '+rc.name+'\nDeposit balance: \u20a60\n\nThis customer has no deposit balance. Ask them to make a deposit first.');
+          return;
+        }
+        if(depBal2<finalGrandTotal){
+          var shortfall=finalGrandTotal-depBal2;
+          if(creditLimit2===0){
+            alert('\u26d4 Sale blocked \u2014 insufficient deposit.\n\nCustomer: '+rc.name+'\nDeposit balance: '+fmt(depBal2)+'\nThis invoice: '+fmt(finalGrandTotal)+'\nShortfall: '+fmt(shortfall)+'\n\nNo credit limit set to cover the shortfall.\nAsk the customer to top up their deposit or reduce the invoice amount.');
+            return;
+          }
+          var availableCredit=Math.max(0,creditLimit2-currentOwed2);
+          if(shortfall>availableCredit){
+            alert('\u26d4 Sale blocked \u2014 deposit + credit insufficient.\n\nCustomer: '+rc.name+'\nDeposit balance: '+fmt(depBal2)+'\nAvailable credit: '+fmt(availableCredit)+'\nTotal available: '+fmt(depBal2+availableCredit)+'\nThis invoice: '+fmt(finalGrandTotal)+'\nShortfall: '+fmt(shortfall-availableCredit)+'\n\nReduce the invoice, increase credit limit, or ask customer to top up deposit.');
+            return;
+          }
+          if(!confirm('\u26a0\ufe0f Deposit covers part of this invoice.\n\nCustomer: '+rc.name+'\nDeposit covers: '+fmt(depBal2)+'\nRemaining on credit: '+fmt(shortfall)+'\n\nProceed? The shortfall will be added to the customer\'s credit balance.')){return;}
         }
       }
     }
@@ -3978,10 +3991,10 @@ function submitInvoice(){
       supplyDate:(pendingSupply||pi.pending>0)?null:date
     });
   });
-  var cashReceived = (payment==='cash'||payment==='split') ? grandTotal : (payment==='part' ? partPayment : 0);
+  var cashReceived = (payment==='cash'||payment==='split'||payment==='deposit') ? grandTotal : (payment==='part' ? partPayment : 0);
   // creditAmount = how much the customer still owes us after this payment
   // If partPayment > grandTotal → negative = we owe them (overpayment / store credit)
-  var creditAmount = payment==='credit' ? grandTotal : (payment==='part' ? (grandTotal - partPayment) : 0); // split=0 credit
+  var creditAmount = payment==='credit' ? grandTotal : (payment==='part' ? (grandTotal - partPayment) : 0); // split/deposit/cash=0 credit
   var overpayment = (payment==='part' && partPayment > grandTotal) ? (partPayment - grandTotal) : 0;
 
   if(cashReceived > 0){
@@ -4142,6 +4155,14 @@ function onPaymentTypeChange(){
     });
     // If walk-in and a blocked option is currently selected, reset to cash
     if(isWalkin&&(paySelEl.value==='credit'||paySelEl.value==='part')){paySelEl.value='cash';}
+    // Hide deposit option if customer has no deposit balance
+    var depOptEl=Array.from(paySelEl.options).find(function(o){return o.value==='deposit';});
+    if(depOptEl){
+      var custId=document.getElementById('s-cust-id')?document.getElementById('s-cust-id').value:'';
+      var depBal=custId?(DB.deposits||[]).filter(function(d){return String(d.custId)==String(custId);}).reduce(function(a,d){return a+d.amount;},0):0;
+      depOptEl.disabled=depBal<=0;
+      depOptEl.text='Deposit (use customer deposit balance'+(depBal>0?' — available: '+fmt(depBal):'— no deposit available')+')';
+    }
   }
   var payType=document.getElementById('s-payment');
   var payMode=document.getElementById('s-paymode');
@@ -4155,6 +4176,11 @@ function onPaymentTypeChange(){
     if(splitWrap)splitWrap.style.display='none';
     if(payModeWrap)payModeWrap.style.display='block';
     togglePaySubFields('credit','s');
+  } else if(payType.value==='deposit'){
+    payMode.value='deposit';payMode.disabled=true;
+    if(partWrap)partWrap.style.display='none';
+    if(splitWrap)splitWrap.style.display='none';
+    if(payModeWrap)payModeWrap.style.display='none';
   } else if(payType.value==='part'){
     payMode.value='cash';payMode.disabled=false;
     if(partWrap)partWrap.style.display='block';
@@ -4599,7 +4625,7 @@ function buildSales(){
       '<div style="margin-top:3px"><span style="background:#fff3cd;color:#664d03;border:1px solid #ffe69c;border-radius:10px;font-size:10px;font-weight:700;padding:2px 7px">⏳ Goods not yet supplied</span></div>':
       (g.items[0]&&g.items[0].supplyDate&&g.items[0].supplyDate!==g.date?
         '<div style="margin-top:3px"><span style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;border-radius:10px;font-size:10px;font-weight:700;padding:2px 7px">✅ Supplied: '+g.items[0].supplyDate+'</span></div>':'');
-    var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='part'?'<span class="badge low">Part pay</span>':'<span class="badge ok">Cash</span>';
+    var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='part'?'<span class="badge low">Part pay</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':'<span class="badge ok">Cash</span>';
     return '<tr'+(isPending?' style="background:#fffbeb"':'')+
       ' data-inv="'+(g.invoiceNum||'').toLowerCase()+'"'+
       ' data-cust="'+(g.custName||'').toLowerCase()+'"'+
@@ -4658,7 +4684,7 @@ function buildSales(){
     itemsHtml+
     '<p style="font-size:11px;font-weight:600;color:#555;margin:.75rem 0 8px;text-transform:uppercase;letter-spacing:.04em">Payment</p>'+
     '<div class="fg" style="grid-template-columns:1fr 1fr 1fr">'+
-      '<div class="form-group"><label>Payment type <span style="color:var(--danger)">*</span></label><select id="s-payment" onchange="onPaymentTypeChange()"><option value="cash">Cash (fully paid)</option><option value="credit">Credit (full amount owed)</option><option value="part">Part payment</option><option value="split">Split payment (2 modes)</option></select></div>'+
+      '<div class="form-group"><label>Payment type <span style="color:var(--danger)">*</span></label><select id="s-payment" onchange="onPaymentTypeChange()"><option value="cash">Cash (fully paid)</option><option value="deposit">Deposit (use customer deposit balance)</option><option value="credit">Credit (full amount owed)</option><option value="part">Part payment</option><option value="split">Split payment (2 modes)</option></select></div>'+
       '<div class="form-group" id="s-paymode-wrap"><label>Payment mode</label><select id="s-paymode" onchange="togglePaySubFields(this.value,\'s\')"><option value="cash">Cash</option><option value="pos">POS</option><option value="transfer">Bank transfer</option><option value="credit">Credit</option></select></div>'+
       '<div class="form-group" id="s-part-wrap" style="display:none"><label>Amount paid now (₦)</label><input type="number" id="s-part-payment" placeholder="0" min="0"></div>'+
     '</div>'+
