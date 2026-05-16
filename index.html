@@ -5702,11 +5702,12 @@ function buildReports(){
     });
     var piList=Object.values(piMap).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date)||parseInvNum(b.invoiceNum)-parseInvNum(a.invoiceNum);});
     var piGrandTotal=piList.reduce(function(a,g){return a+g.total;},0);
+    var piGrandAmtPaid=piList.reduce(function(a,g){return a+(g.payment==='part'?(g.partPayment||0):g.total);},0);
     var piGrandProfit=piList.reduce(function(a,g){return a+g.profit;},0);
     var piRows=piList.map(function(g,i){
-      var payType=g.payment==='part'?'Part pay':'Cash';
       var amtPaid=g.payment==='part'?(g.partPayment||0):g.total;
       var balDue=g.payment==='part'?Math.max(0,g.total-amtPaid):0;
+      var overpaid=g.payment==='part'&&amtPaid>g.total?amtPaid-g.total:0;
       return '<tr>'+
         '<td>'+(i+1)+'</td>'+
         '<td>'+g.date+'</td>'+
@@ -5714,10 +5715,8 @@ function buildReports(){
         '<td>'+g.custName+'</td>'+
         '<td style="text-align:center">'+g.itemCount+'</td>'+
         '<td style="text-align:right;font-weight:700">'+fmt(g.total)+'</td>'+
-        (g.payment==='part'?
-          '<td style="text-align:right;color:#15803d">'+fmt(amtPaid)+'</td>'+
-          '<td style="text-align:right;color:#c0392b">'+fmt(balDue)+'</td>'
-          :'<td colspan="2" style="text-align:center;color:#15803d">Fully paid</td>')+
+        '<td style="text-align:right;color:#15803d;font-weight:700">'+fmt(amtPaid)+(overpaid>0?' <span style=\"font-size:10px;color:#0369a1\">(+'+fmt(overpaid)+' over)</span>':'')+'</td>'+
+        '<td style="text-align:right;color:'+(balDue>0?'#c0392b':'#15803d')+'">'+(balDue>0?fmt(balDue):'\u2713')+'</td>'+
         '<td style="text-align:right">'+fmt(g.profit)+'</td>'+
         '<td>'+payModeLabel(g)+'</td>'+
         '<td>'+g.seller+'</td>'+
@@ -5738,8 +5737,8 @@ function buildReports(){
       '<button class="btn sm" onclick="reportDateFrom=\'\';reportDateTo=\'\';renderPanel()">Clear</button>'+
       piPrintBtn+
     '</div>'+
-    '<div class="metrics">'+mc('Invoices',piList.length,'','')+mc('Total revenue',fmt(piGrandTotal),'','')+mc('Total profit',fmt(piGrandProfit),pct(piGrandProfit,piGrandTotal)+' margin',piGrandProfit>=0?'green':'red')+'</div>'+
-    (piRows?'<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th><th style="text-align:center">Items</th><th style="text-align:right">Invoice total</th><th style="text-align:right">Amt paid</th><th style="text-align:right">Bal due</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+piRows+'<tr style="background:#f5f5f5;font-weight:700;border-top:2px solid #1a237e"><td colspan="5">TOTAL — '+piList.length+' invoices</td><td style="text-align:right">'+fmt(piGrandTotal)+'</td><td colspan="2"></td><td style="text-align:right">'+fmt(piGrandProfit)+'</td><td colspan="2"></td></tr></tbody></table></div>'
+    '<div class="metrics">'+mc('Invoices',piList.length,'','')+mc('Invoice total',fmt(piGrandTotal),'','')+mc('Total paid',fmt(piGrandAmtPaid),'Actual cash received','green')+mc('Total profit',fmt(piGrandProfit),pct(piGrandProfit,piGrandTotal)+' margin',piGrandProfit>=0?'green':'red')+'</div>'+
+    (piRows?'<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th><th style="text-align:center">Items</th><th style="text-align:right">Invoice total</th><th style="text-align:right">Amt paid</th><th style="text-align:right">Bal due</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+piRows+'<tr style="background:#f5f5f5;font-weight:700;border-top:2px solid #1a237e"><td colspan="5">TOTAL — '+piList.length+' invoices</td><td style="text-align:right">'+fmt(piGrandTotal)+'</td><td style="text-align:right;color:#15803d">'+fmt(piGrandAmtPaid)+'</td><td></td><td style="text-align:right">'+fmt(piGrandProfit)+'</td><td colspan="2"></td></tr></tbody></table></div>'
     :'<div class="empty">No paid invoices for this period.</div>');
   }
 
@@ -5828,11 +5827,13 @@ function printPaidInvReport(){
   });
   var piList=Object.values(piMap).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date)||parseInvNum(b.invoiceNum)-parseInvNum(a.invoiceNum);});
   var piGrandTotal=piList.reduce(function(a,g){return a+g.total;},0);
+  var piGrandAmtPaid=piList.reduce(function(a,g){return a+(g.payment==='part'?(g.partPayment||0):g.total);},0);
   var piGrandProfit=piList.reduce(function(a,g){return a+g.profit;},0);
   var dateRange=(reportDateFrom||reportDateTo)?(reportDateFrom||'...')+' to '+(reportDateTo||'...'):'All time';
   var rows=piList.map(function(g,i){
     var amtPaid=g.payment==='part'?(g.partPayment||0):g.total;
     var balDue=g.payment==='part'?Math.max(0,g.total-amtPaid):0;
+    var overpaid=g.payment==='part'&&amtPaid>g.total?amtPaid-g.total:0;
     return '<tr>'+
       '<td>'+(i+1)+'</td>'+
       '<td>'+g.date+'</td>'+
@@ -5840,10 +5841,8 @@ function printPaidInvReport(){
       '<td>'+g.custName+'</td>'+
       '<td style="text-align:center">'+g.itemCount+'</td>'+
       '<td style="text-align:right;font-weight:700">'+fmt(g.total)+'</td>'+
-      (g.payment==='part'?
-        '<td style="text-align:right;color:green">'+fmt(amtPaid)+'</td>'+
-        '<td style="text-align:right;color:#c0392b">'+fmt(balDue)+'</td>'
-        :'<td colspan="2" style="text-align:center;color:green">Fully paid</td>')+
+      '<td style="text-align:right;color:green;font-weight:700">'+fmt(amtPaid)+(overpaid>0?' (+'+fmt(overpaid)+')':'')+'</td>'+
+      '<td style="text-align:right;color:'+(balDue>0?'#c0392b':'green')+'">'+(balDue>0?fmt(balDue):'✓')+'</td>'+
       '<td style="text-align:right">'+fmt(g.profit)+'</td>'+
       '<td>'+payModeLabel(g)+'</td>'+
       '<td>'+g.seller+'</td>'+
@@ -5877,7 +5876,8 @@ function printPaidInvReport(){
     rows+
     '<tr class="tr"><td colspan="5">TOTAL — '+piList.length+' invoice(s)</td>'+
       '<td style="text-align:right">'+fmt(piGrandTotal)+'</td>'+
-      '<td colspan="2"></td>'+
+      '<td style="text-align:right;color:green">'+fmt(piGrandAmtPaid)+'</td>'+
+      '<td></td>'+
       '<td style="text-align:right">'+fmt(piGrandProfit)+'</td>'+
       '<td colspan="2"></td>'+
     '</tr>'+
