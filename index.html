@@ -2885,11 +2885,12 @@ function buildCustomers(){
         '</div>'+
         (theyOweUs?'<div style="background:#fff5f5;border:2px solid #fca5a5;border-radius:10px;padding:14px 16px;margin-top:1rem">'+
           '<div style="font-size:13px;font-weight:700;color:#dc2626;margin-bottom:10px">💳 Record credit payment — owes '+fmt(creditBalance)+'</div>'+
-          '<div class="fg" style="grid-template-columns:1fr 1fr 1fr auto">'+
+          '<div class="fg" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr auto">'+
             '<div class="form-group"><label>Amount paid (₦)</label><input type="number" id="cp-amt-'+cust.id+'" placeholder="0" min="0" max="'+creditBalance+'"></div>'+
             '<div class="form-group"><label>Payment mode</label><select id="cp-mode-'+cust.id+'" onchange="toggleCpSubFields('+cust.id+')"><option value="cash">Cash</option><option value="transfer">Bank transfer</option><option value="pos">POS</option></select></div>'+
             '<div class="form-group" id="cp-bank-wrap-'+cust.id+'" style="display:none"><label>Bank</label><select id="cp-bank-'+cust.id+'"><option value="">Select...</option>'+bankOpts()+'</select></div>'+
             '<div class="form-group" id="cp-pos-wrap-'+cust.id+'" style="display:none"><label>POS</label><select id="cp-pos-'+cust.id+'"><option value="">Select...</option>'+posOpts()+'</select></div>'+
+            '<div class="form-group"><label>Payment date</label><input type="date" id="cp-date-'+cust.id+'" value="'+new Date().toISOString().slice(0,10)+'"></div>'+
             '<div class="form-group"><label>&nbsp;</label><button class="btn primary" onclick="recordCreditPayment('+cust.id+')" style="background:#16a34a;border-color:#16a34a">✓ Record payment</button></div>'+
           '</div>'+
           (DB.creditPayments&&DB.creditPayments.filter(function(p){return p.custId=='+cust.id+';}).length?'<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Payment history</div>'+
@@ -6065,8 +6066,10 @@ function recordCreditPayment(custId){
   }
   if(mode==='transfer'&&DB.banks.length&&!bankId){alert('Select the bank for transfer.');return;}
   if(mode==='pos'&&DB.posTerminals.length&&!posId){alert('Select the POS terminal.');return;}
-  var date=new Date().toLocaleDateString();
-  var month=new Date().toISOString().slice(0,7);
+  var dateEl=document.getElementById('cp-date-'+custId);
+  var rawDate=dateEl&&dateEl.value?new Date(dateEl.value):new Date();
+  var date=rawDate.toLocaleDateString();
+  var month=rawDate.toISOString().slice(0,7);
   // Reduce credit balance
   cust.creditBalance=Math.round((cust.creditBalance-amt)*100)/100;
   // Store payment record
