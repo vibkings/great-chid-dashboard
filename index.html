@@ -3038,8 +3038,14 @@ function parseSaleDate(str){
 function parseInvNum(n){
   if(!n)return 0;
   var s=String(n);
-  // Handle format YYYY/NNNN — use only the sequence part
-  if(s.indexOf('/')!==-1)s=s.split('/').pop();
+  // Handle format YYYY/NNNN — year-prefixed invoices always come after old plain numbers
+  // Use year * 1,000,000 + sequence so 2026/0005 = 2026000005 >> 5700 (old format)
+  if(s.indexOf('/')!==-1){
+    var parts=s.split('/');
+    var yr=parseInt(parts[0])||0;
+    var seq=parseInt(parts[1])||0;
+    return yr*1000000+seq;
+  }
   var m=s.match(/\d+/);
   return m?parseInt(m[0]):0;
 }
@@ -5664,7 +5670,6 @@ function buildReports(){
     out+='<input type="date" value="'+reportDateTo+'" onchange="reportDateTo=this.value;renderPanel()" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">';
     out+='<button class="btn sm" onclick="reportDateFrom=\'\';reportDateTo=\'\';renderPanel()">Clear</button>';
     out+='<button class="btn sm" onclick="printReturnsReport()" style="color:#b45309;border-color:#fcd34d">&#128438; Print report</button>';
-    out+='<span style="font-size:12px;color:#6b7280">Total records in DB: '+allReturns.length+' | Showing: '+retFiltered.length+'</span>';
     out+='</div>';
     out+='<div class="metrics">'+mc('Returns',retList.length,'Invoices','')+mc('Total refunded',fmt(retGrandTotal),'','red')+'</div>';
     if(retRows){
