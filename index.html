@@ -2593,6 +2593,146 @@ function removeCustomer(id){
     saveData();renderApp();
   });
 }
+// ── MESSAGING PANEL ──────────────────────────────────────────
+var msgSelectedCusts=[];   // ids of selected customers
+var msgTemplateKey='custom'; // active template key
+
+var MSG_TEMPLATES={
+  newmonth:{
+    label:'🎉 New Month',
+    text:'Dear {name}, we wish you a wonderful new month! Thank you for your continued patronage. We look forward to serving you better this month. Best regards, Great Chid Electro / Global Doors Ltd.'
+  },
+  reminder:{
+    label:'💳 Balance Reminder',
+    text:'Dear {name}, this is a friendly reminder that you have an outstanding balance of {balance} on your account. Kindly visit us or contact us to make payment. Thank you. Great Chid Electro / Global Doors Ltd.'
+  },
+  promo:{
+    label:'🛍️ Promo / Announcement',
+    text:'Dear {name}, we have exciting products and offers available for you! Visit us today and enjoy great deals. Great Chid Electro / Global Doors Ltd.'
+  },
+  custom:{
+    label:'✏️ Custom message',
+    text:''
+  }
+};
+
+function buildMessagingPanel(){
+  var custs=DB.customers.filter(function(c){return c.phone;});
+  var noPhone=DB.customers.filter(function(c){return !c.phone;});
+  var tplBtns=Object.keys(MSG_TEMPLATES).map(function(k){
+    var t=MSG_TEMPLATES[k];
+    var active=msgTemplateKey===k;
+    return '<button onclick="setMsgTemplate(\''+k+'\')" style="padding:7px 12px;border-radius:8px;border:1.5px solid '+(active?'#1a237e':'#cbd5e1')+';background:'+(active?'#1a237e':'#fff')+';color:'+(active?'#fff':'#374151')+';font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">'+t.label+'</button>';
+  }).join('');
+  var custRows=custs.map(function(c){
+    var bal=c.creditBalance>0?fmt(c.creditBalance):'₦0';
+    var checked=msgSelectedCusts.indexOf(c.id)!==-1;
+    return '<tr style="cursor:pointer" onclick="toggleMsgCust(\''+c.id+'\')">'+
+      '<td style="width:36px;text-align:center"><input type="checkbox" '+(checked?'checked':'')+' onclick="event.stopPropagation();toggleMsgCust(\''+c.id+'\')" style="width:15px;height:15px;cursor:pointer"></td>'+
+      '<td style="font-weight:600">'+c.name+'</td>'+
+      '<td>'+c.phone+'</td>'+
+      '<td>'+(c.biz||'—')+'</td>'+
+      '<td style="color:'+(c.creditBalance>0?'#c0392b':'#15803d')+'">'+bal+'</td>'+
+    '</tr>';
+  }).join('');
+
+  return '<p class="sec-title">📲 Customer Messaging (WhatsApp)</p>'+
+    '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
+      '✅ Messages open WhatsApp for each selected customer. Make sure WhatsApp is installed.'+
+      (noPhone.length?' &nbsp;|&nbsp; <span style="color:#92400e">⚠ '+noPhone.length+' customer(s) have no phone number saved.</span>':'')+
+    '</div>'+
+
+    // Template selector
+    '<p style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">1. Choose a message template</p>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+tplBtns+'</div>'+
+
+    // Message editor
+    '<div class="form-group" style="margin-bottom:1rem">'+
+      '<label style="font-size:12px">Message text &nbsp;<span style="font-weight:400;color:#6b7280">(use {name} for customer name, {balance} for their balance)</span></label>'+
+      '<textarea id="msg-text" rows="5" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit" placeholder="Type your message here...">'+MSG_TEMPLATES[msgTemplateKey].text+'</textarea>'+
+    '</div>'+
+
+    // Customer selector
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
+      '<p style="font-size:12px;font-weight:700;color:#374151;margin:0">2. Select recipients</p>'+
+      '<button onclick="msgSelectAll()" style="padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:11px;cursor:pointer">Select all</button>'+
+      '<button onclick="msgSelectNone()" style="padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:11px;cursor:pointer">Clear</button>'+
+      '<button onclick="msgSelectCredit()" style="padding:5px 10px;border-radius:6px;border:1px solid #fcd34d;background:#fff8f0;font-size:11px;cursor:pointer;color:#92400e">Select credit customers only</button>'+
+      '<span id="msg-sel-count" style="font-size:11px;color:#6b7280">'+msgSelectedCusts.length+' selected</span>'+
+    '</div>'+
+    (custs.length?
+      '<div class="tbl-wrap" style="max-height:280px;overflow-y:auto;margin-bottom:1rem">'+
+        '<table><thead><tr><th style="width:36px"></th><th>Name</th><th>Phone</th><th>Business</th><th>Balance</th></tr></thead>'+
+        '<tbody>'+custRows+'</tbody></table>'+
+      '</div>'
+    :'<div class="empty">No customers with phone numbers found. Add phone numbers to customer profiles first.</div>')+
+
+    // Send button
+    '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+      '<button onclick="sendWhatsAppMessages()" style="padding:11px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📲 Send via WhatsApp</button>'+
+      '<span style="font-size:12px;color:#6b7280">Each customer opens in a separate WhatsApp tab/window</span>'+
+    '</div>';
+}
+
+function setMsgTemplate(key){
+  msgTemplateKey=key;
+  renderApp();
+  // After render, set textarea value to template
+  setTimeout(function(){
+    var ta=document.getElementById('msg-text');
+    if(ta)ta.value=MSG_TEMPLATES[key].text;
+  },50);
+}
+
+function toggleMsgCust(id){
+  var idx=msgSelectedCusts.indexOf(id);
+  if(idx===-1)msgSelectedCusts.push(id);
+  else msgSelectedCusts.splice(idx,1);
+  // Update checkbox and count without full re-render
+  var countEl=document.getElementById('msg-sel-count');
+  if(countEl)countEl.textContent=msgSelectedCusts.length+' selected';
+}
+
+function msgSelectAll(){
+  msgSelectedCusts=DB.customers.filter(function(c){return c.phone;}).map(function(c){return c.id;});
+  renderApp();
+}
+
+function msgSelectNone(){
+  msgSelectedCusts=[];
+  renderApp();
+}
+
+function msgSelectCredit(){
+  msgSelectedCusts=DB.customers.filter(function(c){return c.phone&&c.creditBalance>0;}).map(function(c){return c.id;});
+  renderApp();
+}
+
+function sendWhatsAppMessages(){
+  var msgText=document.getElementById('msg-text')?document.getElementById('msg-text').value.trim():'';
+  if(!msgText){alert('Please enter a message first.');return;}
+  if(!msgSelectedCusts.length){alert('Please select at least one customer.');return;}
+  var selected=DB.customers.filter(function(c){return msgSelectedCusts.indexOf(c.id)!==-1&&c.phone;});
+  if(!selected.length){alert('None of the selected customers have a phone number.');return;}
+  if(!confirm('Send WhatsApp message to '+selected.length+' customer(s)?\n\nThis will open '+selected.length+' WhatsApp window(s).\n\nMake sure your browser allows popups.')){return;}
+  var delay=0;
+  selected.forEach(function(c){
+    setTimeout(function(){
+      // Personalise message
+      var bal=c.creditBalance>0?fmt(c.creditBalance):'₦0';
+      var text=msgText.replace(/\{name\}/g,c.name).replace(/\{balance\}/g,bal);
+      // Clean phone: remove spaces, dashes, leading 0 → replace with 234
+      var phone=c.phone.replace(/[\s\-\(\)]/g,'');
+      if(phone.startsWith('0'))phone='234'+phone.substring(1);
+      if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
+      phone=phone.replace(/^\+/,'');
+      var url='https://wa.me/'+phone+'?text='+encodeURIComponent(text);
+      window.open(url,'_blank');
+    },delay);
+    delay+=800; // stagger so browser doesn't block all popups
+  });
+}
+
 function viewCustomer(id){window._viewingCust=id;activeCustSub='profile';renderApp();}
 function editCustomer(id){window._editingCust=id;activeCustSub='edit';renderApp();}
 function saveEditCustomer(){
@@ -2618,7 +2758,7 @@ function saveEditCustomer(){
 }
 function buildCustomers(){
   if(!canDo('customers'))return '<div class="empty">Access denied.</div>';
-  var subs=[{id:'list',label:'All Customers'},{id:'add',label:'Add Customer'}];
+  var subs=[{id:'list',label:'All Customers'},{id:'add',label:'Add Customer'},{id:'messaging',label:'📲 Messaging'}];
   if(window._viewingCust)subs.push({id:'profile',label:'Customer Profile'});
   var nav='<div class="subtabs">'+subs.map(function(s){return '<button class="subtab'+(activeCustSub===s.id?' active':'')+'" onclick="switchCustSub(\''+s.id+'\')">'+s.label+'</button>';}).join('')+'</div>';
   var content='';
@@ -2654,6 +2794,8 @@ function buildCustomers(){
         '<button class="btn" onclick="activeCustSub=\'profile\';renderApp()">Cancel</button>'+
       '</div></div>';
     }
+  } else if(activeCustSub==='messaging'){
+    content=buildMessagingPanel();
   } else if(activeCustSub==='add'){
     content='<p class="sec-title">Add new customer</p>'+
       '<div class="fg c3">'+
