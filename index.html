@@ -2573,8 +2573,9 @@ function buildStockMgmt(){
 function addCustomer(){
   var name=document.getElementById('cust-name').value.trim();if(!name){alert('Enter name.');return;}
   var creditLimit=parseFloat(document.getElementById('cust-credit-limit').value)||0;
-  DB.customers.push({id:uid(),name:name,phone:document.getElementById('cust-phone').value.trim(),email:document.getElementById('cust-email').value.trim(),address:document.getElementById('cust-address').value.trim(),biz:document.getElementById('cust-biz').value.trim(),notes:document.getElementById('cust-notes').value.trim(),type:document.getElementById('cust-type').value,creditLimit:creditLimit,creditBalance:0,joinDate:new Date().toLocaleDateString(),totalPurchases:0,totalSpent:0,lastSeen:null,salesHistory:[]});
-  ['cust-name','cust-phone','cust-email','cust-address','cust-biz','cust-notes','cust-credit-limit'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});activeCustSub='list';renderApp();
+  var openingBal=parseFloat(document.getElementById('cust-opening-bal').value)||0;
+  DB.customers.push({id:uid(),name:name,phone:document.getElementById('cust-phone').value.trim(),email:document.getElementById('cust-email').value.trim(),address:document.getElementById('cust-address').value.trim(),biz:document.getElementById('cust-biz').value.trim(),notes:document.getElementById('cust-notes').value.trim(),type:document.getElementById('cust-type').value,creditLimit:creditLimit,creditBalance:openingBal,openingBalance:openingBal,joinDate:new Date().toLocaleDateString(),totalPurchases:0,totalSpent:0,lastSeen:null,salesHistory:[]});
+  ['cust-name','cust-phone','cust-email','cust-address','cust-biz','cust-notes','cust-credit-limit','cust-opening-bal'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});activeCustSub='list';renderApp();
 }
 function removeCustomer(id){
   if(!isAdmin()){alert('Admin only.');return;}
@@ -2750,6 +2751,14 @@ function saveEditCustomer(){
   cust.type=document.getElementById('ec-type').value;
   var newLimit=parseFloat(document.getElementById('ec-credit-limit').value)||0;
   cust.creditLimit=newLimit;
+  // Opening balance: if changed, adjust creditBalance by the difference
+  var newOpeningBal=parseFloat(document.getElementById('ec-opening-bal').value)||0;
+  var oldOpeningBal=cust.openingBalance||0;
+  if(newOpeningBal!==oldOpeningBal){
+    var diff=newOpeningBal-oldOpeningBal;
+    cust.creditBalance=(cust.creditBalance||0)+diff;
+    cust.openingBalance=newOpeningBal;
+  }
   saveData();
   alert('Customer updated successfully.');
   window._viewingCust=id;
@@ -2787,6 +2796,9 @@ function buildCustomers(){
         '<div class="form-group"><label>Credit limit (&#x20A6;) <span style="color:var(--text3);font-weight:400">- 0 = no credit</span></label>'+
           '<input type="number" id="ec-credit-limit" value="'+(ec.creditLimit||0)+'" min="0">'+
         '</div>'+
+        '<div class="form-group"><label>Opening balance (&#x20A6;) <span style="color:var(--text3);font-weight:400">— balance before using system</span></label>'+
+          '<input type="number" id="ec-opening-bal" value="'+(ec.openingBalance||0)+'" min="0">'+
+        '</div>'+
       '</div>'+
       '<div class="fg c2"><div class="form-group"><label>Notes</label><textarea id="ec-notes" style="height:70px;resize:none">'+(ec.notes||'')+'</textarea></div></div>'+
       '<div style="display:flex;gap:8px;margin-top:4px">'+
@@ -2805,7 +2817,8 @@ function buildCustomers(){
       '<div class="form-group"><label>Address</label><input type="text" id="cust-address" placeholder="Street, area, city"></div>'+
       '<div class="form-group"><label>Business name</label><input type="text" id="cust-biz" placeholder="Ngozi Stores"></div>'+
       '<div class="form-group"><label>Customer type</label><select id="cust-type"><option value="retail">Retail</option><option value="wholesale">Wholesale / Bulk buyer</option><option value="vip">VIP</option></select></div>'+
-      '<div class="form-group"><label>Credit limit (₦) <span style="color:#666;font-weight:400"> -  0 means no credit allowed</span></label><input type="number" id="cust-credit-limit" placeholder="0" min="0"></div>'+
+      '<div class="form-group\"><label>Credit limit (₦) <span style="color:#666;font-weight:400"> -  0 means no credit allowed</span></label><input type="number" id="cust-credit-limit" placeholder="0" min="0"></div>'+
+      '<div class="form-group"><label>Opening balance (₦) <span style="color:#666;font-weight:400">— amount customer already owes you</span></label><input type="number" id="cust-opening-bal" placeholder="0" min="0"></div>'+
       '</div>'+
       '<div class="fg c2"><div class="form-group"><label>Notes</label><textarea id="cust-notes" placeholder="Special notes..." style="height:70px;resize:none"></textarea></div></div>'+
       '<button class="btn primary" onclick="addCustomer()">Save customer</button>';
@@ -2864,6 +2877,7 @@ function buildCustomers(){
         mc('Total spent',fmt(cust.totalSpent),'Lifetime','')+
         mc('Credit owed',weOweThem?fmt(Math.abs(creditBalance)):fmt(creditBalance),weOweThem?'We owe customer':theyOweUs?'Outstanding':'Clear',weOweThem?'blue':theyOweUs?'red':'green')+
         mc('Credit limit',creditLimit>0?fmt(creditLimit):'No limit','','')+
+        (cust.openingBalance>0?mc('Opening balance',fmt(cust.openingBalance),'Set at setup','amber'):'')+
         (function(){var depBal=(DB.deposits||[]).filter(function(d){return d.custId==cust.id;}).reduce(function(a,d){return a+d.amount;},0);return mc('Deposit balance',fmt(depBal),'Available',depBal>0?'green':'');}())+
         '</div>'+
         creditBar+
@@ -2973,7 +2987,6 @@ function calcOutstandingAtDate(custId, invDate, invNum, invNet){
   var invTs=parseSaleDate(invDate);
   var invN=parseInvNum(invNum);
 
-  // "came before this invoice" = earlier date, OR same date with lower invoice number
   function isBefore(sDate, sInvNum){
     var sTs=parseSaleDate(sDate);
     if(sTs < invTs) return true;
@@ -2981,8 +2994,11 @@ function calcOutstandingAtDate(custId, invDate, invNum, invNet){
     return false;
   }
 
-  // Only invoices that are genuinely unpaid (credit) or partially paid (part)
-  // Fully paid invoices (cash/pos/transfer/split) are NEVER outstanding
+  // Opening balance set at customer setup — always counts as pre-existing debt
+  var cust=DB.customers.find(function(c){return c.id==custId;});
+  var openingBal=cust?(cust.openingBalance||0):0;
+
+  // Only unpaid (credit) or partially paid invoices before this one
   var prevUnpaid=DB.sales.filter(function(s){
     return s.custId==custId &&
       (s.payment==='credit'||s.payment==='part') &&
@@ -2990,22 +3006,21 @@ function calcOutstandingAtDate(custId, invDate, invNum, invNet){
       isBefore(s.date, s.invoiceNum||s.id);
   });
 
-  // Actual credit payments made on or before this invoice date
+  // Credit payments made on or before this invoice date
   var prevCreditPayments=(DB.creditPayments||[]).filter(function(p){
     return p.custId==custId && parseSaleDate(p.date)<=invTs;
   });
 
   var prevOwed=prevUnpaid.reduce(function(a,s){
-    // depositApplied reduces what's actually owed on this invoice
     var dep=s.depositApplied||0;
     if(s.payment==='credit') return a+Math.max(0,s.total-dep);
     if(s.payment==='part') return a+Math.max(0,s.total-(s.partPayment||0)-dep);
     return a;
   },0);
   var prevPaid=prevCreditPayments.reduce(function(a,p){return a+p.amount;},0);
-  var prevInvTotal=Math.max(0,prevOwed-prevPaid);
 
-  // invNet is passed as 0 for fully paid invoices, remaining balance for part, full total for credit
+  // prevInvTotal = opening balance + all prior unpaid invoices - payments made before this date
+  var prevInvTotal=Math.max(0,openingBal+prevOwed-prevPaid);
   var outstandingAtDate=prevInvTotal+Math.max(0,invNet);
   return {prevInvTotal:prevInvTotal,outstandingAtDate:outstandingAtDate};
 }
@@ -5419,28 +5434,31 @@ function buildSuppliers(){
       '<td>'+(s.phone||'-')+'</td>'+
       '<td>'+(s.address||'-')+'</td>'+
       '<td style="text-align:right">'+fmt(s.totalPurchased||0)+'</td>'+
+      '<td style="text-align:right;color:'+(s.openingBalance>0?'#92400e':'inherit')+'">'+(s.openingBalance>0?fmt(s.openingBalance):'—')+'</td>'+
       '<td style="text-align:right;color:var(--danger)">'+fmt(s.owedToSupplier||0)+'</td>'+
       '<td style="text-align:right">'+s.purchases.length+'</td>'+
       (isAdmin()?'<td><button class="btn danger sm" onclick="removeSupplier('+s.id+')">&#10005;</button></td>':'<td></td>')+
     '</tr>';
   }).join('');
   return '<p class="sec-title">Add supplier</p>'+
-    '<div class="fg" style="grid-template-columns:1fr 1fr 1fr 1fr auto"><div class="form-group"><label>Name</label><input type="text" id="su-name" placeholder="Supplier name"></div>'+
+    '<div class="fg" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr auto"><div class="form-group"><label>Name</label><input type="text" id="su-name" placeholder="Supplier name"></div>'+
     '<div class="form-group"><label>Contact person</label><input type="text" id="su-contact" placeholder="e.g. Mr Bello"></div>'+
     '<div class="form-group"><label>Phone</label><input type="text" id="su-phone" placeholder="e.g. 08012345678"></div>'+
     '<div class="form-group"><label>Address</label><input type="text" id="su-addr" placeholder="Address"></div>'+
+    '<div class="form-group"><label>Opening balance (₦) <span style="font-weight:400;color:#666">— amount already owed to supplier</span></label><input type="number" id="su-opening-bal" placeholder="0" min="0"></div>'+
     '<div class="form-group"><label>&nbsp;</label><button class="btn primary" onclick="addSupplier()">+ Add</button></div></div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'+
       '<p class="sec-title" style="margin:0">Supplier list</p>'+
       '<div style="position:relative;max-width:280px;width:100%"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3)">&#128269;</span><input type="text" placeholder="Search suppliers..." value="'+supplierSearch+'" oninput="supplierSearch=this.value;renderPanel()" style="padding-left:32px;width:100%;font-size:13px"></div>'+
     '</div>'+
-    (rows?'<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Address</th><th style="text-align:right">Total bought</th><th style="text-align:right">Owed</th><th style="text-align:right">Orders</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="empty">No suppliers yet.</div>');
+    (rows?'<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Address</th><th style="text-align:right">Total bought</th><th style="text-align:right">Opening bal.</th><th style="text-align:right">Total owed</th><th style="text-align:right">Orders</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="empty">No suppliers yet.</div>');
 }
 function addSupplier(){
   var name=document.getElementById('su-name').value.trim();if(!name){alert('Name required.');return;}
   var dup=DB.suppliers.find(function(s){return s.name.toLowerCase()===name.toLowerCase();});
   if(dup){alert('Supplier already exists.');return;}
-  DB.suppliers.push({id:uid(),name:name,contact:document.getElementById('su-contact').value.trim(),phone:document.getElementById('su-phone').value.trim(),address:document.getElementById('su-addr').value.trim(),totalPurchased:0,owedToSupplier:0,purchases:[]});
+  var openingBal=parseFloat(document.getElementById('su-opening-bal').value)||0;
+  DB.suppliers.push({id:uid(),name:name,contact:document.getElementById('su-contact').value.trim(),phone:document.getElementById('su-phone').value.trim(),address:document.getElementById('su-addr').value.trim(),totalPurchased:0,owedToSupplier:openingBal,openingBalance:openingBal,purchases:[]});
   saveData();renderApp();
 }
 function removeSupplier(id){
