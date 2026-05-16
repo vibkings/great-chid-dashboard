@@ -309,7 +309,7 @@ var DB={
   warehouse:[],recycleBin:[],
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
-  invoiceCounter:2720,
+  invoiceCounter:1,
   banks:[
     {id:1,name:'Access Bank',acct:'0123456789'},
     {id:2,name:'GTBank',acct:'0234567890'},
@@ -764,6 +764,20 @@ function applySnapshot(snapshot) {
   DB.categories = snapshot.categories || DB.categories;
   DB.expenseCats = snapshot.expenseCats || DB.expenseCats;
   DB.invoiceCounter = snapshot.invoiceCounter || DB.invoiceCounter;
+  DB.invoiceYear = snapshot.invoiceYear || new Date().getFullYear();
+  // If no invoiceYear stored yet, derive counter from existing invoices to avoid collision
+  if(!snapshot.invoiceYear){
+    var currentYr=new Date().getFullYear();
+    var yearPrefix=String(currentYr)+'/';
+    var existing=DB.sales.filter(function(s){return s.invoiceNum&&String(s.invoiceNum).indexOf(yearPrefix)===0;});
+    if(existing.length){
+      var maxSeq=existing.reduce(function(mx,s){return Math.max(mx,parseInvNum(s.invoiceNum));},0);
+      DB.invoiceCounter=maxSeq+1;
+    } else {
+      DB.invoiceCounter=1;
+    }
+    DB.invoiceYear=currentYr;
+  }
   DB.recycleBin = snapshot.recycleBin || [];
   DB.drafts = snapshot.drafts || [];
   DB.pendingDeliveries = snapshot.pendingDeliveries || [];
@@ -783,6 +797,7 @@ function buildSnapshot() {
     posTerminals: DB.posTerminals, categories: DB.categories,
     expenseCats: DB.expenseCats,
     invoiceCounter: DB.invoiceCounter,
+    invoiceYear: DB.invoiceYear || new Date().getFullYear(),
     creditPayments: DB.creditPayments || [],
     deposits: DB.deposits || [],
     recycleBin: DB.recycleBin || [],
@@ -2756,11 +2771,27 @@ function parseSaleDate(str){
   return 0;
 }
 
-// Extract numeric part of invoice number for ordering (e.g. "0546" → 546)
+// Extract numeric part of invoice number for ordering (handles YYYY/NNNN or plain number)
 function parseInvNum(n){
   if(!n)return 0;
-  var m=String(n).match(/\d+/);
+  var s=String(n);
+  // Handle format YYYY/NNNN — use only the sequence part
+  if(s.indexOf('/')!==-1)s=s.split('/').pop();
+  var m=s.match(/\d+/);
   return m?parseInt(m[0]):0;
+}
+
+// Generate next invoice number in format YYYY/NNNN, resetting each year
+function generateInvoiceNum(){
+  var now=new Date();
+  var currentYear=now.getFullYear();
+  // Reset counter if year has changed
+  if(!DB.invoiceYear||DB.invoiceYear!==currentYear){
+    DB.invoiceCounter=1;
+    DB.invoiceYear=currentYear;
+  }
+  var seq=String(DB.invoiceCounter).padStart(4,'0');
+  return currentYear+'/'+seq;
 }
 
 // Returns {prevInvTotal, outstandingAtDate} for a given customer + invoice
@@ -3748,6 +3779,9 @@ function submitInvoice(){
   });
   DB._lastInvoice={invoiceId:invoiceId,invoiceNum:invNum,custName:custName,custAddr:custAddr,printName:printName,date:date,items:lastInvItems,invoiceDiscAmt:invoiceDiscAmt,invoiceDiscType:invDiscType,invoiceDiscVal:invDiscVal,payment:payment,payMode:payMode,bankId:bankId,posId:posId,seller:DB.currentUser.name,grandTotal:grandTotal,grandProfit:grandProfit,subtotalAll:subtotalAll,partPayment:partPayment,pendingSupply:pendingSupply};
   invoiceItems=[];
+  // Increment invoice counter for next invoice
+  DB.invoiceCounter=(DB.invoiceCounter||0)+1;
+  DB.invoiceYear=new Date().getFullYear();
   saveData();
   var saveMsg='Invoice #'+invNum+' saved!';
   if(pendingSupply){
@@ -4320,7 +4354,7 @@ function buildSales(){
     '<p class="sec-title">New invoice</p>'+
     '<div style="background:var(--amber-bg);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;color:var(--amber);margin-bottom:1rem"><b>Rules:</b> Invoice number required. Walk-in customers: cash only. Credit sales: registered customers with credit limit only.</div>'+
     '<div class="fg c2" style="margin-bottom:.5rem"><div class="form-group"><label>Invoice number <span style="color:var(--danger)">*</span> (required)</label>'+
-    '<input type="text" id="s-inv-num" placeholder="e.g. 2721" oninput="checkDupInvoice(this.value)">'+
+    '<input type="text" id="s-inv-num" placeholder="Auto-generated" readonly style="background:var(--amber-bg);cursor:default" oninput="checkDupInvoice(this.value)" value="'+generateInvoiceNum()+'">'+
     '<div id="s-inv-dup-warn" style="display:none;margin-top:4px;background:#fff5f5;border:1px solid #f5c2c7;border-radius:6px;padding:6px 10px;font-size:12px;color:#dc3545;font-weight:600">'+
     '⛔ This invoice number already exists! Check the Sales ledger before posting.</div>'+
     '</div>'+
@@ -5286,7 +5320,6 @@ function buildReports(){
   var staffList=[...new Set(DB.sales.map(function(s){return s.seller;}))].filter(Boolean);
   var staffOpts=staffList.map(function(n){return '<option value="'+n+'"'+(reportStaff===n?' selected':'')+'>'+n+'</option>';}).join('');
   // ── Paid Invoice Summary: one row per invoice, no credit ──────
-  if(reportTab==='paidinv'){
   // ── Returns Report: one row per invoice, grouped ──────────────
   if(reportTab==='returns'){
     var retFiltered=(DB.salesReturns||[]).filter(function(r){
@@ -5339,6 +5372,7 @@ function buildReports(){
     :'<div class="empty">No returns recorded for this period.</div>');
   }
 
+  if(reportTab==='paidinv'){
     var piSales=DB.sales.filter(function(s){
       if(s.payment==='credit')return false;
       if(reportDateFrom&&!dateInRange(s.date,reportDateFrom,''))return false;
