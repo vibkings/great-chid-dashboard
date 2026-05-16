@@ -781,6 +781,37 @@ function applySnapshot(snapshot) {
   DB.recycleBin = snapshot.recycleBin || [];
   DB.drafts = snapshot.drafts || [];
   DB.pendingDeliveries = snapshot.pendingDeliveries || [];
+
+  // ── One-time migration: stamp depositApplied on existing sale records ──
+  // Finds negative deposit entries (auto-applied) and patches the matching sale items
+  migrateDepositApplied();
+}
+
+function migrateDepositApplied(){
+  // Find all auto-applied deposit entries (negative amounts with note containing 'Auto-applied to Invoice #')
+  var autoApplied=(DB.deposits||[]).filter(function(d){
+    return d.amount<0 && d.note && d.note.indexOf('Auto-applied to Invoice #')===0;
+  });
+  if(!autoApplied.length)return;
+  var patched=0;
+  autoApplied.forEach(function(dep){
+    // Extract invoice number from note e.g. "Auto-applied to Invoice #2026/0001"
+    var invNum=dep.note.replace('Auto-applied to Invoice #','').trim();
+    var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)===invNum||String(s.invoiceNum||s.id)===String(invNum);});
+    if(!invSales.length)return;
+    // Skip if already patched
+    if(invSales[0].depositApplied!==undefined&&invSales[0].depositApplied!==0)return;
+    var depositAmt=Math.abs(dep.amount);
+    var invTotal=invSales.reduce(function(a,s){return a+s.total;},0);
+    invSales.forEach(function(s){
+      s.depositApplied=invTotal>0?Math.round((s.total/invTotal)*depositAmt*100)/100:0;
+    });
+    patched++;
+  });
+  if(patched>0){
+    console.log('Migration: stamped depositApplied on '+patched+' invoice(s)');
+    saveData(); // persist the patched records to Firebase
+  }
 }
 
 function buildSnapshot() {
