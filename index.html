@@ -703,21 +703,39 @@ function fbPullAll(onDone) {
 function fbForceMigrate(btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Pushing...'; }
   updateSyncStatus('saving');
-  GCE_COLLECTIONS.forEach(function(c){ fbDirtyCollections.add(c); });
-  fbSyncInProgress = false; // reset in case stuck
-  fbSyncDirty(function(ok) {
-    if (ok) {
-      fbConnected = true;
-      fbLastSync = new Date();
-      updateSyncStatus('synced');
-      showToast('\u2705 All data pushed to Firebase successfully!');
-      var overlay = document.getElementById('fb-diag-overlay');
-      if (overlay) overlay.remove();
-    } else {
-      updateSyncStatus('error');
-      showToast('\u274c Push failed — check browser console (F12) for details');
-      if (btn) { btn.disabled = false; btn.textContent = '\ud83d\udce4 Force Push Data'; }
+  // First do a single test write to get the exact error if any
+  var testPayload = { _test: true, _savedAt: new Date().toISOString(), _deviceId: FB_DEVICE_ID };
+  fbSetCollection('meta', testPayload, function() {
+    // Test write OK — push everything
+    GCE_COLLECTIONS.forEach(function(c){ fbDirtyCollections.add(c); });
+    fbSyncInProgress = false;
+    fbSyncDirty(function(ok) {
+      if (ok) {
+        fbConnected = true; fbLastSync = new Date();
+        updateSyncStatus('synced');
+        showToast('✅ All data pushed to Firebase successfully!');
+        var overlay = document.getElementById('fb-diag-overlay');
+        if (overlay) overlay.remove();
+      } else {
+        updateSyncStatus('error');
+        showToast('❌ Some collections failed — check browser console (F12)');
+        if (btn) { btn.disabled = false; btn.textContent = '📤 Force Push Data'; }
+      }
+    });
+  }, function(err) {
+    var code = String(err.code || '?');
+    var msg  = String(err.message || '');
+    var hint = '';
+    if (code === '403' || msg.indexOf('PERMISSION_DENIED') > -1) {
+      hint = 'FIX: Firebase Console > Firestore > Rules > publish: allow read, write: if true;';
+    } else if (code === '404') {
+      hint = 'FIX: Collection path not found. Check project ID in Firebase Console.';
+    } else if (err.code === 'network' || err.code === 'timeout') {
+      hint = 'FIX: Check your internet connection.';
     }
+    updateSyncStatus('error');
+    alert('❌ Firebase write test failed!\n\nHTTP ' + code + ': ' + msg.slice(0,300) + (hint ? '\n\n' + hint : ''));
+    if (btn) { btn.disabled = false; btn.textContent = '📤 Force Push Data'; }
   });
 }
 
@@ -2055,6 +2073,53 @@ function renderApp(){
   if(belowCostItems.length&&canDo('inventory'))bannerParts.push(belowCostItems.length+' item(s) selling below cost price');
   var banner=bannerParts.length?'<div class="reminder-banner"><span>⚠️ <strong>Stock alert:</strong> '+bannerParts.join(' · ')+'</span><button class="btn sm" style="background:#fff;color:var(--danger);border-color:#f5c6cb" onclick="switchTab(\'inventory\')">View</button></div>':'';
   var lowCount=low.length+noCostItems.length+belowCostItems.length;
+
+  // ── Home Summary Cards ────────────────────────────────────────
+  var todayStr=new Date().toLocaleDateString();
+  var todaySales=DB.sales.filter(function(s){return s.date===todayStr;});
+  var todayRev=todaySales.reduce(function(a,s){return a+s.total;},0);
+  var todayProfit=todaySales.reduce(function(a,s){return a+s.profit;},0);
+  var todayInvoices=[...new Set(todaySales.map(function(s){return s.invoiceNum;}))].length;
+  var todayCash=todaySales.filter(function(s){return s.payMode==='cash';}).reduce(function(a,s){return a+s.total;},0);
+  var todayPos=todaySales.filter(function(s){return s.payMode==='pos';}).reduce(function(a,s){return a+s.total;},0);
+  var todayTransfer=todaySales.filter(function(s){return s.payMode==='transfer';}).reduce(function(a,s){return a+s.total;},0);
+  var todayCredit=todaySales.filter(function(s){return s.payment==='credit';}).reduce(function(a,s){return a+s.total;},0);
+  var openTill=DB.tillSessions&&DB.tillSessions.length?(DB.tillSessions.filter(function(t){return !t.closedAt;}).length>0):false;
+  var tillFloat=0;
+  if(DB.tillSessions&&DB.tillSessions.length){
+    var lastTill=DB.tillSessions.slice().reverse().find(function(t){return !t.closedAt;});
+    if(lastTill)tillFloat=lastTill.openFloat||0;
+  }
+  var outstandingTotal=(DB.customers||[]).reduce(function(a,c){return a+(c.creditBalance||0);},0);
+  var profitMargin=todayRev>0?Math.round((todayProfit/todayRev)*100):0;
+  var summaryCards=canDo('sales')?
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:1.25rem">'+
+      '<div onclick="switchTab(\'sales\')" style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow=\'var(--shadow-md)\'" onmouseout="this.style.boxShadow=\'\'">'+
+        '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Today\u2019s Revenue</div>'+
+        '<div style="font-size:22px;font-weight:800;color:var(--primary)">'+fmt(todayRev)+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px">'+todayInvoices+' invoice'+(todayInvoices!==1?'s':'')+' &middot; '+todaySales.length+' item'+(todaySales.length!==1?'s':'')+'</div>'+
+      '</div>'+
+      '<div onclick="switchTab(\'sales\')" style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow=\'var(--shadow-md)\'" onmouseout="this.style.boxShadow=\'\'">'+
+        '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Today\u2019s Profit</div>'+
+        '<div style="font-size:22px;font-weight:800;color:'+(todayProfit>=0?'#16a34a':'var(--danger)')+'">'+fmt(todayProfit)+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px">Margin: <b style="color:'+(profitMargin>=20?'#16a34a':profitMargin>=10?'#f59e0b':'var(--danger)')+'">'+profitMargin+'%</b></div>'+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px">'+
+        '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Payment Breakdown</div>'+
+        '<div style="font-size:12px;color:var(--text2);line-height:1.8">'+
+          (todayCash>0?'<div>&#128181; Cash: <b>'+fmt(todayCash)+'</b></div>':'')+
+          (todayPos>0?'<div>&#128179; POS: <b>'+fmt(todayPos)+'</b></div>':'')+
+          (todayTransfer>0?'<div>&#127974; Transfer: <b>'+fmt(todayTransfer)+'</b></div>':'')+
+          (todayCredit>0?'<div style="color:var(--danger)">&#9888; Credit: <b>'+fmt(todayCredit)+'</b></div>':'')+
+          (todaySales.length===0?'<div style="color:var(--text3)">No sales yet today</div>':'')+
+        '</div>'+
+      '</div>'+
+      '<div onclick="switchTab(\'creditcust\')" style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow=\'var(--shadow-md)\'" onmouseout="this.style.boxShadow=\'\'">'+
+        '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Outstanding Debt</div>'+
+        '<div style="font-size:22px;font-weight:800;color:'+(outstandingTotal>0?'var(--danger)':'#16a34a')+'">'+fmt(outstandingTotal)+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-top:4px">Across all credit customers</div>'+
+      '</div>'+
+    '</div>':'';
   var navHtml='';
   var sections=[
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases']},
@@ -2122,6 +2187,7 @@ function renderApp(){
         '</div>'+
       '</div>'+
       '<div class="page-content">'+
+        summaryCards+
         banner+
         '<div id="panel-root"></div>'+
       '</div>'+
@@ -4171,36 +4237,38 @@ function buildInvoiceHTML(inv){
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice #'+inv.invoiceNum+'</title>'+
     '<style>'+
-    '@page{size:'+pageSize+';margin:8mm}'+
+    '@page{size:'+pageSize+';margin:'+(pageSize==='A4'?'10mm':'8mm')+'}'+
     '*{box-sizing:border-box;margin:0;padding:0}'+
-    'body{font-family:Arial,sans-serif;font-size:'+fontSize+';color:#111}'+
-    '.h{border-bottom:3px solid #c0392b;padding-bottom:6px;margin-bottom:5px;display:flex;align-items:center;gap:10px}'+
+    'body{font-family:Arial,Helvetica,sans-serif;font-size:'+fontSize+';color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    '.h{border-bottom:3px solid #c0392b;padding-bottom:8px;margin-bottom:7px;display:flex;align-items:center;gap:12px}'+
     '.logo-wrap{flex-shrink:0;width:72px;height:80px}'+
     '.htext{flex:1;text-align:center}'+
-    '.co{font-size:'+(pageSize==='A4'?'20':'18')+'px;font-weight:900;color:#c0392b;letter-spacing:1px;line-height:1.1}'+
-    '.co2{font-size:'+(pageSize==='A4'?'20':'18')+'px;font-weight:900;color:#1a237e;letter-spacing:1px;line-height:1.2;margin:2px 0}'+
-    '.su{font-size:8.5px;color:#1a237e;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:2px 0}'+
-    '.ds{font-size:8.5px;color:#333;margin:1px 0}.of{font-size:8px;color:#333;margin:2px 0;line-height:1.5}.of b{color:#c0392b}'+
-    '.tb{background:#c0392b;color:#fff;display:inline-block;padding:3px 18px;border-radius:15px;font-size:12px;font-weight:700;letter-spacing:1px;margin:4px 0}'+
-    '.mr{display:flex;justify-content:space-between;align-items:flex-start;margin:5px 0}'+
-    '.fl{border-bottom:1px solid #333;width:100%;font-size:11px;padding:1px 0;min-height:16px}'+
-    '.dg{border:2px solid #1a237e;display:grid;grid-template-columns:1fr 1fr 1fr;width:130px}'+
-    '.dh{text-align:center;font-size:8px;font-weight:600;padding:2px;border-bottom:1px solid #1a237e;border-right:1px solid #1a237e;background:#1a237e;color:#fff}'+
+    '.co{font-size:'+(pageSize==='A4'?'21':'19')+'px;font-weight:900;color:#c0392b;letter-spacing:1.5px;line-height:1.1}'+
+    '.co2{font-size:'+(pageSize==='A4'?'21':'19')+'px;font-weight:900;color:#1a237e;letter-spacing:1.5px;line-height:1.2;margin:3px 0}'+
+    '.su{font-size:8.5px;color:#1a237e;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin:3px 0}'+
+    '.ds{font-size:9px;color:#333;margin:2px 0;line-height:1.5}'+
+    '.of{font-size:8.5px;color:#333;margin:2px 0;line-height:1.6}.of b{color:#c0392b}'+
+    '.tb{background:#c0392b;color:#fff;display:inline-block;padding:4px 22px;border-radius:20px;font-size:13px;font-weight:800;letter-spacing:2px;margin:5px 0;text-transform:uppercase}'+
+    '.mr{display:flex;justify-content:space-between;align-items:flex-start;margin:7px 0 5px}'+
+    '.fl{border-bottom:1.5px solid #333;width:100%;font-size:12px;padding:2px 0;min-height:18px;font-weight:600}'+
+    '.dg{border:2px solid #1a237e;display:grid;grid-template-columns:1fr 1fr 1fr;width:140px;border-radius:3px;overflow:hidden}'+
+    '.dh{text-align:center;font-size:8.5px;font-weight:700;padding:3px;border-bottom:1px solid #1a237e;border-right:1px solid #1a237e;background:#1a237e;color:#fff;text-transform:uppercase}'+
     '.dh:last-child{border-right:none}'+
-    '.dv{text-align:center;font-size:13px;font-weight:700;padding:3px;border-right:1px solid #1a237e;min-height:20px}'+
+    '.dv{text-align:center;font-size:15px;font-weight:900;padding:4px;border-right:1px solid #1a237e;min-height:24px;color:#1a237e}'+
     '.dv:last-child{border-right:none}'+
-    '.in{font-size:11px;font-weight:700;color:#1a237e;margin-top:4px}'+
+    '.in{font-size:12px;font-weight:800;color:#1a237e;margin-top:5px;letter-spacing:.5px}'+
     'table{width:100%;border-collapse:collapse;page-break-inside:auto}'+
     'thead{display:table-header-group}'+
     'tbody tr{page-break-inside:avoid}'+
-    'th{background:#c0392b;color:#fff;font-size:9px;padding:4px 6px;border:1px solid #c0392b;font-weight:700;letter-spacing:.3px}'+
+    'th{background:#c0392b;color:#fff;font-size:'+(pageSize==='A4'?'10':'9')+'px;padding:5px 7px;border:1px solid #c0392b;font-weight:700;letter-spacing:.4px;text-transform:uppercase}'+
     '.tl{text-align:left}.center{text-align:center}.right{text-align:right}'+
-    'td{border:1px solid #ccc;padding:3px 6px;font-size:'+(pageSize==='A4'?'11':'10')+'px;vertical-align:middle;height:20px}'+
-    '.tr td{background:#f5f5f5;font-weight:700;border-top:2px solid #c0392b}'+
-    '.ft{text-align:center;font-size:8px;color:#666;margin-top:6px;padding-top:4px;border-top:1px solid #ccc}'+
-    '.pay-box{border:1px solid #ccc;border-radius:4px;overflow:hidden;margin-top:6px}'+
+    'td{border:1px solid #ddd;padding:4px 7px;font-size:'+(pageSize==='A4'?'11.5':'10.5')+'px;vertical-align:middle;height:22px}'+
+    'tbody tr:nth-child(even) td{background:#fafafa}'+
+    '.tr td{background:#f0f0f0!important;font-weight:800;border-top:2.5px solid #c0392b;font-size:'+(pageSize==='A4'?'12':'11')+'px}'+
+    '.ft{text-align:center;font-size:8.5px;color:#666;margin-top:8px;padding-top:6px;border-top:1px solid #ccc;font-style:italic}'+
+    '.pay-box{border:1.5px solid #ddd;border-radius:6px;overflow:hidden;margin-top:8px;box-shadow:0 1px 3px rgba(0,0,0,.06)}'+
     '.pay-row{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #eee}'+
-    '.pay-cell{padding:4px 7px}.pay-label{font-size:7.5px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.pay-val{font-size:10px;font-weight:700;color:#111}'+
+    '.pay-cell{padding:5px 9px}.pay-label{font-size:8px;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;font-weight:600}.pay-val{font-size:11px;font-weight:800;color:#111}'+
     // Page header that repeats on continuation pages
     '@media print{'+
       '.page-header{display:block}'+
@@ -4375,11 +4443,19 @@ function buildInvItemDropdownItems(filter){
   if(!dd)return;
   if(!items.length){dd.innerHTML='<div style="padding:10px 12px;color:var(--text3);font-size:13px">No items match.</div>';return;}
   dd.innerHTML=items.map(function(i){
-    var statusColor=i.qty===0?'color:var(--danger)':i.qty<=i.minQty?'color:var(--warning)':'color:var(--success)';
+    var stockColor=i.qty===0?'#dc2626':i.qty<=i.minQty?'#d97706':'#16a34a';
+    var stockBg=i.qty===0?'#fff0f0':i.qty<=i.minQty?'#fffbeb':'#f0fdf4';
+    var stockLabel=i.qty===0?'Out of stock':i.qty<=i.minQty?'Low: '+i.qty+' left':'In stock: '+i.qty;
     var safeName=i.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-    return '<div onmousedown="event.preventDefault();selectInvItem(\''+i.id+'\',\''+safeName+'\')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
-      '<div style="font-weight:600">'+i.name+'</div>'+
-      '<div style="font-size:11px;'+statusColor+';margin-top:1px">'+(i.cat||'-')+' · Stock: '+i.qty+(i.qty===0?' (⏳ will be fully pending)':i.qty<=i.minQty?' (⚠ low stock)':'')+'</div>'+
+    return '<div onmousedown="event.preventDefault();selectInvItem(\''+i.id+'\',\''+safeName+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.name+'</div>'+
+        '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(i.cat||'Uncategorised')+'</div>'+
+      '</div>'+
+      '<div style="text-align:right;flex-shrink:0">'+
+        '<div style="font-size:14px;font-weight:800;color:var(--primary)">'+fmt(i.sell)+'</div>'+
+        '<div style="font-size:10px;font-weight:600;color:'+stockColor+';background:'+stockBg+';padding:1px 5px;border-radius:3px;margin-top:2px">'+stockLabel+'</div>'+
+      '</div>'+
     '</div>';
   }).join('')+
   '<div onmousedown="event.preventDefault();selectInvItem(\'__new__\',\'\')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--primary);font-weight:600;border-top:2px solid var(--border)" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">➕ Add new item...</div>';
