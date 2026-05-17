@@ -1333,9 +1333,41 @@ function buildVersionNotes(){
   '</div>';
 }
 
+function checkNewMonthReminder(){
+  var now=new Date();
+  if(now.getDate()!==1)return; // only on 1st of month
+  var monthKey=now.getFullYear()+'-'+(now.getMonth()+1); // e.g. "2026-6"
+  var lastShown=(DB.settings&&DB.settings.newMonthReminderShown)||'';
+  if(lastShown===monthKey)return; // already shown this month
+  // Mark as shown
+  if(!DB.settings)DB.settings={};
+  DB.settings.newMonthReminderShown=monthKey;
+  saveData();
+  // Show reminder after a short delay so the UI loads first
+  var months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var monthName=months[now.getMonth()];
+  setTimeout(function(){
+    showConfirm({
+      type:'info',
+      title:'🎉 Happy '+monthName+'!',
+      msg:'It\'s the 1st of '+monthName+' — time to send your monthly greetings!',
+      detail:'Send a New Month WhatsApp message to all your customers to show appreciation and keep them engaged.\n\nGo to Customers → Messaging → New Month template.',
+      confirmLabel:'Go to Messaging',
+      cancelLabel:'Remind me later'
+    },function(){
+      activeTab='customers';
+      activeCustSub='messaging';
+      msgTemplateKey='newmonth';
+      renderApp();
+    });
+  },1500);
+}
+
 function renderApp(){
   if(!DB.currentUser){renderAuth();return;}
   saveData();
+  // ── New Month reminder on 1st of each month ──────────────────
+  checkNewMonthReminder();
   var vt=TABS.filter(function(t){return t.id==='users'?isAdmin():canDo(t.perm);});
   if(!vt.find(function(t){return t.id===activeTab;}))activeTab=vt.length?vt[0].id:'';
   var u=DB.currentUser;
@@ -2608,7 +2640,13 @@ var msgTemplateKey='custom'; // active template key
 var MSG_TEMPLATES={
   newmonth:{
     label:'🎉 New Month',
-    text:'Dear {name}, we wish you a wonderful new month! Thank you for your continued patronage. We look forward to serving you better this month. Best regards, Great Chid Electro / Global Doors Ltd.'
+    text:(function(){
+      var months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+      var now=new Date();
+      var monthName=months[now.getMonth()];
+      var year=now.getFullYear();
+      return 'Dear {name}, wishing you a wonderful '+monthName+' '+year+'! 🎉 Thank you for your continued patronage at Great Chid Electro / Global Doors Ltd. We look forward to serving you better this month. Feel free to contact us for any electrical or door needs. Best regards, Great Chid Electro / Global Doors Ltd.';
+    })()
   },
   reminder:{
     label:'💳 Balance Reminder',
