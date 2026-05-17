@@ -2634,185 +2634,99 @@ function removeCustomer(id){
   });
 }
 // ── MESSAGING PANEL ──────────────────────────────────────────
-var msgSelectedCusts=[];   // ids of selected customers
-var msgTemplateKey='custom'; // active template key
+var msgSelectedCusts=[];
+var msgTemplateKey='custom';
+var msgChannel='twilio'; // 'twilio' or 'termii'
 
 var MSG_TEMPLATES={
   newmonth:{
-    label:'🎉 New Month',
+    label:'\u{1F389} New Month',
     text:(function(){
       var months=['January','February','March','April','May','June','July','August','September','October','November','December'];
       var now=new Date();
-      var monthName=months[now.getMonth()];
-      var year=now.getFullYear();
-      return 'Dear {name}, wishing you a wonderful '+monthName+' '+year+'! 🎉 Thank you for your continued patronage at Great Chid Electro / Global Doors Ltd. We look forward to serving you better this month. Feel free to contact us for any electrical or door needs. Best regards, Great Chid Electro / Global Doors Ltd.';
+      return 'Dear {name}, wishing you a wonderful '+months[now.getMonth()]+' '+now.getFullYear()+'! \u{1F389} Thank you for your continued patronage at Great Chid Electro / Global Doors Ltd. We look forward to serving you better this month. Best regards, Great Chid Electro / Global Doors Ltd.';
     })()
   },
-  reminder:{
-    label:'💳 Balance Reminder',
-    text:'Dear {name}, this is a friendly reminder that you have an outstanding balance of {balance} on your account. Kindly visit us or contact us to make payment. Thank you. Great Chid Electro / Global Doors Ltd.'
-  },
-  promo:{
-    label:'🛍️ Promo / Announcement',
-    text:'Dear {name}, we have exciting products and offers available for you! Visit us today and enjoy great deals. Great Chid Electro / Global Doors Ltd.'
-  },
-  custom:{
-    label:'✏️ Custom message',
-    text:''
+  reminder:{label:'\u{1F4B3} Balance Reminder',text:'Dear {name}, this is a friendly reminder that you have an outstanding balance of {balance} on your account. Kindly visit us or contact us to make payment. Thank you. Great Chid Electro / Global Doors Ltd.'},
+  promo:{label:'\u{1F6CD} Promo / Announcement',text:'Dear {name}, we have exciting products and offers available for you! Visit us today and enjoy great deals. Great Chid Electro / Global Doors Ltd.'},
+  custom:{label:'\u270F Custom message',text:''}
+};
+
+// ── Twilio config (no hardcoded secrets) ──
+var TWILIO_FROM='whatsapp:+2347055693109';
+function getTwilioAccountSid(){return (DB.settings&&DB.settings.twilioAccountSid)||'';}
+function getTwilioAuthToken(){return (DB.settings&&DB.settings.twilioAuthToken)||'';}
+
+// ── Termii config ──
+var TERMII_BASE='https://v3.api.termii.com';
+var TERMII_SENDER='GreatChid';
+function getTermiiApiKey(){return (DB.settings&&DB.settings.termiiApiKey)||'';}
+
+function buildMessagingPanel(){
+  var custs=DB.customers.filter(function(c){return c.phone;});
+  var noPhone=DB.customers.filter(function(c){return !c.phone;});
+  var tplBtns=Object.keys(MSG_TEMPLATES).map(function(k){
+    var t=MSG_TEMPLATES[k],active=msgTemplateKey===k;
+    return '<button onclick="setMsgTemplate(\''+k+'\')" style="padding:7px 12px;border-radius:8px;border:1.5px solid '+(active?'#1a237e':'#cbd5e1')+';background:'+(active?'#1a237e':'#fff')+';color:'+(active?'#fff':'#374151')+';font-size:12px;font-weight:600;cursor:pointer">'+t.label+'</button>';
+  }).join('');
+  var custRows=custs.map(function(c){
+    var checked=msgSelectedCusts.indexOf(c.id)!==-1;
+    return '<tr style="cursor:pointer" onclick="toggleMsgCust(\''+c.id+'\')">'+
+      '<td style="width:36px;text-align:center"><input type="checkbox" '+(checked?'checked':'')+' onclick="event.stopPropagation();toggleMsgCust(\''+c.id+'\')" style="width:15px;height:15px"></td>'+
+      '<td style="font-weight:600">'+c.name+'</td><td>'+c.phone+'</td><td>'+(c.biz||'—')+'</td>'+
+      '<td style="color:'+(c.creditBalance>0?'#c0392b':'#15803d')+'">'+(c.creditBalance>0?fmt(c.creditBalance):'₦0')+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // Channel toggle
+  var channelToggle=
+    '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">'+
+      '<span style="font-size:12px;font-weight:700;color:#374151">Channel:</span>'+
+      '<button onclick="msgChannel=\'twilio\';renderApp()" style="padding:6px 14px;border-radius:8px;border:1.5px solid '+(msgChannel==='twilio'?'#25D366':'#cbd5e1')+';background:'+(msgChannel==='twilio'?'#25D366':'#fff')+';color:'+(msgChannel==='twilio'?'#fff':'#374151')+';font-size:12px;font-weight:600;cursor:pointer">📲 WhatsApp (Twilio)</button>'+
+      '<button onclick="msgChannel=\'termii\';renderApp()" style="padding:6px 14px;border-radius:8px;border:1.5px solid '+(msgChannel==='termii'?'#1a237e':'#cbd5e1')+';background:'+(msgChannel==='termii'?'#1a237e':'#fff')+';color:'+(msgChannel==='termii'?'#fff':'#374151')+';font-size:12px;font-weight:600;cursor:pointer">📱 SMS (Termii)</button>'+
+    '</div>';
+
+  // Credential status section
+  var credSection='';
+  if(msgChannel==='twilio'){
+    var ok=getTwilioAuthToken()&&getTwilioAccountSid();
+    credSection=!ok?
+      '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:1rem">'+
+        '<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">⚙️ Twilio credentials required</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">'+
+          '<div><label style="font-size:11px">Account SID</label><input type="text" id="twilio-sid-input" placeholder="ACxxxxxxxxx" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>'+
+          '<div><label style="font-size:11px">Auth Token</label><input type="password" id="twilio-token-input" placeholder="Auth token..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>'+
+          '<button onclick="saveTwilioCreds()" style="padding:8px 14px;background:#1a237e;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Save</button>'+
+        '</div></div>':
+      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
+        '✅ WhatsApp (Twilio) connected — +2347055693109 (egreatchidelectro)'+
+        (noPhone.length?' | <span style="color:#92400e">⚠ '+noPhone.length+' without phone</span>':'')+
+        ' <button onclick="clearTwilioCreds()" style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;text-decoration:underline">Change</button></div>';
+  } else {
+    var ok2=getTermiiApiKey();
+    credSection=!ok2?
+      '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:1rem">'+
+        '<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">⚙️ Termii API Key required</div>'+
+        '<div style="display:flex;gap:8px">'+
+          '<input type="text" id="termii-key-input" placeholder="Paste API key..." style="flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">'+
+          '<button onclick="saveTermiiKey()" style="padding:8px 14px;background:#1a237e;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Save</button>'+
+        '</div></div>':
+      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
+        '✅ SMS (Termii) connected'+
+        (noPhone.length?' | <span style="color:#92400e">⚠ '+noPhone.length+' without phone</span>':'')+
+        ' <button onclick="clearTermiiKey()" style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;text-decoration:underline">Change</button></div>';
   }
-};
 
-function buildMessagingPanel(){
-  var custs=DB.customers.filter(function(c){return c.phone;});
-  var noPhone=DB.customers.filter(function(c){return !c.phone;});
-  var tplBtns=Object.keys(MSG_TEMPLATES).map(function(k){
-    var t=MSG_TEMPLATES[k];
-    var active=msgTemplateKey===k;
-    return '<button onclick="setMsgTemplate(\''+k+'\')" style="padding:7px 12px;border-radius:8px;border:1.5px solid '+(active?'#1a237e':'#cbd5e1')+';background:'+(active?'#1a237e':'#fff')+';color:'+(active?'#fff':'#374151')+';font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">'+t.label+'</button>';
-  }).join('');
-  var custRows=custs.map(function(c){
-    var bal=c.creditBalance>0?fmt(c.creditBalance):'₦0';
-    var checked=msgSelectedCusts.indexOf(c.id)!==-1;
-    return '<tr style="cursor:pointer" onclick="toggleMsgCust(\''+c.id+'\')">'+
-      '<td style="width:36px;text-align:center"><input type="checkbox" '+(checked?'checked':'')+' onclick="event.stopPropagation();toggleMsgCust(\''+c.id+'\')" style="width:15px;height:15px;cursor:pointer"></td>'+
-      '<td style="font-weight:600">'+c.name+'</td>'+
-      '<td>'+c.phone+'</td>'+
-      '<td>'+(c.biz||'—')+'</td>'+
-      '<td style="color:'+(c.creditBalance>0?'#c0392b':'#15803d')+'">'+bal+'</td>'+
-    '</tr>';
-  }).join('');
+  var sendBtn=msgChannel==='twilio'?
+    '<button onclick="sendTwilioWhatsApp()" style="padding:11px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📲 Send WhatsApp to all selected</button>':
+    '<button onclick="sendTermiiSMS()" style="padding:11px 24px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📱 Send SMS to all selected</button>';
 
-  return '<p class="sec-title">📲 Customer Messaging (WhatsApp)</p>'+
-    '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
-      '✅ Messages open WhatsApp for each selected customer. Make sure WhatsApp is installed.'+
-      (noPhone.length?' &nbsp;|&nbsp; <span style="color:#92400e">⚠ '+noPhone.length+' customer(s) have no phone number saved.</span>':'')+
-    '</div>'+
-
-    // Template selector
-    '<p style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">1. Choose a message template</p>'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+tplBtns+'</div>'+
-
-    // Message editor
-    '<div class="form-group" style="margin-bottom:1rem">'+
-      '<label style="font-size:12px">Message text &nbsp;<span style="font-weight:400;color:#6b7280">(use {name} for customer name, {balance} for their balance)</span></label>'+
-      '<textarea id="msg-text" rows="5" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit" placeholder="Type your message here...">'+MSG_TEMPLATES[msgTemplateKey].text+'</textarea>'+
-    '</div>'+
-
-    // Customer selector
-    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
-      '<p style="font-size:12px;font-weight:700;color:#374151;margin:0">2. Select recipients</p>'+
-      '<button onclick="msgSelectAll()" style="padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:11px;cursor:pointer">Select all</button>'+
-      '<button onclick="msgSelectNone()" style="padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:11px;cursor:pointer">Clear</button>'+
-      '<button onclick="msgSelectCredit()" style="padding:5px 10px;border-radius:6px;border:1px solid #fcd34d;background:#fff8f0;font-size:11px;cursor:pointer;color:#92400e">Select credit customers only</button>'+
-      '<span id="msg-sel-count" style="font-size:11px;color:#6b7280">'+msgSelectedCusts.length+' selected</span>'+
-    '</div>'+
-    (custs.length?
-      '<div class="tbl-wrap" style="max-height:280px;overflow-y:auto;margin-bottom:1rem">'+
-        '<table><thead><tr><th style="width:36px"></th><th>Name</th><th>Phone</th><th>Business</th><th>Balance</th></tr></thead>'+
-        '<tbody>'+custRows+'</tbody></table>'+
-      '</div>'
-    :'<div class="empty">No customers with phone numbers found. Add phone numbers to customer profiles first.</div>')+
-
-    // Send button
-    '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
-      '<button onclick="sendWhatsAppMessages()" style="padding:11px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📲 Send via WhatsApp</button>'+
-      '<span style="font-size:12px;color:#6b7280">Each customer opens in a separate WhatsApp tab/window</span>'+
-    '</div>';
-}
-
-function setMsgTemplate(key){
-  msgTemplateKey=key;
-  renderApp();
-  // After render, set textarea value to template
-  setTimeout(function(){
-    var ta=document.getElementById('msg-text');
-    if(ta)ta.value=MSG_TEMPLATES[key].text;
-  },50);
-}
-
-function toggleMsgCust(id){
-  var idx=msgSelectedCusts.indexOf(id);
-  if(idx===-1)msgSelectedCusts.push(id);
-  else msgSelectedCusts.splice(idx,1);
-  // Update checkbox and count without full re-render
-  var countEl=document.getElementById('msg-sel-count');
-  if(countEl)countEl.textContent=msgSelectedCusts.length+' selected';
-}
-
-function msgSelectAll(){
-  msgSelectedCusts=DB.customers.filter(function(c){return c.phone;}).map(function(c){return c.id;});
-  renderApp();
-}
-
-function msgSelectNone(){
-  msgSelectedCusts=[];
-  renderApp();
-}
-
-function msgSelectCredit(){
-  msgSelectedCusts=DB.customers.filter(function(c){return c.phone&&c.creditBalance>0;}).map(function(c){return c.id;});
-  renderApp();
-}
-
-// ── Twilio WhatsApp API config ────────────────────────────────
-// Credentials are stored in DB.settings (Firebase) — never hardcoded
-var TWILIO_CONFIG={
-  fromNumber:'whatsapp:+2347055693109'
-};
-
-function getTwilioAccountSid(){
-  return (DB.settings&&DB.settings.twilioAccountSid)||'';
-}
-
-function getTwilioAuthToken(){
-  return (DB.settings&&DB.settings.twilioAuthToken)||'';
-}
-
-function buildMessagingPanel(){
-  var custs=DB.customers.filter(function(c){return c.phone;});
-  var noPhone=DB.customers.filter(function(c){return !c.phone;});
-  var hasToken=getTwilioAuthToken()&&getTwilioAccountSid();
-
-  var tplBtns=Object.keys(MSG_TEMPLATES).map(function(k){
-    var t=MSG_TEMPLATES[k];
-    var active=msgTemplateKey===k;
-    return '<button onclick="setMsgTemplate(\''+k+'\')" style="padding:7px 12px;border-radius:8px;border:1.5px solid '+(active?'#1a237e':'#cbd5e1')+';background:'+(active?'#1a237e':'#fff')+';color:'+(active?'#fff':'#374151')+';font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">'+t.label+'</button>';
-  }).join('');
-
-  var custRows=custs.map(function(c){
-    var bal=c.creditBalance>0?fmt(c.creditBalance):'₦0';
-    var checked=msgSelectedCusts.indexOf(c.id)!==-1;
-    return '<tr style="cursor:pointer" onclick="toggleMsgCust(\''+c.id+'\')">'+
-      '<td style="width:36px;text-align:center"><input type="checkbox" '+(checked?'checked':'')+' onclick="event.stopPropagation();toggleMsgCust(\''+c.id+'\')" style="width:15px;height:15px;cursor:pointer"></td>'+
-      '<td style="font-weight:600">'+c.name+'</td>'+
-      '<td>'+c.phone+'</td>'+
-      '<td>'+(c.biz||'—')+'</td>'+
-      '<td style="color:'+(c.creditBalance>0?'#c0392b':'#15803d')+'">'+bal+'</td>'+
-    '</tr>';
-  }).join('');
-
-  var tokenSection=!hasToken?
-    '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:10px;padding:12px 14px;margin-bottom:1rem">'+
-      '<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">⚙️ Twilio credentials required</div>'+
-      '<div style="font-size:12px;color:#666;margin-bottom:8px">Enter your Twilio credentials. Found at console.twilio.com → Account → Auth tokens. Stored securely in your Firebase data.</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">'+
-        '<div class="form-group" style="margin:0"><label style="font-size:11px">Account SID</label><input type="text" id="twilio-sid-input" placeholder="ACxxxxxxxxxxxxxxx" value="'+(getTwilioAccountSid()||'')+'" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>'+
-        '<div class="form-group" style="margin:0"><label style="font-size:11px">Auth Token</label><input type="password" id="twilio-token-input" placeholder="Enter Auth Token..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>'+
-        '<button onclick="saveTwilioToken()" style="padding:8px 14px;background:#1a237e;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Save</button>'+
-      '</div>'+
-    '</div>':
-    '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
-      '✅ Twilio WhatsApp connected — Sender: +2347055693109 (egreatchidelectro)'+
-      (noPhone.length?' &nbsp;|&nbsp; <span style="color:#92400e">⚠ '+noPhone.length+' customer(s) have no phone number.</span>':'')+
-      ' &nbsp;<button onclick="clearTwilioToken()" style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;text-decoration:underline">Change credentials</button>'+
-    '</div>';
-
-  return '<p class="sec-title">📲 Customer Messaging — WhatsApp (Twilio)</p>'+
-    tokenSection+
+  return '<p class="sec-title">📲 Customer Messaging</p>'+
+    channelToggle+credSection+
     '<p style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">1. Choose a message template</p>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+tplBtns+'</div>'+
     '<div class="form-group" style="margin-bottom:1rem">'+
-      '<label style="font-size:12px">Message &nbsp;<span style="font-weight:400;color:#6b7280">({name} = customer name, {balance} = their balance)</span></label>'+
+      '<label style="font-size:12px">Message &nbsp;<span style="font-weight:400;color:#6b7280">({name} = customer name, {balance} = balance)</span></label>'+
       '<textarea id="msg-text" rows="5" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit" placeholder="Type your message here...">'+MSG_TEMPLATES[msgTemplateKey].text+'</textarea>'+
     '</div>'+
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
@@ -2822,98 +2736,106 @@ function buildMessagingPanel(){
       '<button onclick="msgSelectCredit()" style="padding:5px 10px;border-radius:6px;border:1px solid #fcd34d;background:#fff8f0;font-size:11px;cursor:pointer;color:#92400e">Credit customers only</button>'+
       '<span id="msg-sel-count" style="font-size:11px;color:#6b7280">'+msgSelectedCusts.length+' selected</span>'+
     '</div>'+
-    (custs.length?
-      '<div class="tbl-wrap" style="max-height:280px;overflow-y:auto;margin-bottom:1rem">'+
-        '<table><thead><tr><th style="width:36px"></th><th>Name</th><th>Phone</th><th>Business</th><th>Balance</th></tr></thead>'+
-        '<tbody>'+custRows+'</tbody></table>'+
-      '</div>'
-    :'<div class="empty">No customers with phone numbers found.</div>')+
-    '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
-      '<button onclick="sendTwilioWhatsApp()" style="padding:11px 24px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;'+(hasToken?'':'opacity:0.5')+'">📲 Send WhatsApp to all selected</button>'+
+    (custs.length?'<div class="tbl-wrap" style="max-height:280px;overflow-y:auto;margin-bottom:1rem"><table><thead><tr><th style="width:36px"></th><th>Name</th><th>Phone</th><th>Business</th><th>Balance</th></tr></thead><tbody>'+custRows+'</tbody></table></div>':'<div class="empty">No customers with phone numbers found.</div>')+
+    '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+sendBtn+
       '<span id="msg-send-status" style="font-size:12px;color:#6b7280"></span>'+
     '</div>'+
     '<div id="msg-results" style="margin-top:12px"></div>';
 }
 
-function saveTwilioToken(){
+function setMsgTemplate(key){msgTemplateKey=key;renderApp();setTimeout(function(){var ta=document.getElementById('msg-text');if(ta)ta.value=MSG_TEMPLATES[key].text;},50);}
+function toggleMsgCust(id){var idx=msgSelectedCusts.indexOf(id);if(idx===-1)msgSelectedCusts.push(id);else msgSelectedCusts.splice(idx,1);var el=document.getElementById('msg-sel-count');if(el)el.textContent=msgSelectedCusts.length+' selected';}
+function msgSelectAll(){msgSelectedCusts=DB.customers.filter(function(c){return c.phone;}).map(function(c){return c.id;});renderApp();}
+function msgSelectNone(){msgSelectedCusts=[];renderApp();}
+function msgSelectCredit(){msgSelectedCusts=DB.customers.filter(function(c){return c.phone&&c.creditBalance>0;}).map(function(c){return c.id;});renderApp();}
+
+function saveTwilioCreds(){
   var sid=document.getElementById('twilio-sid-input');
-  var t=document.getElementById('twilio-token-input');
-  if(!sid||!sid.value.trim()){alert('Please enter your Account SID.');return;}
-  if(!t||!t.value.trim()){alert('Please enter your Auth Token.');return;}
+  var tok=document.getElementById('twilio-token-input');
+  if(!sid||!sid.value.trim()){alert('Enter Account SID.');return;}
+  if(!tok||!tok.value.trim()){alert('Enter Auth Token.');return;}
   if(!DB.settings)DB.settings={};
   DB.settings.twilioAccountSid=sid.value.trim();
-  DB.settings.twilioAuthToken=t.value.trim();
-  saveData();
-  renderApp();
-}
-
-function clearTwilioToken(){
-  if(!confirm('Remove saved Twilio credentials?'))return;
-  if(DB.settings){DB.settings.twilioAccountSid='';DB.settings.twilioAuthToken='';}
+  DB.settings.twilioAuthToken=tok.value.trim();
   saveData();renderApp();
 }
+function clearTwilioCreds(){if(!confirm('Remove Twilio credentials?'))return;if(DB.settings){DB.settings.twilioAccountSid='';DB.settings.twilioAuthToken='';}saveData();renderApp();}
+
+function saveTermiiKey(){
+  var k=document.getElementById('termii-key-input');
+  if(!k||!k.value.trim()){alert('Paste your Termii API key.');return;}
+  if(!DB.settings)DB.settings={};
+  DB.settings.termiiApiKey=k.value.trim();
+  saveData();renderApp();
+}
+function clearTermiiKey(){if(!confirm('Remove Termii API key?'))return;if(DB.settings)DB.settings.termiiApiKey='';saveData();renderApp();}
 
 async function sendTwilioWhatsApp(){
   var msgText=document.getElementById('msg-text')?document.getElementById('msg-text').value.trim():'';
-  if(!msgText){alert('Please enter a message first.');return;}
-  if(!msgSelectedCusts.length){alert('Please select at least one customer.');return;}
-  var token=getTwilioAuthToken();
-  if(!token){alert('Please save your Twilio credentials first.');return;}
-  var sid=getTwilioAccountSid();
-  if(!sid){alert('Please save your Twilio Account SID first.');return;}
+  if(!msgText){alert('Please enter a message.');return;}
+  if(!msgSelectedCusts.length){alert('Select at least one customer.');return;}
+  var token=getTwilioAuthToken(),sid=getTwilioAccountSid();
+  if(!token||!sid){alert('Please save your Twilio credentials first.');return;}
   var selected=DB.customers.filter(function(c){return msgSelectedCusts.indexOf(c.id)!==-1&&c.phone;});
-  if(!selected.length){alert('None of the selected customers have a phone number.');return;}
-  if(!confirm('Send WhatsApp message to '+selected.length+' customer(s) via Twilio?\n\nThis will use your Twilio credit (~$0.05 per message).')){return;}
-
-  var statusEl=document.getElementById('msg-send-status');
-  var resultsEl=document.getElementById('msg-results');
-  if(statusEl)statusEl.textContent='Sending...';
-  if(resultsEl)resultsEl.innerHTML='';
-
-  var results=[];
-  var url='https://api.twilio.com/2010-04-01/Accounts/'+sid+'/Messages.json';
+  if(!selected.length){alert('No selected customers have phone numbers.');return;}
+  if(!confirm('Send WhatsApp to '+selected.length+' customer(s)?\nEstimated cost: $'+(selected.length*0.05).toFixed(2)+' from your Twilio balance.'))return;
+  var statusEl=document.getElementById('msg-send-status'),resultsEl=document.getElementById('msg-results');
+  if(statusEl)statusEl.textContent='Sending...';if(resultsEl)resultsEl.innerHTML='';
+  var results=[],url='https://api.twilio.com/2010-04-01/Accounts/'+sid+'/Messages.json';
   var headers={'Authorization':'Basic '+btoa(sid+':'+token),'Content-Type':'application/x-www-form-urlencoded'};
-
   for(var i=0;i<selected.length;i++){
     var c=selected[i];
-    var bal=c.creditBalance>0?fmt(c.creditBalance):'₦0';
-    var text=msgText.replace(/\{name\}/g,c.name).replace(/\{balance\}/g,bal);
+    if(statusEl)statusEl.textContent='Sending '+(i+1)+' of '+selected.length+'...';
+    var text=msgText.replace(/\{name\}/g,c.name).replace(/\{balance\}/g,c.creditBalance>0?fmt(c.creditBalance):'₦0');
     var phone=c.phone.replace(/[\s\-\(\)]/g,'');
     if(phone.startsWith('0'))phone='234'+phone.substring(1);
     if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
     phone=phone.replace(/^\+/,'');
-    var to='whatsapp:+'+phone;
-    if(statusEl)statusEl.textContent='Sending '+(i+1)+' of '+selected.length+'...';
     try{
-      var body='From='+encodeURIComponent(TWILIO_CONFIG.fromNumber)+'&To='+encodeURIComponent(to)+'&Body='+encodeURIComponent(text);
-      var resp=await fetch(url,{method:'POST',headers:headers,body:body});
+      var resp=await fetch(url,{method:'POST',headers:headers,body:'From='+encodeURIComponent(TWILIO_FROM)+'&To='+encodeURIComponent('whatsapp:+'+phone)+'&Body='+encodeURIComponent(text)});
       var data=await resp.json();
-      if(data.sid){
-        results.push({name:c.name,phone:c.phone,status:'✅ Sent',sid:data.sid});
-      } else {
-        results.push({name:c.name,phone:c.phone,status:'❌ '+((data.message||data.error_message)||'Failed')});
-      }
-    }catch(err){
-      results.push({name:c.name,phone:c.phone,status:'❌ Error: '+err.message});
-    }
-    // Small delay between sends
+      results.push({name:c.name,phone:c.phone,status:data.sid?'✅ Sent':'❌ '+(data.message||'Failed')});
+    }catch(err){results.push({name:c.name,phone:c.phone,status:'❌ Error: '+err.message});}
     await new Promise(function(r){setTimeout(r,300);});
   }
-
   var sent=results.filter(function(r){return r.status.startsWith('✅');}).length;
-  var failed=results.length-sent;
-  if(statusEl)statusEl.textContent='Done — '+sent+' sent, '+failed+' failed.';
-
-  if(resultsEl){
-    resultsEl.innerHTML='<div style="margin-top:8px;font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">Delivery report:</div>'+
-      '<div class="tbl-wrap" style="max-height:200px;overflow-y:auto">'+
-      '<table><thead><tr><th>Customer</th><th>Phone</th><th>Status</th></tr></thead><tbody>'+
-      results.map(function(r){return '<tr><td>'+r.name+'</td><td>'+r.phone+'</td><td>'+r.status+'</td></tr>';}).join('')+
-      '</tbody></table></div>';
-  }
+  if(statusEl)statusEl.textContent='Done — '+sent+' sent, '+(results.length-sent)+' failed.';
+  if(resultsEl)resultsEl.innerHTML='<div style="font-size:12px;font-weight:700;margin-bottom:6px">Delivery report:</div><div class="tbl-wrap" style="max-height:200px;overflow-y:auto"><table><thead><tr><th>Customer</th><th>Phone</th><th>Status</th></tr></thead><tbody>'+results.map(function(r){return '<tr><td>'+r.name+'</td><td>'+r.phone+'</td><td>'+r.status+'</td></tr>';}).join('')+'</tbody></table></div>';
 }
 
-function sendWhatsAppMessages(){sendTwilioWhatsApp();}
+async function sendTermiiSMS(){
+  var msgText=document.getElementById('msg-text')?document.getElementById('msg-text').value.trim():'';
+  if(!msgText){alert('Please enter a message.');return;}
+  if(!msgSelectedCusts.length){alert('Select at least one customer.');return;}
+  var apiKey=getTermiiApiKey();
+  if(!apiKey){alert('Please save your Termii API key first.');return;}
+  var selected=DB.customers.filter(function(c){return msgSelectedCusts.indexOf(c.id)!==-1&&c.phone;});
+  if(!selected.length){alert('No selected customers have phone numbers.');return;}
+  if(!confirm('Send SMS to '+selected.length+' customer(s) via Termii?\nEstimated cost: ₦'+(selected.length*6)+' – ₦'+(selected.length*10)))return;
+  var statusEl=document.getElementById('msg-send-status'),resultsEl=document.getElementById('msg-results');
+  if(statusEl)statusEl.textContent='Sending...';if(resultsEl)resultsEl.innerHTML='';
+  var results=[];
+  for(var i=0;i<selected.length;i++){
+    var c=selected[i];
+    if(statusEl)statusEl.textContent='Sending '+(i+1)+' of '+selected.length+'...';
+    var text=msgText.replace(/\{name\}/g,c.name).replace(/\{balance\}/g,c.creditBalance>0?fmt(c.creditBalance):'₦0');
+    var phone=c.phone.replace(/[\s\-\(\)]/g,'');
+    if(phone.startsWith('0'))phone='234'+phone.substring(1);
+    if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
+    phone=phone.replace(/^\+/,'');
+    try{
+      var resp=await fetch(TERMII_BASE+'/api/sms/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:phone,from:TERMII_SENDER,sms:text,type:'plain',api_key:apiKey,channel:'generic'})});
+      var data=await resp.json();
+      results.push({name:c.name,phone:c.phone,status:(data.message_id||data.messageId||data.code==='ok'||data.status==='Message Sent')?'✅ Sent':'❌ '+(data.message||'Failed')});
+    }catch(err){results.push({name:c.name,phone:c.phone,status:'❌ Error: '+err.message});}
+    await new Promise(function(r){setTimeout(r,200);});
+  }
+  var sent=results.filter(function(r){return r.status.startsWith('✅');}).length;
+  if(statusEl)statusEl.textContent='Done — '+sent+' sent, '+(results.length-sent)+' failed.';
+  if(resultsEl)resultsEl.innerHTML='<div style="font-size:12px;font-weight:700;margin-bottom:6px">Delivery report:</div><div class="tbl-wrap" style="max-height:200px;overflow-y:auto"><table><thead><tr><th>Customer</th><th>Phone</th><th>Status</th></tr></thead><tbody>'+results.map(function(r){return '<tr><td>'+r.name+'</td><td>'+r.phone+'</td><td>'+r.status+'</td></tr>';}).join('')+'</tbody></table></div>';
+}
+
+function sendWhatsAppMessages(){msgChannel==='termii'?sendTermiiSMS():sendTwilioWhatsApp();}
 
 function viewCustomer(id){window._viewingCust=id;activeCustSub='profile';renderApp();}
 function editCustomer(id){window._editingCust=id;activeCustSub='edit';renderApp();}
