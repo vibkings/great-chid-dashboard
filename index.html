@@ -70,6 +70,53 @@
   --shadow-lg:0 10px 25px rgba(0,0,0,.12),0 4px 8px rgba(0,0,0,.08);
   --font:'Inter',sans-serif;
 }
+/* ── Dark Mode ── */
+body.dark-mode{
+  --bg:#0f1117;
+  --sidebar:#1a1d27;
+  --sidebar-border:#2a2d3a;
+  --sidebar-hover:#252837;
+  --sidebar-active:#1e2130;
+  --surface:#1e2130;
+  --surface2:#252837;
+  --surface3:#2a2d3a;
+  --border:#2a2d3a;
+  --border2:#333649;
+  --text:#e2e8f0;
+  --text2:#94a3b8;
+  --text3:#64748b;
+  --primary:#3b82f6;
+  --primary-dark:#2563eb;
+  --primary-bg:#1e2a40;
+  --success:#22c55e;
+  --success-bg:#0d2318;
+  --danger:#ef4444;
+  --danger-bg:#2d0d0d;
+  --warning:#f59e0b;
+  --warning-bg:#2d1f00;
+  --warning-text:#fbbf24;
+  --info:#22d3ee;
+  --info-bg:#0a2030;
+  --info-text:#67e8f9;
+  --white:#1e2130;
+  --light:#252837;
+  --accent-glow:rgba(59,130,246,.2);
+  --amber-bg:#2d1f00;
+}
+body.dark-mode .topbar{background:var(--surface);border-color:var(--border);}
+body.dark-mode .card{background:var(--surface);border-color:var(--border);}
+body.dark-mode input,body.dark-mode select,body.dark-mode textarea{background:var(--surface2);color:var(--text);border-color:var(--border);}
+body.dark-mode table thead tr{background:var(--surface3);}
+body.dark-mode .tbl-wrap table tr:nth-child(even) td{background:var(--surface2);}
+body.dark-mode .badge.ok{background:#0d2318;color:#22c55e;}
+body.dark-mode .badge.owing{background:#2d0d0d;color:#ef4444;}
+body.dark-mode .badge.low{background:#2d1f00;color:#f59e0b;}
+body.dark-mode .metric-card{background:var(--surface);border-color:var(--border);}
+body.dark-mode .subtab{background:var(--surface2);color:var(--text2);border-color:var(--border);}
+body.dark-mode .subtab.active{background:var(--primary);color:#fff;}
+body.dark-mode .confirm-box{background:var(--surface);}
+body.dark-mode .form-group label{color:var(--text2);}
+body{transition:background .25s,color .25s;}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;min-height:100vh}
 body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
@@ -306,7 +353,7 @@ var DB={
   users:[{id:1,name:'Admin',username:'admin',password:'admin123',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
   adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],
-  warehouse:[],recycleBin:[],
+  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
   invoiceCounter:1,
@@ -371,19 +418,35 @@ function dateInRange(storedDateStr, fromStr, toStr){
 }
 
 // ============================================================
-// FIREBASE SYNC — Pure REST API (no SDK, no external scripts)
-// Works from file://, offline-first, no CDN dependency
+// FIREBASE SYNC — Per-collection REST API (conflict-safe)
+// Each collection saves as its own Firestore document.
+// When two offline users come back online, only the collections
+// they actually changed will overwrite — others are preserved.
 // ============================================================
 var GCE_PROJECT_ID   = 'new-great-chid-dashboard';
 var GCE_API_KEY      = 'AIzaSyDtSPRgy3EVf9SdPGUj1fd2xxfOpYjzRvU';
-var GCE_DOC_PATH     = 'gce_business/data';
 var GCE_REST_BASE    = 'https://firestore.googleapis.com/v1/projects/' + GCE_PROJECT_ID + '/databases/(default)/documents/';
-var GCE_DOC_URL      = GCE_REST_BASE + GCE_DOC_PATH + '?key=' + GCE_API_KEY;
+var GCE_COL_PATH     = 'gce_business/'; // collection prefix
+var GCE_API_KEY_QS   = '?key=' + GCE_API_KEY;
+
+// Collections saved as separate documents (conflict-safe)
+// Each has its own lastModified timestamp
+var GCE_COLLECTIONS = [
+  'sales','inventory','customers','suppliers','purchases','cashflow',
+  'creditPayments','deposits','salesReturns','adjLog','stockCounts',
+  'supplierPayments','tillSessions','activityLog','settings',
+  'creditCustomers','users','banks','posTerminals','categories',
+  'expenseCats','transferLog','warehouse','recycleBin','drafts',
+  'pendingDeliveries','meta' // meta = invoiceCounter, invoiceYear, etc.
+];
 
 var STORAGE_KEY      = 'gce_business_data';
-var FB_DEVICE_ID     = 'dev_' + Math.random().toString(36).slice(2, 9);
+var FB_DEVICE_ID     = localStorage.getItem('gce_device_id') || (function(){
+  var id='dev_'+Math.random().toString(36).slice(2,9);
+  localStorage.setItem('gce_device_id',id);return id;
+})();
 
-var fbConfigured     = true;   // REST always "configured"
+var fbConfigured     = true;
 var fbConnected      = false;
 var fbLastSync       = null;
 var fbLastOwnSaveTime = 0;
@@ -394,8 +457,10 @@ var fbLastSavedAt    = null;
 var fbPendingSnapshot = null;
 var fbLastOwnSavedAt  = null;
 
+// Track which collections were modified since last sync
+var fbDirtyCollections = new Set();
+
 // ── Firestore REST helpers ──────────────────────────────────
-// Convert a plain JS object → Firestore REST document fields
 function toFirestoreDoc(obj) {
   function convert(val) {
     if (val === null || val === undefined) return { nullValue: null };
@@ -414,7 +479,6 @@ function toFirestoreDoc(obj) {
   return { fields: objToFields(obj) };
 }
 
-// Convert Firestore REST document fields → plain JS object
 function fromFirestoreDoc(fields) {
   function convert(val) {
     if (!val) return null;
@@ -435,97 +499,246 @@ function fromFirestoreDoc(fields) {
   return fieldsToObj(fields || {});
 }
 
-// ── Read document from Firestore ────────────────────────────
+// ── Read a single collection doc ────────────────────────────
+function fbGetCollection(colName, callback) {
+  var url = GCE_REST_BASE + 'gce_cols/' + colName + GCE_API_KEY_QS;
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url, true);
+  xhr.timeout = 12000;
+  xhr.onload = function() {
+    if (xhr.status === 200) {
+      try { var doc=JSON.parse(xhr.responseText); callback(null, fromFirestoreDoc(doc.fields)); }
+      catch(e) { callback(e, null); }
+    } else if (xhr.status === 404) { callback(null, null); }
+    else { callback({ code: xhr.status }, null); }
+  };
+  xhr.onerror = function() { callback({ code:'network' }, null); };
+  xhr.ontimeout = function() { callback({ code:'timeout' }, null); };
+  xhr.send();
+}
+
+// ── Write a single collection doc ───────────────────────────
+function fbSetCollection(colName, data, onSuccess, onError) {
+  var url = GCE_REST_BASE + 'gce_cols/' + colName + GCE_API_KEY_QS;
+  var body = JSON.stringify(toFirestoreDoc(data));
+  var xhr = new XMLHttpRequest();
+  xhr.open('PATCH', url, true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.timeout = 15000;
+  xhr.onload = function() {
+    if (xhr.status >= 200 && xhr.status < 300) { if (onSuccess) onSuccess(); }
+    else { if (onError) onError({ code: xhr.status }); }
+  };
+  xhr.onerror = function() { if (onError) onError({ code:'network' }); };
+  xhr.ontimeout = function() { if (onError) onError({ code:'timeout' }); };
+  xhr.send(body);
+}
+
+// ── Legacy single-doc read (for migration) ──────────────────
+var GCE_DOC_PATH = 'gce_business/data';
+var GCE_DOC_URL  = GCE_REST_BASE + GCE_DOC_PATH + GCE_API_KEY_QS;
 function fbGet(callback) {
   var xhr = new XMLHttpRequest();
   xhr.open('GET', GCE_DOC_URL, true);
   xhr.timeout = 12000;
   xhr.onload = function() {
     if (xhr.status === 200) {
-      try {
-        var doc = JSON.parse(xhr.responseText);
-        var data = fromFirestoreDoc(doc.fields);
-        callback(null, data);
-      } catch(e) { callback(e, null); }
-    } else if (xhr.status === 404) {
-      callback(null, null); // document doesn't exist yet
-    } else {
-      callback({ code: xhr.status, message: xhr.responseText }, null);
-    }
+      try { var doc=JSON.parse(xhr.responseText); callback(null, fromFirestoreDoc(doc.fields)); }
+      catch(e) { callback(e, null); }
+    } else if (xhr.status === 404) { callback(null, null); }
+    else { callback({ code: xhr.status, message: xhr.responseText }, null); }
   };
-  xhr.onerror   = function() { callback({ code: 'network', message: 'Network error' }, null); };
-  xhr.ontimeout = function() { callback({ code: 'timeout', message: 'Request timed out' }, null); };
+  xhr.onerror   = function() { callback({ code:'network', message:'Network error' }, null); };
+  xhr.ontimeout = function() { callback({ code:'timeout', message:'Timed out' }, null); };
   xhr.send();
 }
-
-// ── Write document to Firestore (PATCH = upsert) ────────────
 function fbSet(data, onSuccess, onError) {
   var body = JSON.stringify(toFirestoreDoc(data));
   var xhr = new XMLHttpRequest();
-  // PATCH with updateMask creates or fully replaces the doc
   xhr.open('PATCH', GCE_DOC_URL, true);
   xhr.setRequestHeader('Content-Type', 'application/json');
   xhr.timeout = 15000;
   xhr.onload = function() {
-    if (xhr.status >= 200 && xhr.status < 300) {
-      if (onSuccess) onSuccess();
-    } else {
-      if (onError) onError({ code: xhr.status, message: xhr.responseText });
-    }
+    if (xhr.status >= 200 && xhr.status < 300) { if (onSuccess) onSuccess(); }
+    else { if (onError) onError({ code: xhr.status, message: xhr.responseText }); }
   };
-  xhr.onerror   = function() { if (onError) onError({ code: 'network', message: 'Network error' }); };
-  xhr.ontimeout = function() { if (onError) onError({ code: 'timeout', message: 'Timed out' }); };
+  xhr.onerror   = function() { if (onError) onError({ code:'network', message:'Network error' }); };
+  xhr.ontimeout = function() { if (onError) onError({ code:'timeout', message:'Timed out' }); };
   xhr.send(body);
 }
 
-// ── Polling: check for remote changes every 15 seconds ──────
+// ── Build per-collection snapshot ───────────────────────────
+function buildCollectionSnapshot(colName) {
+  var now = new Date().toISOString();
+  var meta = {
+    _savedAt: now,
+    _deviceId: FB_DEVICE_ID,
+    invoiceCounter: DB.invoiceCounter,
+    invoiceYear: DB.invoiceYear
+  };
+  var map = {
+    sales: DB.sales,
+    inventory: DB.inventory,
+    customers: DB.customers,
+    suppliers: DB.suppliers,
+    purchases: DB.purchases,
+    cashflow: DB.cashflow,
+    creditPayments: DB.creditPayments||[],
+    deposits: DB.deposits||[],
+    salesReturns: DB.salesReturns||[],
+    adjLog: DB.adjLog||[],
+    stockCounts: DB.stockCounts||[],
+    supplierPayments: DB.supplierPayments||[],
+    tillSessions: DB.tillSessions||[],
+    activityLog: (DB.activityLog||[]).slice(0,200), // limit to 200
+    settings: DB.settings||{},
+    creditCustomers: DB.creditCustomers||[],
+    users: DB.users,
+    banks: DB.banks,
+    posTerminals: DB.posTerminals||[],
+    categories: DB.categories||[],
+    expenseCats: DB.expenseCats||[],
+    transferLog: DB.transferLog||[],
+    warehouse: DB.warehouse||[],
+    recycleBin: DB.recycleBin||[],
+    drafts: DB.drafts||[],
+    pendingDeliveries: DB.pendingDeliveries||[],
+    meta: meta
+  };
+  if (colName === 'meta') return meta;
+  var data = map[colName];
+  return { data: data, _savedAt: now, _deviceId: FB_DEVICE_ID };
+}
+
+// ── Apply a fetched collection to DB ────────────────────────
+function applyCollection(colName, payload) {
+  if (!payload) return;
+  var data = payload.data !== undefined ? payload.data : payload;
+  if (colName === 'meta') {
+    if (data.invoiceCounter) DB.invoiceCounter = data.invoiceCounter;
+    if (data.invoiceYear)    DB.invoiceYear    = data.invoiceYear;
+    return;
+  }
+  var map = {
+    sales:'sales', inventory:'inventory', customers:'customers',
+    suppliers:'suppliers', purchases:'purchases', cashflow:'cashflow',
+    creditPayments:'creditPayments', deposits:'deposits',
+    salesReturns:'salesReturns', adjLog:'adjLog', stockCounts:'stockCounts',
+    supplierPayments:'supplierPayments', tillSessions:'tillSessions',
+    activityLog:'activityLog', settings:'settings',
+    creditCustomers:'creditCustomers', users:'users', banks:'banks',
+    posTerminals:'posTerminals', categories:'categories',
+    expenseCats:'expenseCats', transferLog:'transferLog',
+    warehouse:'warehouse', recycleBin:'recycleBin',
+    drafts:'drafts', pendingDeliveries:'pendingDeliveries'
+  };
+  if (map[colName] && Array.isArray(data)) DB[map[colName]] = data;
+  else if (colName === 'settings' && data && typeof data === 'object') DB.settings = data;
+}
+
+// ── Sync: push only dirty collections to Firestore ──────────
+var fbSyncInProgress = false;
+function fbSyncDirty(onDone) {
+  if (!navigator.onLine) return;
+  if (fbSyncInProgress) return;
+  var cols = Array.from(fbDirtyCollections);
+  if (!cols.length) { if(onDone) onDone(true); return; }
+  fbSyncInProgress = true;
+  fbDirtyCollections.clear();
+  var pending = cols.length;
+  var allOk = true;
+  cols.forEach(function(colName) {
+    var payload = buildCollectionSnapshot(colName);
+    fbSetCollection(colName, payload, function() {
+      pending--;
+      if (pending === 0) { fbSyncInProgress=false; if(onDone) onDone(allOk); }
+    }, function(e) {
+      allOk = false;
+      fbDirtyCollections.add(colName); // re-queue failed collection
+      pending--;
+      if (pending === 0) { fbSyncInProgress=false; if(onDone) onDone(false); }
+    });
+  });
+}
+
+// ── Pull all collections from Firestore ─────────────────────
+function fbPullAll(onDone) {
+  var cols = GCE_COLLECTIONS.slice();
+  var pending = cols.length;
+  var anyData = false;
+  cols.forEach(function(colName) {
+    fbGetCollection(colName, function(err, payload) {
+      if (!err && payload) {
+        applyCollection(colName, payload);
+        anyData = true;
+      }
+      pending--;
+      if (pending === 0) {
+        // Also try legacy single-doc for migration
+        fbGet(function(err2, legacyData) {
+          if (!err2 && legacyData && legacyData._savedAt && !anyData) {
+            // Migrate from old single-doc format
+            applySnapshot(legacyData);
+            // Mark all collections dirty to migrate to new format
+            GCE_COLLECTIONS.forEach(function(c){fbDirtyCollections.add(c);});
+            console.log('Migrated from legacy single-doc format');
+          }
+          if (onDone) onDone();
+        });
+      }
+    });
+  });
+}
+
+// ── Mark collections dirty based on what changed ────────────
+function markDirty(collections) {
+  if (!Array.isArray(collections)) collections = [collections];
+  collections.forEach(function(c) { fbDirtyCollections.add(c); });
+  fbDirtyCollections.add('meta');
+}
+
 function startFirebaseListener() {
   if (fbPollTimer) clearInterval(fbPollTimer);
   updateSyncStatus('connecting');
 
-  // Initial read
-  fbGet(function(err, data) {
-    if (err) {
-      fbConnected = false;
-      updateSyncStatus('error');
-      console.error('Firebase initial read failed:', err);
-      // retry in 30s
-      fbConnectTimer = setTimeout(startFirebaseListener, 30000);
-      return;
-    }
+  // Pull all collections from Firestore
+  fbPullAll(function() {
     fbConnected = true;
-    if (data && data._savedAt) {
-      // If remote is newer than what we have, offer to sync
-      if (!DB._savedAt || data._savedAt > DB._savedAt) {
-        if (data._deviceId !== FB_DEVICE_ID) {
-          fbPendingSnapshot = data;
-          var remoteTime = new Date(data._savedAt).toLocaleTimeString();
-          showSyncPopup(remoteTime, (data.sales || []).length);
-        } else {
-          updateSyncStatus('synced');
-        }
-      } else {
-        updateSyncStatus('synced');
-      }
-    } else {
-      updateSyncStatus('synced'); // no remote data yet
+    fbLastSync = new Date();
+    fbLastSavedAt = new Date().toISOString();
+    updateSyncStatus('synced');
+    // Flush any pending offline saves
+    var pending = localStorage.getItem(STORAGE_KEY+'_pending');
+    if (pending) {
+      GCE_COLLECTIONS.forEach(function(c){ fbDirtyCollections.add(c); });
+      fbSyncDirty(function(ok){
+        if(ok){ localStorage.removeItem(STORAGE_KEY+'_pending'); updateSyncStatus('synced'); showToast('\u2705 Offline changes synced!'); }
+        else { updateSyncStatus('error'); }
+      });
     }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(buildSnapshot())); } catch(e) {}
+    renderApp();
   });
 
-  // Poll every 20 seconds for changes from other devices
+  // Poll every 20 seconds — check meta doc for changes from other devices
   fbPollTimer = setInterval(function() {
-    if (Date.now() - fbLastOwnSaveTime < 10000) return; // skip if we just saved
-    fbGet(function(err, data) {
+    if (!navigator.onLine) return;
+    if (Date.now() - fbLastOwnSaveTime < 10000) return;
+    fbGetCollection('meta', function(err, payload) {
       if (err) { updateSyncStatus('error'); return; }
       fbConnected = true;
-      if (!data || !data._savedAt) { updateSyncStatus('synced'); return; }
-      if (data._deviceId === FB_DEVICE_ID) { updateSyncStatus('synced'); return; }
-      if (data._savedAt === fbLastSavedAt) { updateSyncStatus('synced'); return; }
-      if (DB._savedAt && data._savedAt <= DB._savedAt) { updateSyncStatus('synced'); return; }
-      // Remote is newer — offer sync
-      fbPendingSnapshot = data;
-      var remoteTime = new Date(data._savedAt).toLocaleTimeString();
-      showSyncPopup(remoteTime, (data.sales || []).length);
+      if (!payload || !payload._savedAt) { updateSyncStatus('synced'); return; }
+      if (payload._deviceId === FB_DEVICE_ID) { updateSyncStatus('synced'); return; }
+      if (fbLastSavedAt && payload._savedAt <= fbLastSavedAt) { updateSyncStatus('synced'); return; }
+      // Another device saved — pull all updated collections
+      fbPullAll(function() {
+        fbLastSavedAt = payload._savedAt;
+        fbLastSync = new Date();
+        updateSyncStatus('synced');
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(buildSnapshot())); } catch(e) {}
+        renderApp();
+        showToast('\ud83d\udd04 Data updated from another device.');
+      });
     });
   }, 20000);
 }
@@ -590,12 +803,11 @@ function dismissFbSync() {
 function updateSyncStatus(status) {
   var el = document.getElementById('sync-indicator');
   if (!el) return;
-  var icons   = { synced:'🟢', saving:'🔄', connecting:'🔵', error:'🔴', local:'💾', pending:'🔔' };
-  var labels  = { synced:'Synced', saving:'Saving...', connecting:'Connecting...', error:'Sync error — click to retry', local:'Local only', pending:'Sync available' };
+  var icons   = { synced:'🟢', saving:'🔄', connecting:'🔵', error:'🔴', local:'💾', pending:'🔔', offline:'🟠' };
+  var labels  = { synced:'Synced', saving:'Saving...', connecting:'Connecting...', error:'Sync error — click to retry', local:'Local only', pending:'Sync available', offline:'Offline — saved locally' };
   var time    = (fbLastSync && status === 'synced') ? ' · ' + fbLastSync.toLocaleTimeString() : '';
   el.innerHTML = '<span style="font-size:12px">' + (icons[status]||'⚪') + ' ' + (labels[status]||status) + time + '</span>';
-  el.className = 'sync-badge ' + (status === 'synced' ? 'connected' : status === 'error' ? 'error' : 'local');
-  // Make error/local clickable to retry
+  el.className = 'sync-badge ' + (status === 'synced' ? 'connected' : status === 'error' || status === 'offline' ? 'error' : 'local');
   if (status === 'error' || status === 'local') {
     el.style.cursor = 'pointer';
     el.title = 'Click to retry Firebase connection';
@@ -709,23 +921,36 @@ function saveData() {
   DB._savedAt = snapshot._savedAt;
   fbLastSavedAt = snapshot._savedAt;
   fbLastOwnSavedAt = snapshot._savedAt;
-  // Always save locally first
+  // Always save locally first — works offline
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch(e) {}
 
-  // Save to Firestore via REST API
+  // If offline, queue and show indicator
+  if(!navigator.onLine){
+    updateSyncStatus('offline');
+    localStorage.setItem(STORAGE_KEY+'_pending', '1');
+    return;
+  }
+
+  // Mark all collections dirty (conservative — sync everything on save)
+  GCE_COLLECTIONS.forEach(function(c){ fbDirtyCollections.add(c); });
+
   fbLastOwnSaveTime = Date.now();
   updateSyncStatus('saving');
   clearTimeout(fbSaveTimer);
   fbSaveTimer = setTimeout(function() {
-    snapshot._deviceId = FB_DEVICE_ID;
-    fbSet(snapshot,
-      function() { fbLastSync = new Date(); updateSyncStatus('synced'); },
-      function(e) { console.error('Firebase save failed:', e); updateSyncStatus('error'); }
-    );
+    fbSyncDirty(function(ok) {
+      if (ok) {
+        fbLastSync = new Date();
+        updateSyncStatus('synced');
+        localStorage.removeItem(STORAGE_KEY+'_pending');
+      } else {
+        updateSyncStatus('error');
+      }
+    });
   }, 400);
 }
 
-// ---- loadData: localStorage first, then Firebase REST ----
+// ---- loadData: localStorage first, then Firebase per-collection ----
 function loadData() {
   // Load from localStorage immediately so app works offline
   try {
@@ -737,7 +962,7 @@ function loadData() {
   } catch(e) {
     console.warn('Could not load from localStorage:', e);
   }
-  // Connect to Firestore via REST
+  // Connect to Firestore — pulls all collections
   initFirebase();
   renderAuth();
 }
@@ -778,6 +1003,9 @@ function applySnapshot(snapshot) {
     }
     DB.invoiceYear=currentYr;
   }
+  DB.activityLog = snapshot.activityLog || [];
+  DB.supplierPayments = snapshot.supplierPayments || [];
+  DB.tillSessions = snapshot.tillSessions || [];
   DB.recycleBin = snapshot.recycleBin || [];
   DB.drafts = snapshot.drafts || [];
   DB.pendingDeliveries = snapshot.pendingDeliveries || [];
@@ -838,6 +1066,9 @@ function buildSnapshot() {
     creditPayments: DB.creditPayments || [],
     deposits: DB.deposits || [],
     recycleBin: DB.recycleBin || [],
+    activityLog: DB.activityLog || [],
+    supplierPayments: DB.supplierPayments || [],
+    tillSessions: DB.tillSessions || [],
     _savedAt: now,
   };
 }
@@ -1040,6 +1271,282 @@ function emptyRecycleBin() {
     saveData();
     renderApp();
   });
+}
+
+// ── DAILY CLOSING REPORT ─────────────────────────────────────
+var closingDate = new Date().toISOString().slice(0,10);
+
+function buildClosingReport(){
+  if(!canDo('reports'))return '<div class="empty">Access denied.</div>';
+  var d=new Date(closingDate);
+  var dateStr=d.toLocaleDateString('en-NG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  // All sales for this date
+  var daySales=DB.sales.filter(function(s){return dateInRange(s.date,closingDate,closingDate);});
+  // Group by invoice
+  var invMap={};
+  daySales.forEach(function(s){
+    var k=s.invoiceNum||s.id;
+    if(!invMap[k])invMap[k]={invoiceNum:k,custName:s.printName||s.custName,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,splitPayment:s.splitPayment||null,total:0,profit:0,partPayment:s.partPayment||0,seller:s.seller};
+    invMap[k].total+=s.total;invMap[k].profit+=s.profit;
+  });
+  var invList=Object.values(invMap);
+  var totalRevenue=invList.reduce(function(a,g){return a+g.total;},0);
+  var totalProfit=invList.reduce(function(a,g){return a+g.profit;},0);
+  // Payment breakdown
+  var cash=0,pos=0,transfer=0,credit=0,partPaid=0,deposit=0;
+  invList.forEach(function(g){
+    if(g.payment==='credit'){credit+=g.total;}
+    else if(g.payment==='deposit'){deposit+=g.total;}
+    else if(g.payment==='part'){partPaid+=g.partPayment||0;credit+=Math.max(0,g.total-(g.partPayment||0));}
+    else if(g.payMode==='split'&&g.splitPayment){
+      var sp=g.splitPayment;
+      function addSplit(m,a){if(m==='pos')pos+=a;else if(m==='transfer')transfer+=a;else cash+=a;}
+      addSplit(sp.mode1,sp.amt1);addSplit(sp.mode2,sp.amt2);
+    }
+    else if(g.payMode==='pos')pos+=g.total;
+    else if(g.payMode==='transfer')transfer+=g.total;
+    else cash+=g.total;
+  });
+  var totalPaid=cash+pos+transfer+partPaid+deposit;
+  // Credit payments received today
+  var cpToday=(DB.creditPayments||[]).filter(function(p){return dateInRange(p.date,closingDate,closingDate);});
+  var cpTotal=cpToday.reduce(function(a,p){return a+p.amount;},0);
+  // Deposits received today
+  var depToday=(DB.deposits||[]).filter(function(d){return d.amount>0&&dateInRange(d.date,closingDate,closingDate);});
+  var depTotal=depToday.reduce(function(a,d){return a+d.amount;},0);
+  // Expenses today
+  var expToday=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&dateInRange(c.date,closingDate,closingDate);});
+  var expTotal=expToday.reduce(function(a,e){return a+e.amount;},0);
+  // Returns today
+  var retToday=(DB.salesReturns||[]).filter(function(r){return dateInRange(r.date,closingDate,closingDate);});
+  var retTotal=retToday.reduce(function(a,r){return a+(r.refundAmt||0);},0);
+  // By staff
+  var byStaff={};
+  invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
+  var staffRows=Object.keys(byStaff).map(function(s){var st=byStaff[s];return '<tr><td>'+s+'</td><td style="text-align:center">'+st.count+'</td><td style="text-align:right">'+fmt(st.total)+'</td><td style="text-align:right;color:#15803d">'+fmt(st.profit)+'</td></tr>';}).join('');
+  // Invoice rows
+  var invRows=invList.map(function(g,i){
+    var payBadge=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':g.payment==='part'?'<span class="badge low">Part</span>':'<span class="badge ok">Cash</span>';
+    return '<tr><td>'+(i+1)+'</td><td style="font-weight:700">'+g.invoiceNum+'</td><td>'+g.custName+'</td><td>'+payBadge+'</td><td style="text-align:right">'+fmt(g.total)+'</td><td style="text-align:right;color:#15803d">'+fmt(g.profit)+'</td><td style="font-size:11px">'+payModeLabel(g)+'</td><td>'+g.seller+'</td></tr>';
+  }).join('');
+
+  var grandCashIn=totalPaid+cpTotal+depTotal;
+
+  return '<p class="sec-title">📋 Daily Closing Report</p>'+
+    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:1rem;flex-wrap:wrap">'+
+      '<input type="date" value="'+closingDate+'" onchange="closingDate=this.value;renderPanel()" style="font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--border)">'+
+      '<span style="font-size:13px;color:var(--text3)">'+dateStr+'</span>'+
+      '<button onclick="printClosingReport()" style="padding:7px 14px;background:#1a237e;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;margin-left:auto">🖨️ Print closing report</button>'+
+      '<button onclick="sendDailySummaryWhatsApp()" style="padding:7px 14px;background:#25D366;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">📲 Send summary to owner</button>'+
+      '<button onclick="setOpeningFloat()" style="padding:7px 14px;background:#15803d;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">💰 Set opening float</button>'+
+    '</div>'+
+    // Till / Cash float section
+    (function(){
+      var todaySession=(DB.tillSessions||[]).find(function(t){return t.date===closingDate;});
+      var openFloat=todaySession?todaySession.openFloat:0;
+      var expectedCash=openFloat+cash;
+      var closingCount=todaySession?todaySession.closingCount:null;
+      var variance=closingCount!==null?closingCount-expectedCash:null;
+      return '<div class="card" style="margin-bottom:1rem;border-left:4px solid #15803d">'+
+        '<div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:10px">💰 Till / Cash in Hand</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:10px">'+
+          '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center">'+
+            '<div style="font-size:11px;color:#666;margin-bottom:4px">Opening float</div>'+
+            '<div style="font-size:16px;font-weight:700;color:#15803d">'+(openFloat>0?fmt(openFloat):'Not set')+'</div>'+
+          '</div>'+
+          '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center">'+
+            '<div style="font-size:11px;color:#666;margin-bottom:4px">Cash sales today</div>'+
+            '<div style="font-size:16px;font-weight:700;color:#15803d">'+fmt(cash)+'</div>'+
+          '</div>'+
+          '<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:10px;text-align:center">'+
+            '<div style="font-size:11px;color:#666;margin-bottom:4px">Expected in till</div>'+
+            '<div style="font-size:16px;font-weight:700;color:#1d4ed8">'+fmt(expectedCash)+'</div>'+
+          '</div>'+
+          (closingCount!==null?
+            '<div style="background:'+(variance===0?'#f0fdf4':variance>0?'#eff6ff':'#fff5f5')+';border:1px solid '+(variance===0?'#86efac':variance>0?'#93c5fd':'#fca5a5')+';border-radius:8px;padding:10px;text-align:center">'+
+              '<div style="font-size:11px;color:#666;margin-bottom:4px">Actual count</div>'+
+              '<div style="font-size:16px;font-weight:700;color:'+(variance===0?'#15803d':variance>0?'#1d4ed8':'#c0392b')+'">'+fmt(closingCount)+'</div>'+
+              '<div style="font-size:10px;color:'+(variance===0?'#15803d':variance>0?'#1d4ed8':'#c0392b')+';margin-top:2px">'+(variance===0?'✓ Balanced':variance>0?'+'+fmt(variance)+' over':fmt(Math.abs(variance))+' short')+'</div>'+
+            '</div>':
+            '<div style="background:#fff8f0;border:1px dashed #fcd34d;border-radius:8px;padding:10px;text-align:center;cursor:pointer" onclick="recordClosingCount()">'+
+              '<div style="font-size:11px;color:#92400e;margin-bottom:4px">Closing cash count</div>'+
+              '<div style="font-size:13px;font-weight:600;color:#92400e">Click to count</div>'+
+            '</div>')+
+        '</div>'+
+      '</div>';
+    }())+
+    // Summary metrics
+    '<div class="metrics">'+
+      mc('Invoices',invList.length,'Today','')+
+      mc('Total revenue',fmt(totalRevenue),'All sales','')+
+      mc('Total paid',fmt(totalPaid),'Cash received','green')+
+      mc('Credit owed',fmt(credit),'',credit>0?'red':'')+
+      mc('Total profit',fmt(totalProfit),pct(totalProfit,totalRevenue)+' margin','green')+
+    '</div>'+
+    // Cash breakdown
+    '<div class="card" style="margin-bottom:1rem">'+
+      '<div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:10px">💰 Cash breakdown</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px">'+
+        (cash>0?'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Cash</div><div style="font-size:16px;font-weight:700;color:#15803d">'+fmt(cash)+'</div></div>':'')+
+        (pos>0?'<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">POS</div><div style="font-size:16px;font-weight:700;color:#1d4ed8">'+fmt(pos)+'</div></div>':'')+
+        (transfer>0?'<div style="background:#faf5ff;border:1px solid #d8b4fe;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Transfer</div><div style="font-size:16px;font-weight:700;color:#7c3aed">'+fmt(transfer)+'</div></div>':'')+
+        (partPaid>0?'<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Part paid</div><div style="font-size:16px;font-weight:700;color:#92400e">'+fmt(partPaid)+'</div></div>':'')+
+        (cpTotal>0?'<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Credit payments</div><div style="font-size:16px;font-weight:700;color:#15803d">'+fmt(cpTotal)+'</div></div>':'')+
+        (depTotal>0?'<div style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Deposits received</div><div style="font-size:16px;font-weight:700;color:#0369a1">'+fmt(depTotal)+'</div></div>':'')+
+        (expTotal>0?'<div style="background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Expenses</div><div style="font-size:16px;font-weight:700;color:#c0392b">- '+fmt(expTotal)+'</div></div>':'')+
+        (retTotal>0?'<div style="background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Returns refunded</div><div style="font-size:16px;font-weight:700;color:#c0392b">- '+fmt(retTotal)+'</div></div>':'')+
+        '<div style="background:#1a237e;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#93c5fd;margin-bottom:4px">Net cash in</div><div style="font-size:16px;font-weight:700;color:#fff">'+fmt(grandCashIn-expTotal-retTotal)+'</div></div>'+
+      '</div>'+
+    '</div>'+
+    // By staff
+    (staffRows?'<div class="card" style="margin-bottom:1rem"><div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:10px">👤 By staff</div><div class="tbl-wrap"><table><thead><tr><th>Staff</th><th style="text-align:center">Invoices</th><th style="text-align:right">Sales</th><th style="text-align:right">Profit</th></tr></thead><tbody>'+staffRows+'</tbody></table></div></div>':'')+
+    // Invoice list
+    (invRows?'<div class="card"><div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:10px">🧾 Invoices ('+invList.length+')</div><div class="tbl-wrap"><table><thead><tr><th>#</th><th>Invoice</th><th>Customer</th><th>Type</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+invRows+'</tbody></table></div></div>':
+    '<div class="empty">No sales recorded for this date.</div>');
+}
+
+function setOpeningFloat(){
+  var amt=parseFloat(prompt('Enter opening float for '+closingDate+' (cash in till at start of day):'));
+  if(isNaN(amt)||amt<0){alert('Enter a valid amount.');return;}
+  if(!DB.tillSessions)DB.tillSessions=[];
+  var existing=DB.tillSessions.find(function(t){return t.date===closingDate;});
+  if(existing){existing.openFloat=amt;}
+  else{DB.tillSessions.push({id:uid(),date:closingDate,openFloat:amt,closingCount:null,by:DB.currentUser.name});}
+  saveData();renderPanel();
+  logActivity('Opening float set',closingDate+' — ₦'+amt.toLocaleString(),'');
+}
+
+function recordClosingCount(){
+  var amt=parseFloat(prompt('Enter actual cash count in the till at closing:'));
+  if(isNaN(amt)||amt<0){alert('Enter a valid amount.');return;}
+  if(!DB.tillSessions)DB.tillSessions=[];
+  var existing=DB.tillSessions.find(function(t){return t.date===closingDate;});
+  if(existing){existing.closingCount=amt;}
+  else{DB.tillSessions.push({id:uid(),date:closingDate,openFloat:0,closingCount:amt,by:DB.currentUser.name});}
+  saveData();renderPanel();
+  logActivity('Closing cash count',closingDate+' — counted ₦'+amt.toLocaleString(),'');
+}
+
+function printClosingReport(){
+  var d=new Date(closingDate);
+  var dateStr=d.toLocaleDateString('en-NG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var daySales=DB.sales.filter(function(s){return dateInRange(s.date,closingDate,closingDate);});
+  var invMap={};
+  daySales.forEach(function(s){
+    var k=s.invoiceNum||s.id;
+    if(!invMap[k])invMap[k]={invoiceNum:k,custName:s.printName||s.custName,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,splitPayment:s.splitPayment||null,total:0,profit:0,partPayment:s.partPayment||0,seller:s.seller};
+    invMap[k].total+=s.total;invMap[k].profit+=s.profit;
+  });
+  var invList=Object.values(invMap);
+  var totalRevenue=invList.reduce(function(a,g){return a+g.total;},0);
+  var totalProfit=invList.reduce(function(a,g){return a+g.profit;},0);
+  var cash=0,pos=0,transfer=0,credit=0,partPaid=0;
+  invList.forEach(function(g){
+    if(g.payment==='credit'){credit+=g.total;}
+    else if(g.payment==='part'){partPaid+=g.partPayment||0;}
+    else if(g.payMode==='split'&&g.splitPayment){var sp=g.splitPayment;function addSplit(m,a){if(m==='pos')pos+=a;else if(m==='transfer')transfer+=a;else cash+=a;}addSplit(sp.mode1,sp.amt1);addSplit(sp.mode2,sp.amt2);}
+    else if(g.payMode==='pos')pos+=g.total;
+    else if(g.payMode==='transfer')transfer+=g.total;
+    else cash+=g.total;
+  });
+  var cpTotal=(DB.creditPayments||[]).filter(function(p){return dateInRange(p.date,closingDate,closingDate);}).reduce(function(a,p){return a+p.amount;},0);
+  var depTotal=(DB.deposits||[]).filter(function(d){return d.amount>0&&dateInRange(d.date,closingDate,closingDate);}).reduce(function(a,d){return a+d.amount;},0);
+  var expTotal=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&dateInRange(c.date,closingDate,closingDate);}).reduce(function(a,e){return a+e.amount;},0);
+  var byStaff={};
+  invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
+  var staffRows=Object.keys(byStaff).map(function(s){var st=byStaff[s];return '<tr><td>'+s+'</td><td>'+st.count+'</td><td>'+fmt(st.total)+'</td><td>'+fmt(st.profit)+'</td></tr>';}).join('');
+  var invRows=invList.map(function(g,i){return '<tr><td>'+(i+1)+'</td><td>'+g.invoiceNum+'</td><td>'+g.custName+'</td><td>'+g.payment+'</td><td>'+fmt(g.total)+'</td><td>'+fmt(g.profit)+'</td><td>'+payModeLabel(g)+'</td><td>'+g.seller+'</td></tr>';}).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Closing Report</title>'+
+    '<style>@page{size:A4;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px}'+
+    '.h{text-align:center;border-bottom:2px solid #1a237e;padding-bottom:8px;margin-bottom:12px}'+
+    '.co{font-size:16px;font-weight:900;color:#c0392b}.co2{font-size:16px;font-weight:900;color:#1a237e}'+
+    '.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}'+
+    '.box{border:1px solid #ddd;border-radius:4px;padding:8px;text-align:center}'+
+    '.box-label{font-size:9px;color:#666;margin-bottom:2px}.box-val{font-size:14px;font-weight:700}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:10px}'+
+    'th{background:#1a237e;color:#fff;padding:4px 6px;font-size:9px;text-align:left}'+
+    'td{border:1px solid #ddd;padding:3px 6px}tr:nth-child(even)td{background:#f5f5f5}'+
+    '.sec{font-size:11px;font-weight:700;color:#1a237e;margin:10px 0 4px}'+
+    '.sign{margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px}'+
+    '.sign-line{border-top:1px solid #000;margin-top:30px;padding-top:4px;font-size:9px;text-align:center}'+
+    '</style></head><body>'+
+    '<div class="h">'+
+      '<div class="co">GREAT CHID ELECTRO (NIG.)</div>'+
+      '<div class="co2">GLOBAL DOORS LTD</div>'+
+      '<div style="font-size:12px;font-weight:700;color:#1a237e;margin-top:4px">DAILY CLOSING REPORT</div>'+
+      '<div style="font-size:10px;color:#555;margin-top:2px">'+dateStr+' &nbsp;|&nbsp; Printed: '+new Date().toLocaleString()+'</div>'+
+    '</div>'+
+    '<div class="grid">'+
+      '<div class="box"><div class="box-label">Total Invoices</div><div class="box-val">'+invList.length+'</div></div>'+
+      '<div class="box"><div class="box-label">Total Revenue</div><div class="box-val" style="color:#1a237e">'+fmt(totalRevenue)+'</div></div>'+
+      '<div class="box"><div class="box-label">Total Profit</div><div class="box-val" style="color:#15803d">'+fmt(totalProfit)+'</div></div>'+
+      '<div class="box"><div class="box-label">Cash</div><div class="box-val">'+fmt(cash)+'</div></div>'+
+      '<div class="box"><div class="box-label">POS</div><div class="box-val">'+fmt(pos)+'</div></div>'+
+      '<div class="box"><div class="box-label">Transfer</div><div class="box-val">'+fmt(transfer)+'</div></div>'+
+      '<div class="box"><div class="box-label">Part Paid</div><div class="box-val">'+fmt(partPaid)+'</div></div>'+
+      '<div class="box"><div class="box-label">Credit Payments</div><div class="box-val" style="color:#15803d">'+fmt(cpTotal)+'</div></div>'+
+      '<div class="box"><div class="box-label">Credit Owed</div><div class="box-val" style="color:#c0392b">'+fmt(credit)+'</div></div>'+
+      '<div class="box"><div class="box-label">Deposits Received</div><div class="box-val" style="color:#0369a1">'+fmt(depTotal)+'</div></div>'+
+      '<div class="box"><div class="box-label">Expenses</div><div class="box-val" style="color:#c0392b">'+fmt(expTotal)+'</div></div>'+
+      '<div class="box" style="background:#1a237e"><div class="box-label" style="color:#93c5fd">Net Cash In</div><div class="box-val" style="color:#fff">'+fmt(cash+pos+transfer+partPaid+cpTotal+depTotal-expTotal)+'</div></div>'+
+    '</div>'+
+    '<div class="sec">By Staff</div>'+
+    '<table><thead><tr><th>Staff</th><th>Invoices</th><th>Sales</th><th>Profit</th></tr></thead><tbody>'+staffRows+'</tbody></table>'+
+    '<div class="sec">Invoice Summary</div>'+
+    '<table><thead><tr><th>#</th><th>Invoice</th><th>Customer</th><th>Type</th><th>Total</th><th>Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+invRows+'</tbody></table>'+
+    '<div class="sign">'+
+      '<div><div class="sign-line">Prepared by: ___________________</div></div>'+
+      '<div><div class="sign-line">Approved by: ___________________</div></div>'+
+    '</div>'+
+    '</body></html>';
+  var w=window.open('','_blank');w.document.write(html);w.document.close();setTimeout(function(){w.print();},400);
+}
+
+// ── ACTIVITY LOG ──────────────────────────────────────────────
+var activitySearch='';
+var activityDateFrom='';
+var activityDateTo='';
+
+function buildActivityLog(){
+  if(!isAdmin())return '<div class="empty">Admin access only.</div>';
+  var filtered=(DB.activityLog||[]).filter(function(a){
+    if(activitySearch&&a.action.toLowerCase().indexOf(activitySearch.toLowerCase())===-1&&a.detail.toLowerCase().indexOf(activitySearch.toLowerCase())===-1&&a.user.toLowerCase().indexOf(activitySearch.toLowerCase())===-1)return false;
+    if(activityDateFrom&&!dateInRange(a.date,activityDateFrom,''))return false;
+    if(activityDateTo&&!dateInRange(a.date,'',activityDateTo))return false;
+    return true;
+  });
+  var actionColors={
+    'Invoice saved':'#15803d','Invoice voided':'#c0392b','Credit payment':'#0369a1',
+    'Sales return':'#92400e','Login':'#1a237e','Stock adjustment':'#7c3aed'
+  };
+  var rows=filtered.map(function(a,i){
+    var col=actionColors[a.action]||'#374151';
+    return '<tr>'+
+      '<td style="font-size:10px;color:#999">'+a.date+' '+a.time+'</td>'+
+      '<td><span style="background:'+col+';color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap">'+a.action+'</span></td>'+
+      '<td style="font-size:12px">'+a.detail+'</td>'+
+      '<td style="font-size:11px;color:#555">'+a.extra+'</td>'+
+      '<td style="font-weight:600;color:#1a237e">'+a.user+'</td>'+
+    '</tr>';
+  }).join('');
+
+  return '<p class="sec-title">🔍 User Activity Log</p>'+
+    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">'+
+      '<input type="text" placeholder="Search action, detail or user..." value="'+activitySearch+'" oninput="activitySearch=this.value;renderPanel()" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px">'+
+      '<input type="date" value="'+activityDateFrom+'" onchange="activityDateFrom=this.value;renderPanel()" style="font-size:12px;padding:6px 8px;border-radius:6px;border:1px solid var(--border)">'+
+      '<span style="font-size:12px;color:var(--text3)">to</span>'+
+      '<input type="date" value="'+activityDateTo+'" onchange="activityDateTo=this.value;renderPanel()" style="font-size:12px;padding:6px 8px;border-radius:6px;border:1px solid var(--border)">'+
+      '<button onclick="activitySearch=\'\';activityDateFrom=\'\';activityDateTo=\'\';renderPanel()" class="btn sm">Clear</button>'+
+      '<button onclick="clearActivityLog()" class="btn sm danger">🗑 Clear all</button>'+
+    '</div>'+
+    '<div class="metrics">'+mc('Total actions',(DB.activityLog||[]).length,'All time','')+mc('Showing',filtered.length,'Filtered','')+'</div>'+
+    (rows?'<div class="tbl-wrap"><table><thead><tr><th>Date / Time</th><th>Action</th><th>Detail</th><th>Extra</th><th>By</th></tr></thead><tbody>'+rows+'</tbody></table></div>':
+    '<div class="empty">No activity recorded yet'+(activitySearch||activityDateFrom||activityDateTo?' for this filter.':'.')+'</div>');
+}
+
+function clearActivityLog(){
+  if(!confirm('Clear all activity log entries? This cannot be undone.'))return;
+  DB.activityLog=[];saveData();renderPanel();
 }
 
 function buildRecycleBin() {
@@ -1264,7 +1771,9 @@ function doLogin(){
   var u=document.getElementById('au-user').value.trim(),p=document.getElementById('au-pass').value.trim();
   var user=DB.users.find(function(x){return x.username===u&&x.password===p;});
   if(!user){alert('Invalid credentials.');return;}
-  DB.currentUser=user;renderApp();
+  DB.currentUser=user;
+  logActivity('Login',user.name+' signed in','');
+  renderApp();
 }
 function doLogout(){DB.currentUser=null;renderAuth();}
 
@@ -1277,15 +1786,18 @@ var TABS=[
   {id:'expenses',label:'Expenses',perm:'expenses'},
   {id:'finance',label:'Finance',perm:'finance'},
   {id:'suppliers',label:'Suppliers',perm:'suppliers'},
+  {id:'suppayments',label:'Sup. Payments',perm:'suppliers'},
   {id:'customers',label:'Customers',perm:'customers'},
   {id:'creditcust',label:'Credit',perm:'creditcust'},
   {id:'reports',label:'Reports',perm:'reports'},
+  {id:'closing',label:'📋 Closing',perm:'reports'},
+  {id:'activitylog',label:'🔍 Activity',perm:'admin'},
   {id:'recyclebin',label:'Recycle Bin',perm:'admin'},
   {id:'settings',label:'Settings',perm:'settings'},
   {id:'users',label:'Users',perm:'users'}
 ];
 
-var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️'};
+var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️'};
 var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile'};
 var VERSION_NOTES=[
   {ver:'v27',date:'May 2026',title:'Confirmation popups & Recycle Bin',notes:[
@@ -1333,6 +1845,135 @@ function buildVersionNotes(){
   '</div>';
 }
 
+// ── Activity Logger ───────────────────────────────────────────
+function logActivity(action, detail, extra){
+  if(!DB.activityLog)DB.activityLog=[];
+  DB.activityLog.unshift({
+    id:uid(),
+    action:action,
+    detail:detail||'',
+    extra:extra||'',
+    user:DB.currentUser?DB.currentUser.name:'System',
+    date:new Date().toLocaleDateString(),
+    time:new Date().toLocaleTimeString(),
+    ts:Date.now()
+  });
+  // Keep last 500 entries
+  if(DB.activityLog.length>500)DB.activityLog=DB.activityLog.slice(0,500);
+}
+
+// ── Dark Mode ─────────────────────────────────────────────────
+function isDarkMode(){
+  return localStorage.getItem('darkMode')==='1'||document.body.classList.contains('dark-mode');
+}
+function toggleDarkMode(){
+  var on=isDarkMode();
+  document.body.classList.toggle('dark-mode',!on);
+  localStorage.setItem('darkMode',on?'0':'1');
+  var btn=document.getElementById('dark-mode-btn');
+  if(btn)btn.textContent=on?'🌙':'☀️';
+}
+function applyDarkMode(){
+  if(localStorage.getItem('darkMode')==='1'){
+    document.body.classList.add('dark-mode');
+  }
+}
+// Apply dark mode immediately on load
+applyDarkMode();
+
+// ── Backup Reminder ───────────────────────────────────────────
+// Reminds staff to take a backup at closing time (7pm)
+var _backupReminderShown=false;
+function checkBackupReminder(){
+  var now=new Date();
+  var h=now.getHours(),m=now.getMinutes();
+  // Trigger between 19:00 and 19:15 (7pm window)
+  if(h===19&&m<=15){
+    var todayKey=now.toLocaleDateString();
+    var shownKey='closingShown_'+todayKey;
+    if(localStorage.getItem(shownKey))return;
+    localStorage.setItem(shownKey,'1');
+    _backupReminderShown=true;
+    setTimeout(function(){
+      showConfirm({
+        type:'info',
+        title:'🕖 Closing time!',
+        msg:'It\'s 7PM — time to close up.',
+        detail:'1. Take a backup of your data\n2. Send daily summary to owner via WhatsApp\n\nChoose an action below.',
+        confirmLabel:'⬇ Backup + Send summary',
+        cancelLabel:'Just backup'
+      },function(){
+        exportBackup();
+        sendDailySummaryWhatsApp();
+      });
+    },800);
+  }
+}
+
+function sendDailySummaryWhatsApp(){
+  var today=new Date().toLocaleDateString();
+  var daySales=DB.sales.filter(function(s){return dateInRange(s.date,new Date().toISOString().slice(0,10),new Date().toISOString().slice(0,10));});
+  var invMap={};
+  daySales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invMap[k])invMap[k]={total:0,profit:0,payment:s.payment};invMap[k].total+=s.total;invMap[k].profit+=s.profit;});
+  var invList=Object.values(invMap);
+  var totalRev=invList.reduce(function(a,g){return a+g.total;},0);
+  var totalProfit=invList.reduce(function(a,g){return a+g.profit;},0);
+  var creditOwed=invList.filter(function(g){return g.payment==='credit';}).reduce(function(a,g){return a+g.total;},0);
+  var totalPaid=totalRev-creditOwed;
+  var cpToday=(DB.creditPayments||[]).filter(function(p){return dateInRange(p.date,new Date().toISOString().slice(0,10),new Date().toISOString().slice(0,10));}).reduce(function(a,p){return a+p.amount;},0);
+  var expenses=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&dateInRange(c.date,new Date().toISOString().slice(0,10),new Date().toISOString().slice(0,10));}).reduce(function(a,e){return a+e.amount;},0);
+
+  var msg=
+    '📊 *DAILY CLOSING REPORT*\n'+
+    '📅 '+today+'\n'+
+    '🏪 Great Chid Electro / Global Doors Ltd\n\n'+
+    '🧾 *Invoices:* '+invList.length+'\n'+
+    '💰 *Total Revenue:* '+fmt(totalRev)+'\n'+
+    '✅ *Total Paid:* '+fmt(totalPaid)+'\n'+
+    (creditOwed>0?'⚠️ *Credit Owed:* '+fmt(creditOwed)+'\n':'')+
+    (cpToday>0?'💳 *Credit Payments:* '+fmt(cpToday)+'\n':'')+
+    (expenses>0?'💸 *Expenses:* '+fmt(expenses)+'\n':'')+
+    '📈 *Profit:* '+fmt(totalProfit)+' ('+Math.round(totalProfit/Math.max(totalRev,1)*100)+'% margin)\n\n'+
+    '💵 *Net cash in:* '+fmt(totalPaid+cpToday-expenses)+'\n\n'+
+    '_Sent from Great Chid Business Dashboard_';
+
+  // Ask for owner's phone
+  var ownerPhone=(DB.settings&&DB.settings.ownerWhatsApp)||'';
+  if(!ownerPhone){
+    ownerPhone=prompt('Enter owner\'s WhatsApp number for daily summary:\n(Will be saved for future use)');
+    if(!ownerPhone)return;
+    if(!DB.settings)DB.settings={};
+    DB.settings.ownerWhatsApp=ownerPhone;
+    saveData();
+  }
+  var phone=ownerPhone.replace(/[\s\-\(\)]/g,'');
+  if(phone.startsWith('0'))phone='234'+phone.substring(1);
+  if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
+  phone=phone.replace(/^\+/,'');
+  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+function showOfflineBanner(show){
+  var existing=document.getElementById('offline-banner');
+  if(!show){if(existing)existing.remove();return;}
+  if(existing)return;
+  var banner=document.createElement('div');
+  banner.id='offline-banner';
+  banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#f59e0b;color:#1c1917;text-align:center;padding:8px;font-size:12px;font-weight:700;';
+  banner.innerHTML='🟠 You are offline. All changes are saved locally and will sync automatically when connection returns.';
+  document.body.prepend(banner);
+}
+
+function showToast(msg,duration){
+  var old=document.getElementById('app-toast');if(old)old.remove();
+  var toast=document.createElement('div');
+  toast.id='app-toast';
+  toast.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a237e;color:#fff;padding:12px 24px;border-radius:10px;font-size:13px;font-weight:600;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,.2);';
+  toast.textContent=msg;
+  document.body.appendChild(toast);
+  setTimeout(function(){if(toast.parentNode)toast.remove();},duration||3000);
+}
+
 function checkNewMonthReminder(){
   var now=new Date();
   if(now.getDate()!==1)return; // only on 1st of month
@@ -1368,6 +2009,8 @@ function renderApp(){
   saveData();
   // ── New Month reminder on 1st of each month ──────────────────
   checkNewMonthReminder();
+  // ── Backup reminder at closing time ──────────────────────────
+  checkBackupReminder();
   var vt=TABS.filter(function(t){return t.id==='users'?isAdmin():canDo(t.perm);});
   if(!vt.find(function(t){return t.id===activeTab;}))activeTab=vt.length?vt[0].id:'';
   var u=DB.currentUser;
@@ -1442,6 +2085,7 @@ function renderApp(){
           '<div id="sync-indicator" class="sync-badge local">🔵 Connecting...</div>'+
           '<button class="btn sm" onclick="showFirebaseDiag()" title="Firebase diagnostics" style="font-size:11px;padding:4px 8px;color:var(--text3)">🔍 Sync</button>'+
           '<button class="btn sm" onclick="exportBackup()" title="Export data backup">&#11015; Backup</button>'+
+          '<button class="btn sm" onclick="toggleDarkMode()" title="Toggle dark/light mode" id="dark-mode-btn" style="font-size:14px;padding:4px 8px">'+(isDarkMode()?'☀️':'🌙')+'</button>'+
           '<button class="btn sm" onclick="doLogout()">Sign out</button>'+
         '</div>'+
       '</div>'+
@@ -1740,7 +2384,7 @@ function filterWhTable(){
 function renderPanel(){
   var scrollY=window.scrollY||window.pageYOffset;
   var p=document.getElementById('panel-root');if(!p)return;
-  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers};
+  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers};
   var content=(map[activeTab]||function(){return '';})();
   // Show version notes only on inventory (home) or when explicitly navigating to it
   var vnHtml='';
@@ -2853,6 +3497,9 @@ function saveEditCustomer(){
   cust.notes=document.getElementById('ec-notes').value.trim();
   cust.type=document.getElementById('ec-type').value;
   var newLimit=parseFloat(document.getElementById('ec-credit-limit').value)||0;
+  if(newLimit!==cust.creditLimit){
+    logActivity('Credit limit changed',cust.name+' — from '+fmt(cust.creditLimit)+' to '+fmt(newLimit),'Admin: '+DB.currentUser.name);
+  }
   cust.creditLimit=newLimit;
   // Opening balance: if changed, adjust creditBalance by the difference
   var newOpeningBal=parseFloat(document.getElementById('ec-opening-bal').value)||0;
@@ -2965,6 +3612,7 @@ function buildCustomers(){
         '<button class="btn sm" onclick="showDepositModal('+cust.id+')" style="color:#15803d;border-color:#86efac;font-weight:700">💰 Add deposit</button>'+
         '<button class="btn sm" onclick="printCustomerReport('+cust.id+')" style="color:#1a237e;border-color:#93c5fd">&#128438; Print report</button>'+
         '<button class="btn sm" onclick="editCustomer('+cust.id+')" style="color:var(--primary);border-color:#b6d4fe">&#9998; Edit customer</button>'+
+        '<button class="btn sm" onclick="printCustomerStatement('+cust.id+')" style="color:#065f46;border-color:#6ee7b7">🖨️ Print statement</button>'+
         '</div>'+
         '</div>'+
         '<div class="cust-detail-grid">'+
@@ -3147,6 +3795,7 @@ function parseInvNum(n){
 }
 
 // Generate next invoice number in format YYYY/NNNN, resetting each year
+// Uses a pre-claim check to prevent duplicates when two users save simultaneously
 function generateInvoiceNum(){
   var now=new Date();
   var currentYear=now.getFullYear();
@@ -3154,6 +3803,17 @@ function generateInvoiceNum(){
   if(!DB.invoiceYear||DB.invoiceYear!==currentYear){
     DB.invoiceCounter=1;
     DB.invoiceYear=currentYear;
+  }
+  // Gap protection: scan existing invoices to find the true next safe number
+  // In case counter drifted (e.g. two users saved at same time), skip ahead
+  var prefix=String(currentYear)+'/';
+  var usedNums=DB.sales
+    .filter(function(s){return s.invoiceNum&&String(s.invoiceNum).indexOf(prefix)===0;})
+    .map(function(s){return parseInt(String(s.invoiceNum).split('/')[1])||0;});
+  var maxUsed=usedNums.length?Math.max.apply(null,usedNums):0;
+  // Always use max(counter, maxUsed+1) so we never re-use a number
+  if(DB.invoiceCounter<=maxUsed){
+    DB.invoiceCounter=maxUsed+1;
   }
   var seq=String(DB.invoiceCounter).padStart(4,'0');
   return currentYear+'/'+seq;
@@ -3234,6 +3894,85 @@ function showPrintChoiceModal(custName, outstandingBal, prevInvTotal, grandTotal
   document.getElementById('pco-inv-only').onclick=function(){overlay.remove();onInvOnly();};
   document.getElementById('pco-cancel').onclick=function(){overlay.remove();};
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+
+function printCustomerStatement(custId){
+  var cust=DB.customers.find(function(c){return c.id==custId;});
+  if(!cust){alert('Customer not found.');return;}
+  // Build all events same as the account statement
+  var allEvents=[];
+  if(cust.openingBalance>0)allEvents.push({type:'opening',date:'—',label:'Opening balance',amount:cust.openingBalance,mode:'—',by:'Setup'});
+  var custInvs={};
+  DB.sales.filter(function(s){return String(s.custId)==String(custId)&&(s.payment==='credit'||s.payment==='part');}).forEach(function(s){
+    var k=s.invoiceNum||s.id;
+    if(!custInvs[k])custInvs[k]={type:'invoice',date:s.date,label:'Invoice #'+k,amount:s.total,partPayment:s.partPayment||0,payment:s.payment,mode:s.payment==='credit'?'Credit':'Part payment',by:s.seller};
+    else{custInvs[k].amount+=s.total;}
+  });
+  Object.values(custInvs).forEach(function(e){allEvents.push(e);});
+  (DB.creditPayments||[]).filter(function(p){return String(p.custId)==String(custId);}).forEach(function(p){
+    allEvents.push({type:'payment',date:p.date,label:'Payment received',amount:p.amount,mode:payModeLabel(p),by:p.by});
+  });
+  var retMap={};
+  (DB.salesReturns||[]).filter(function(r){return String(r.custId)==String(custId);}).forEach(function(r){
+    var k=r.invoiceNum+'_'+r.date;
+    if(!retMap[k])retMap[k]={type:'return',date:r.date,label:'Return \u2014 Invoice #'+r.invoiceNum,amount:0,refundType:r.refundType,mode:r.refundType==='cash'?'Cash refund':r.refundType==='credit'?'Store credit':'Exchange',by:r.by};
+    retMap[k].amount+=r.refundAmt||0;
+  });
+  Object.values(retMap).forEach(function(e){allEvents.push(e);});
+  allEvents.sort(function(a,b){if(a.type==='opening')return -1;if(b.type==='opening')return 1;return parseSaleDate(a.date)-parseSaleDate(b.date);});
+  var running=0;
+  var rows=allEvents.map(function(e,i){
+    if(e.type==='opening'||e.type==='invoice')running+=e.amount;
+    else if(e.type==='payment')running-=e.amount;
+    else if(e.type==='return'&&(e.refundType==='credit'||e.refundType==='exchange'))running-=e.amount;
+    running=Math.round(running*100)/100;
+    var dr=e.type==='invoice'||e.type==='opening'?fmt(e.amount):'';
+    var cr=e.type==='payment'||(e.type==='return'&&(e.refundType==='credit'||e.refundType==='exchange'))?fmt(e.amount):'';
+    return '<tr>'+
+      '<td>'+e.date+'</td>'+
+      '<td>'+e.label+'</td>'+
+      '<td style="text-align:right;color:#c0392b">'+dr+'</td>'+
+      '<td style="text-align:right;color:#15803d">'+cr+'</td>'+
+      '<td style="text-align:right;font-weight:700;color:'+(running>0?'#c0392b':'#15803d')+'">'+fmt(Math.max(0,running))+'</td>'+
+      '<td>'+e.mode+'</td>'+
+      '<td>'+e.by+'</td>'+
+    '</tr>';
+  }).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Account Statement</title>'+
+    '<style>@page{size:A4;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px}'+
+    '.h{text-align:center;border-bottom:2px solid #065f46;padding-bottom:8px;margin-bottom:12px}'+
+    '.co{font-size:16px;font-weight:900;color:#c0392b}.co2{font-size:16px;font-weight:900;color:#1a237e}'+
+    '.cust-box{border:1px solid #ddd;border-radius:6px;padding:10px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr 1fr}'+
+    'table{width:100%;border-collapse:collapse}th{background:#065f46;color:#fff;padding:4px 6px;font-size:9px;text-align:left}'+
+    'td{border:1px solid #ddd;padding:3px 6px}tr:nth-child(even)td{background:#f0fdf4}'+
+    '.bal{font-size:13px;font-weight:700;color:'+(cust.creditBalance>0?'#c0392b':'#15803d')+';text-align:right}'+
+    '</style></head><body>'+
+    '<div class="h">'+
+      '<div class="co">GREAT CHID ELECTRO (NIG.)</div>'+
+      '<div class="co2">GLOBAL DOORS LTD</div>'+
+      '<div style="font-size:12px;font-weight:700;color:#065f46;margin-top:4px">CUSTOMER ACCOUNT STATEMENT</div>'+
+      '<div style="font-size:9px;color:#555;margin-top:2px">Printed: '+new Date().toLocaleString()+'</div>'+
+    '</div>'+
+    '<div class="cust-box">'+
+      '<div><b>Customer:</b> '+cust.name+'</div>'+
+      '<div><b>Phone:</b> '+(cust.phone||'—')+'</div>'+
+      '<div><b>Business:</b> '+(cust.biz||'—')+'</div>'+
+      '<div><b>Credit limit:</b> '+(cust.creditLimit>0?fmt(cust.creditLimit):'No limit')+'</div>'+
+      '<div><b>Member since:</b> '+(cust.joinDate||'—')+'</div>'+
+      '<div class="bal">Current balance: '+fmt(Math.max(0,cust.creditBalance||0))+'</div>'+
+    '</div>'+
+    '<table><thead><tr><th>Date</th><th>Description</th><th style="text-align:right">Debit (owes)</th><th style="text-align:right">Credit (paid)</th><th style="text-align:right">Balance</th><th>Mode</th><th>By</th></tr></thead>'+
+    '<tbody>'+(rows||'<tr><td colspan="7" style="text-align:center;color:#999">No transactions found</td></tr>')+'</tbody>'+
+    '</table>'+
+    '<div style="margin-top:15px;text-align:right;font-size:11px">'+
+      '<b>Closing balance: <span style="color:'+(cust.creditBalance>0?'#c0392b':'#15803d')+'">'+fmt(Math.max(0,cust.creditBalance||0))+'</span></b>'+
+    '</div>'+
+    '<div style="margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:20px">'+
+      '<div style="border-top:1px solid #000;padding-top:4px;font-size:9px;text-align:center">Customer signature</div>'+
+      '<div style="border-top:1px solid #000;padding-top:4px;font-size:9px;text-align:center">Authorized by</div>'+
+    '</div>'+
+    '</body></html>';
+  var w=window.open('','_blank');w.document.write(html);w.document.close();setTimeout(function(){w.print();},400);
 }
 
 function printCustomerInvoice(invNum,custId){
@@ -4173,6 +4912,19 @@ function submitInvoice(){
   });
   DB._lastInvoice={invoiceId:invoiceId,invoiceNum:invNum,custName:custName,custAddr:custAddr,printName:printName,date:date,items:lastInvItems,invoiceDiscAmt:invoiceDiscAmt,invoiceDiscType:invDiscType,invoiceDiscVal:invDiscVal,payment:payment,payMode:payMode,bankId:bankId,posId:posId,seller:DB.currentUser.name,grandTotal:grandTotal,grandProfit:grandProfit,subtotalAll:subtotalAll,partPayment:partPayment,pendingSupply:pendingSupply};
   invoiceItems=[];
+  logActivity('Invoice saved','Invoice #'+invNum+' — '+custName+' — '+fmt(grandTotal),payment);
+  // Gap protection: re-check for duplicates right before incrementing
+  // (catches race condition where another user saved same number while this form was open)
+  var dupCheck=DB.sales.filter(function(s){return String(s.invoiceNum)===String(invNum);});
+  if(dupCheck.length>0){
+    // This number was already used — regenerate a new one and patch the saved records
+    var newNum=generateInvoiceNum();
+    DB.sales.filter(function(s){return String(s.invoiceNum)===String(invNum)&&s.invoiceId===invoiceId;})
+            .forEach(function(s){s.invoiceNum=newNum;});
+    DB._lastInvoice.invoiceNum=newNum;
+    invNum=newNum;
+    console.warn('Invoice number collision detected — reassigned to '+newNum);
+  }
   // Increment invoice counter for next invoice
   DB.invoiceCounter=(DB.invoiceCounter||0)+1;
   DB.invoiceYear=new Date().getFullYear();
@@ -4532,6 +5284,7 @@ function processReturn(invoiceId){
     if(cust)cust.creditBalance=Math.max(0,(cust.creditBalance||0)-totalRefund);
   }
   saveData();
+  logActivity('Sales return','Invoice #'+(items[0].invoiceNum||invoiceId)+' — '+returnedItems.map(function(r){return r.name+' ×'+r.qty;}).join(', ')+(totalRefund>0?' — Refund: '+fmt(totalRefund):''),refundType);
   document.getElementById('return-modal').remove();
   renderApp();
   alert('✅ Return processed!\n\n'+returnedItems.map(function(r){return r.name+' × '+r.qty;}).join('\n')+'\n\nStock has been added back to inventory.'+(totalRefund>0?'\nRefund: ₦'+Math.round(totalRefund).toLocaleString()+' ('+refundType+')':''));
@@ -4568,6 +5321,7 @@ function voidInvoice(invoiceKey){
     DB.sales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)!=invoiceKey;});
     saveData();renderApp();
     alert('Invoice #'+invoiceKey+' voided and moved to Recycle Bin.');
+    logActivity('Invoice voided','Invoice #'+invoiceKey+' voided and moved to Recycle Bin','');
   });
 }
 function buildSales(){
@@ -4761,7 +5515,7 @@ function buildSales(){
     '<p class="sec-title">New invoice</p>'+
     '<div style="background:var(--amber-bg);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;color:var(--amber);margin-bottom:1rem"><b>Rules:</b> Invoice number required. Walk-in customers: cash only. Credit sales: registered customers with credit limit only.</div>'+
     '<div class="fg c2" style="margin-bottom:.5rem"><div class="form-group"><label>Invoice number <span style="color:var(--danger)">*</span> (required)</label>'+
-    '<input type="text" id="s-inv-num" placeholder="Auto-generated" readonly style="background:var(--amber-bg);cursor:default" oninput="checkDupInvoice(this.value)" value="'+generateInvoiceNum()+'">'+
+    '<input type="text" id="s-inv-num" placeholder="Auto-generated" readonly style="background:var(--amber-bg);cursor:default" onfocus="this.value=generateInvoiceNum()" value="'+generateInvoiceNum()+'">'+
     '<div id="s-inv-dup-warn" style="display:none;margin-top:4px;background:#fff5f5;border:1px solid #f5c2c7;border-radius:6px;padding:6px 10px;font-size:12px;color:#dc3545;font-weight:600">'+
     '⛔ This invoice number already exists! Check the Sales ledger before posting.</div>'+
     '</div>'+
@@ -4894,6 +5648,102 @@ function buildSales(){
         :'<div class="empty" style="padding:1.25rem">No returns for this period.</div>');
     })();
 }
+// ── Real Invoice Editing ─────────────────────────────────────
+function editInvoice(invNum){
+  if(!isAdmin()){alert('Admin only.');return;}
+  var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum;});
+  if(!invSales.length){alert('Invoice not found.');return;}
+  var old=document.getElementById('inv-edit-modal');if(old)old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='inv-edit-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;overflow-y:auto;padding:20px';
+
+  var s0=invSales[0];
+  var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
+
+  // Build editable rows per line item
+  var itemRows=invSales.map(function(s,i){
+    return '<tr>'+
+      '<td style="padding:6px">'+s.name+'</td>'+
+      '<td style="padding:6px"><input type="number" id="ei-qty-'+i+'" value="'+s.qty+'" min="1" style="width:70px;padding:4px;border:1px solid #cbd5e1;border-radius:4px"></td>'+
+      '<td style="padding:6px"><input type="number" id="ei-price-'+i+'" value="'+s.salePrice+'" min="0" style="width:100px;padding:4px;border:1px solid #cbd5e1;border-radius:4px"></td>'+
+      '<td style="padding:6px"><input type="number" id="ei-disc-'+i+'" value="'+(s.discAmt||0)+'" min="0" style="width:80px;padding:4px;border:1px solid #cbd5e1;border-radius:4px"></td>'+
+      '<td style="padding:6px" id="ei-total-'+i+'">'+fmt(s.total)+'</td>'+
+    '</tr>';
+  }).join('');
+
+  overlay.innerHTML=
+    '<div style="background:var(--surface,#fff);border-radius:14px;padding:24px;max-width:680px;width:100%;max-height:90vh;overflow-y:auto">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+        '<div style="font-size:16px;font-weight:700">✏️ Edit Invoice #'+invNum+'</div>'+
+        '<button onclick="document.getElementById(\'inv-edit-modal\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer">&times;</button>'+
+      '</div>'+
+      '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:8px;padding:10px;font-size:12px;color:#92400e;margin-bottom:16px">'+
+        '⚠️ Editing an invoice adjusts sale prices, quantities and discounts. Stock levels are NOT automatically adjusted — do a stock adjustment separately if needed. All edits are logged.'+
+      '</div>'+
+      '<div style="margin-bottom:16px">'+
+        '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Customer name (print name)</label>'+
+        '<input type="text" id="ei-custname" value="'+(s0.printName||s0.custName)+'" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
+      '</div>'+
+      '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">'+
+        '<thead><tr style="background:#f5f5f5"><th style="padding:6px;text-align:left">Item</th><th style="padding:6px">Qty</th><th style="padding:6px">Unit price</th><th style="padding:6px">Disc amt</th><th style="padding:6px">Total</th></tr></thead>'+
+        '<tbody>'+itemRows+'</tbody>'+
+      '</table>'+
+      '<div style="margin-bottom:16px">'+
+        '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reason for edit *</label>'+
+        '<input type="text" id="ei-reason" placeholder="e.g. Wrong price entered, customer negotiated discount" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
+      '</div>'+
+      '<div style="display:flex;gap:10px">'+
+        '<button onclick="saveInvoiceEdit(\''+invNum+'\')" style="flex:1;padding:11px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">✅ Save changes</button>'+
+        '<button onclick="document.getElementById(\'inv-edit-modal\').remove()" style="padding:11px 20px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+      '</div>'+
+    '</div>';
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+
+function saveInvoiceEdit(invNum){
+  var reason=document.getElementById('ei-reason').value.trim();
+  if(!reason){alert('Please enter a reason for this edit.');return;}
+  var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum;});
+  var custName=document.getElementById('ei-custname').value.trim();
+  var oldTotal=invSales.reduce(function(a,s){return a+s.total;},0);
+  var stockChanges=[];
+  invSales.forEach(function(s,i){
+    var oldQty=s.qty;
+    var qty=parseInt(document.getElementById('ei-qty-'+i).value)||s.qty;
+    var price=parseFloat(document.getElementById('ei-price-'+i).value)||s.salePrice;
+    var disc=parseFloat(document.getElementById('ei-disc-'+i).value)||0;
+    var newTotal=Math.max(0,(price*qty)-disc);
+    // Auto stock adjustment if qty changed and goods were supplied
+    if(qty!==oldQty&&s.supplyStatus!=='pending'){
+      var diff=oldQty-qty; // positive = we over-sold, need to add back; negative = sold more, deduct more
+      var invItem=DB.inventory.find(function(it){return it.id==s.itemId;});
+      if(invItem){
+        var before=invItem.qty;
+        invItem.qty=Math.max(0,invItem.qty+diff);
+        stockChanges.push({name:s.name,before:before,after:invItem.qty,diff:diff});
+        DB.adjLog.push({id:uid(),itemId:invItem.id,itemName:invItem.name,type:diff>0?'add':'remove',
+          reason:'Invoice edit — #'+invNum+'. Qty: '+oldQty+' → '+qty+'. '+reason,
+          before:before,change:diff,after:invItem.qty,
+          date:new Date().toLocaleDateString(),by:DB.currentUser.name});
+      }
+    }
+    s.qty=qty;s.salePrice=price;s.discAmt=disc;s.total=newTotal;
+    s.profit=Math.round((newTotal-(s.cost*qty))*100)/100;
+    if(custName){s.printName=custName;s.custName=custName;}
+  });
+  var newTotal=invSales.reduce(function(a,s){return a+s.total;},0);
+  saveData();
+  logActivity('Invoice edited','Invoice #'+invNum+' — total: '+fmt(oldTotal)+' → '+fmt(newTotal)+'. Reason: '+reason,'Admin: '+DB.currentUser.name);
+  document.getElementById('inv-edit-modal').remove();
+  var stockMsg=stockChanges.length?'\n\n📦 Stock adjusted:\n'+stockChanges.map(function(c){return c.name+': '+c.before+' → '+c.after+(c.diff>0?' (+'+c.diff+' added back)':' ('+Math.abs(c.diff)+' deducted)');}).join('\n'):'';
+  showToast('Invoice #'+invNum+' updated.'+(stockChanges.length?' Stock auto-adjusted.':''));
+  if(stockMsg)alert('Invoice #'+invNum+' saved.'+stockMsg);
+  var old=document.getElementById('inv-detail-modal');if(old)old.remove();
+}
+
 function viewInvoiceDetail(invNum){
   var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum;});
   if(!invSales.length){alert('Invoice not found.');return;}
@@ -4956,8 +5806,11 @@ function viewInvoiceDetail(invNum){
             '<div><span style="color:#6c757d">Gross profit:</span> <span style="color:#198754;font-weight:700">'+fmt(grandProfit)+'</span></div>'+
           '</div>'+
         '</div>'+
-        '<div style="display:flex;gap:8px;margin-top:1rem">'+
+        '<div style="display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap">'+
           '<button onclick="reprintInvoice(\''+invNum+'\');document.getElementById(\'inv-detail-modal\').remove()" style="flex:1;padding:9px;background:#0d6efd;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">&#128438; Print invoice</button>'+
+          '<button onclick="shareInvoiceWhatsApp(\''+invNum+'\')" style="flex:1;padding:9px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📲 Share via WhatsApp</button>'+
+          (isAdmin()?'<button onclick="editInvoice(\''+invNum+'\');document.getElementById(\'inv-detail-modal\').remove()" style="padding:9px 14px;background:#fff8f0;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">✏️ Edit invoice</button>':'')+''+
+          (isAdmin()?'<button onclick="showEditInvoiceNote(\''+invNum+'\')" style="padding:9px 14px;background:#fff8f0;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📝 Add note</button>':'')+''+
           '<button onclick="document.getElementById(\'inv-detail-modal\').remove()" style="padding:9px 20px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
         '</div>'+
       '</div>'+
@@ -4966,6 +5819,61 @@ function viewInvoiceDetail(invNum){
   // Close on backdrop click
   modal.addEventListener('click',function(e){if(e.target===modal)modal.remove();});
   document.body.appendChild(modal);
+}
+
+// ── Share invoice via WhatsApp ────────────────────────────────
+function shareInvoiceWhatsApp(invNum){
+  var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum;});
+  if(!invSales.length){alert('Invoice not found.');return;}
+  var s0=invSales[0];
+  var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
+  var custId=s0.custId;
+  var cust=custId?DB.customers.find(function(c){return c.id==custId;}):null;
+  var phone=cust?cust.phone:'';
+  // Build text summary of invoice
+  var itemLines=[];
+  var invMap={};
+  invSales.forEach(function(s){
+    invMap[s.name]=(invMap[s.name]||0)+s.total;
+  });
+  Object.keys(invMap).forEach(function(name){
+    itemLines.push('  • '+name+' — '+fmt(invMap[name]));
+  });
+  var payLabel=s0.payment==='credit'?'Credit (amount owed)':s0.payment==='part'?'Part payment (paid: '+fmt(s0.partPayment||0)+')':s0.payment==='deposit'?'Deposit':'Cash';
+  var msg=
+    '🧾 *INVOICE #'+invNum+'*\n'+
+    '📅 Date: '+s0.date+'\n'+
+    '🏪 Great Chid Electro / Global Doors Ltd\n\n'+
+    '*Items:*\n'+itemLines.join('\n')+'\n\n'+
+    '*Total: '+fmt(grandTotal)+'*\n'+
+    'Payment: '+payLabel+'\n'+
+    'Staff: '+s0.seller+'\n\n'+
+    'Thank you for your patronage! 🙏';
+  // Ask for phone if not on record
+  if(!phone){
+    phone=prompt('Enter customer WhatsApp number:');
+    if(!phone)return;
+  }
+  phone=phone.replace(/[\s\-\(\)]/g,'');
+  if(phone.startsWith('0'))phone='234'+phone.substring(1);
+  if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
+  phone=phone.replace(/^\+/,'');
+  window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+// ── Invoice note / correction ─────────────────────────────────
+function showEditInvoiceNote(invNum){
+  var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum;});
+  if(!invSales.length)return;
+  var existing=invSales[0].note||'';
+  var note=prompt('Add/edit note for Invoice #'+invNum+':\n(This is for corrections or remarks — the original data is unchanged)',existing);
+  if(note===null)return; // cancelled
+  invSales.forEach(function(s){s.note=note;});
+  saveData();
+  logActivity('Invoice note','Note added/edited on Invoice #'+invNum,note.substring(0,50));
+  alert('Note saved on Invoice #'+invNum);
+  var old=document.getElementById('inv-detail-modal');if(old)old.remove();
+  viewInvoiceDetail(invNum);
 }
 
 function reprintInvoice(invNum){
@@ -5628,6 +6536,134 @@ function buildFinance(){
 // ============================================================
 // SUPPLIERS TAB
 // ============================================================
+// ── SUPPLIER PAYMENTS MODULE ─────────────────────────────────
+var supPaySearch='';
+var supPayDateFrom='';
+var supPayDateTo='';
+var supPayFilterSup='';
+
+function buildSupplierPayments(){
+  if(!canDo('suppliers'))return '<div class="empty">Access denied.</div>';
+
+  // Summary: total owed to all suppliers
+  var totalOwed=DB.suppliers.reduce(function(a,s){return a+(s.owedToSupplier||0);},0);
+  var totalPaidEver=(DB.supplierPayments||[]).reduce(function(a,p){return a+p.amount;},0);
+
+  // Supplier selector options
+  var supOpts='<option value="">All suppliers</option>'+
+    DB.suppliers.map(function(s){return '<option value="'+s.id+'"'+(supPayFilterSup==s.id?' selected':'')+'>'+s.name+(s.owedToSupplier>0?' (owes '+fmt(s.owedToSupplier)+')':'')+'</option>';}).join('');
+
+  // Filter payments
+  var filtered=(DB.supplierPayments||[]).filter(function(p){
+    if(supPaySearch&&p.supName.toLowerCase().indexOf(supPaySearch.toLowerCase())===-1&&(p.note||'').toLowerCase().indexOf(supPaySearch.toLowerCase())===-1)return false;
+    if(supPayFilterSup&&String(p.supId)!==String(supPayFilterSup))return false;
+    if(supPayDateFrom&&!dateInRange(p.date,supPayDateFrom,''))return false;
+    if(supPayDateTo&&!dateInRange(p.date,'',supPayDateTo))return false;
+    return true;
+  }).slice().reverse();
+
+  var filteredTotal=filtered.reduce(function(a,p){return a+p.amount;},0);
+
+  // Supplier owed cards
+  var owedCards=DB.suppliers.filter(function(s){return (s.owedToSupplier||0)>0;}).map(function(s){
+    var paid=(DB.supplierPayments||[]).filter(function(p){return String(p.supId)==String(s.id);}).reduce(function(a,p){return a+p.amount;},0);
+    var total=(s.totalPurchased||0);
+    var pct=total>0?Math.min(100,Math.round((paid/total)*100)):0;
+    return '<div class="card" style="border-left:4px solid #c0392b">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'+
+        '<div>'+
+          '<div style="font-size:14px;font-weight:700">'+s.name+'</div>'+
+          '<div style="font-size:11px;color:var(--text3)">'+(s.contact||'')+(s.phone?' · '+s.phone:'')+'</div>'+
+        '</div>'+
+        '<button onclick="paySupplier('+s.id+')" style="padding:7px 14px;background:#15803d;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">💳 Pay now</button>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">'+
+        '<div style="text-align:center"><div style="font-size:10px;color:#666">Total purchased</div><div style="font-size:13px;font-weight:700">'+fmt(s.totalPurchased||0)+'</div></div>'+
+        '<div style="text-align:center"><div style="font-size:10px;color:#666">Total paid</div><div style="font-size:13px;font-weight:700;color:#15803d">'+fmt(paid)+'</div></div>'+
+        '<div style="text-align:center"><div style="font-size:10px;color:#666">Still owed</div><div style="font-size:13px;font-weight:700;color:#c0392b">'+fmt(s.owedToSupplier)+'</div></div>'+
+      '</div>'+
+      '<div style="background:#f5f5f5;border-radius:4px;height:6px;overflow:hidden">'+
+        '<div style="background:#15803d;height:100%;width:'+pct+'%;border-radius:4px;transition:width .5s"></div>'+
+      '</div>'+
+      '<div style="font-size:10px;color:#666;margin-top:4px">'+pct+'% paid</div>'+
+    '</div>';
+  }).join('');
+
+  // Payment history rows
+  var rows=filtered.map(function(p,i){
+    return '<tr>'+
+      '<td>'+p.date+'</td>'+
+      '<td style="font-weight:700">'+p.supName+'</td>'+
+      '<td style="text-align:right;font-weight:700;color:#15803d">'+fmt(p.amount)+'</td>'+
+      '<td>'+p.mode+'</td>'+
+      '<td>'+(p.note||'—')+'</td>'+
+      '<td>'+p.by+'</td>'+
+    '</tr>';
+  }).join('');
+
+  return '<p class="sec-title">💳 Supplier Payments</p>'+
+
+    // Top metrics
+    '<div class="metrics" style="margin-bottom:1rem">'+
+      mc('Total owed',fmt(totalOwed),'To all suppliers',totalOwed>0?'red':'')+
+      mc('Total paid ever',fmt(totalPaidEver),'All time','green')+
+      mc('Suppliers with debt',DB.suppliers.filter(function(s){return (s.owedToSupplier||0)>0;}).length,'','red')+
+    '</div>'+
+
+    // Owed cards
+    (owedCards?'<p class="sec-title" style="margin-bottom:10px">Suppliers with outstanding balance</p><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:1.5rem">'+owedCards+'</div>':
+    '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 16px;font-size:13px;color:#15803d;margin-bottom:1.5rem">✅ No outstanding supplier balances — all suppliers are fully paid!</div>')+
+
+    // Payment history
+    '<p class="sec-title" style="margin-bottom:10px">Payment history</p>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'+
+      '<input type="text" placeholder="Search supplier or reference..." value="'+supPaySearch+'" oninput="supPaySearch=this.value;renderPanel()" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;min-width:200px">'+
+      '<select onchange="supPayFilterSup=this.value;renderPanel()" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px">'+supOpts+'</select>'+
+      '<input type="date" value="'+supPayDateFrom+'" onchange="supPayDateFrom=this.value;renderPanel()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">'+
+      '<span style="font-size:12px;color:var(--text3)">to</span>'+
+      '<input type="date" value="'+supPayDateTo+'" onchange="supPayDateTo=this.value;renderPanel()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">'+
+      '<button onclick="supPaySearch=\'\';supPayFilterSup=\'\';supPayDateFrom=\'\';supPayDateTo=\'\';renderPanel()" class="btn sm">Clear</button>'+
+      '<button onclick="printSupplierPaymentsReport()" class="btn sm" style="color:#1a237e;border-color:#93c5fd">🖨️ Print</button>'+
+    '</div>'+
+    (rows?
+      '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Supplier</th><th style="text-align:right">Amount paid</th><th>Mode</th><th>Reference</th><th>By</th></tr></thead>'+
+      '<tbody>'+rows+
+      '<tr style="background:#f0fdf4;font-weight:700;border-top:2px solid #15803d"><td colspan="2">TOTAL — '+filtered.length+' payment(s)</td><td style="text-align:right;color:#15803d">'+fmt(filteredTotal)+'</td><td colspan="3"></td></tr>'+
+      '</tbody></table></div>'
+    :'<div class="empty">No payments recorded'+(supPaySearch||supPayFilterSup||supPayDateFrom||supPayDateTo?' for this filter.':'.')+'</div>');
+}
+
+function printSupplierPaymentsReport(){
+  var filtered=(DB.supplierPayments||[]).filter(function(p){
+    if(supPayFilterSup&&String(p.supId)!==String(supPayFilterSup))return false;
+    if(supPayDateFrom&&!dateInRange(p.date,supPayDateFrom,''))return false;
+    if(supPayDateTo&&!dateInRange(p.date,'',supPayDateTo))return false;
+    return true;
+  }).slice().reverse();
+  var total=filtered.reduce(function(a,p){return a+p.amount;},0);
+  var dateRange=(supPayDateFrom||supPayDateTo)?(supPayDateFrom||'...')+' to '+(supPayDateTo||'...'):'All time';
+  var rows=filtered.map(function(p,i){return '<tr><td>'+(i+1)+'</td><td>'+p.date+'</td><td style="font-weight:700">'+p.supName+'</td><td style="text-align:right;color:green;font-weight:700">'+fmt(p.amount)+'</td><td>'+p.mode+'</td><td>'+(p.note||'—')+'</td><td>'+p.by+'</td></tr>';}).join('');
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Supplier Payments</title>'+
+    '<style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px}'+
+    '.h{text-align:center;border-bottom:2px solid #15803d;padding-bottom:6px;margin-bottom:10px}'+
+    '.co{font-size:16px;font-weight:900;color:#c0392b}.co2{font-size:16px;font-weight:900;color:#1a237e}'+
+    'table{width:100%;border-collapse:collapse}th{background:#15803d;color:#fff;padding:4px 6px;font-size:9px;text-align:left}'+
+    'td{border:1px solid #ddd;padding:3px 6px}tr:nth-child(even)td{background:#f0fdf4}'+
+    '.tr td{font-weight:700;background:#d1fae5;border-top:2px solid #15803d}'+
+    '</style></head><body>'+
+    '<div class="h">'+
+      '<div class="co">GREAT CHID ELECTRO (NIG.)</div>'+
+      '<div class="co2">GLOBAL DOORS LTD</div>'+
+      '<div style="font-size:11px;font-weight:700;color:#15803d;margin-top:4px">SUPPLIER PAYMENTS REPORT</div>'+
+      '<div style="font-size:9px;color:#555;margin-top:2px">Period: '+dateRange+' | Printed: '+new Date().toLocaleString()+'</div>'+
+    '</div>'+
+    '<table><thead><tr><th>#</th><th>Date</th><th>Supplier</th><th style="text-align:right">Amount paid</th><th>Mode</th><th>Reference</th><th>By</th></tr></thead>'+
+    '<tbody>'+rows+
+    '<tr class="tr"><td colspan="3">TOTAL — '+filtered.length+' payment(s)</td><td style="text-align:right;color:green">'+fmt(total)+'</td><td colspan="3"></td></tr>'+
+    '</tbody></table></body></html>';
+  var w=window.open('','_blank');w.document.write(html);w.document.close();setTimeout(function(){w.print();},400);
+}
+
 function buildSuppliers(){
   if(!canDo('suppliers'))return '<div class="empty">Access denied.</div>';
   var rows=DB.suppliers.filter(function(s){
@@ -5644,6 +6680,7 @@ function buildSuppliers(){
       '<td style="text-align:right;color:'+(s.openingBalance>0?'#92400e':'inherit')+'">'+(s.openingBalance>0?fmt(s.openingBalance):'—')+'</td>'+
       '<td style="text-align:right;color:var(--danger)">'+fmt(s.owedToSupplier||0)+'</td>'+
       '<td style="text-align:right">'+s.purchases.length+'</td>'+
+      '<td>'+(s.owedToSupplier>0?'<button class="btn sm" style="color:#15803d;border-color:#86efac;font-size:11px" onclick="paySupplier('+s.id+')">💳 Pay</button>':'')+'<button class="btn sm" style="font-size:11px;color:#1a237e;border-color:#93c5fd;margin-left:2px" onclick="viewSupplierPayments('+s.id+')">History</button></td>'+
       (isAdmin()?'<td><button class="btn danger sm" onclick="removeSupplier('+s.id+')">&#10005;</button></td>':'<td></td>')+
     '</tr>';
   }).join('');
@@ -5658,8 +6695,60 @@ function buildSuppliers(){
       '<p class="sec-title" style="margin:0">Supplier list</p>'+
       '<div style="position:relative;max-width:280px;width:100%"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3)">&#128269;</span><input type="text" placeholder="Search suppliers..." value="'+supplierSearch+'" oninput="supplierSearch=this.value;renderPanel()" style="padding-left:32px;width:100%;font-size:13px"></div>'+
     '</div>'+
-    (rows?'<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Address</th><th style="text-align:right">Total bought</th><th style="text-align:right">Opening bal.</th><th style="text-align:right">Total owed</th><th style="text-align:right">Orders</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="empty">No suppliers yet.</div>');
+    (rows?'<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Address</th><th style="text-align:right">Total bought</th><th style="text-align:right">Opening bal.</th><th style="text-align:right">Total owed</th><th style="text-align:right">Orders</th><th>Actions</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="empty">No suppliers yet.</div>');
 }
+function paySupplier(supId){
+  var sup=DB.suppliers.find(function(s){return s.id==supId;});
+  if(!sup){alert('Supplier not found.');return;}
+  var amt=parseFloat(prompt('Pay '+sup.name+'\nAmount owed: '+fmt(sup.owedToSupplier||0)+'\n\nEnter payment amount:'));
+  if(isNaN(amt)||amt<=0){alert('Enter a valid amount.');return;}
+  var mode=prompt('Payment mode (cash/transfer/pos):','cash');
+  if(!mode)return;
+  var note=prompt('Reference/note (optional):','');
+  var date=new Date().toLocaleDateString();
+  var month=new Date().toLocaleString('default',{month:'short',year:'numeric'});
+  if(!DB.supplierPayments)DB.supplierPayments=[];
+  DB.supplierPayments.push({id:uid(),supId:supId,supName:sup.name,amount:amt,mode:mode,note:note||'',date:date,month:month,by:DB.currentUser.name});
+  sup.owedToSupplier=Math.max(0,(sup.owedToSupplier||0)-amt);
+  // NOT added to cashflow/expenses — supplier payment is a liability settlement, not an expense
+  logActivity('Supplier payment','Paid '+fmt(amt)+' to '+sup.name+'. Remaining: '+fmt(sup.owedToSupplier),mode);
+  saveData();renderApp();
+  alert('Payment of '+fmt(amt)+' recorded for '+sup.name+'.\nRemaining balance: '+fmt(sup.owedToSupplier));
+}
+
+function viewSupplierPayments(supId){
+  var sup=DB.suppliers.find(function(s){return s.id==supId;});
+  if(!sup)return;
+  var payments=(DB.supplierPayments||[]).filter(function(p){return p.supId==supId;});
+  var totalPaid=payments.reduce(function(a,p){return a+p.amount;},0);
+  var old=document.getElementById('sup-pay-modal');if(old)old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='sup-pay-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+  var rows=payments.length?payments.slice().reverse().map(function(p){
+    return '<tr><td>'+p.date+'</td><td style="font-weight:700;color:#15803d">'+fmt(p.amount)+'</td><td>'+p.mode+'</td><td>'+(p.note||'—')+'</td><td>'+p.by+'</td></tr>';
+  }).join(''):'<tr><td colspan="5" style="text-align:center;color:#999">No payments recorded yet</td></tr>';
+  overlay.innerHTML=
+    '<div style="background:var(--surface,#fff);border-radius:14px;padding:24px;max-width:580px;width:90%;max-height:80vh;overflow-y:auto">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+        '<div style="font-size:15px;font-weight:700">Payment history — '+sup.name+'</div>'+
+        '<button onclick="document.getElementById(\'sup-pay-modal\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer">&times;</button>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">'+
+        '<div style="background:#f0fdf4;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#666">Total paid</div><div style="font-size:15px;font-weight:700;color:#15803d">'+fmt(totalPaid)+'</div></div>'+
+        '<div style="background:#fff5f5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#666">Still owed</div><div style="font-size:15px;font-weight:700;color:#c0392b">'+fmt(sup.owedToSupplier||0)+'</div></div>'+
+        '<div style="background:#f0f9ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#666">Payments</div><div style="font-size:15px;font-weight:700;color:#0369a1">'+payments.length+'</div></div>'+
+      '</div>'+
+      '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
+        '<thead><tr style="background:#f5f5f5"><th style="padding:6px;text-align:left">Date</th><th style="padding:6px;text-align:left">Amount</th><th style="padding:6px;text-align:left">Mode</th><th style="padding:6px;text-align:left">Note</th><th style="padding:6px;text-align:left">By</th></tr></thead>'+
+        '<tbody>'+rows+'</tbody>'+
+      '</table>'+
+      (sup.owedToSupplier>0?'<button onclick="document.getElementById(\'sup-pay-modal\').remove();paySupplier('+supId+')" style="margin-top:16px;width:100%;padding:10px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">💳 Record another payment</button>':'')+
+    '</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+}
+
 function addSupplier(){
   var name=document.getElementById('su-name').value.trim();if(!name){alert('Name required.');return;}
   var dup=DB.suppliers.find(function(s){return s.name.toLowerCase()===name.toLowerCase();});
@@ -6231,6 +7320,7 @@ function buildUsers(){
         '<div style="width:42px;height:42px;border-radius:50%;background:'+ac[0]+';color:'+ac[1]+';display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0">'+initials(usr.name)+'</div>'+
         '<div><div style="font-size:14px;font-weight:700">'+usr.name+'</div><div style="font-size:11.5px;color:var(--text3)">@'+usr.username+' &nbsp;·&nbsp; '+(usr.role==='admin'?'<span style="color:var(--primary);font-weight:600">Administrator</span>':'Staff')+'</div></div>'+
         (isAdmin()&&usr.id!==u.id?'<button class="btn danger sm" style="margin-left:auto" onclick="removeUser('+usr.id+')">&#10005; Remove</button>':'')+
+        (isAdmin()&&usr.id!==u.id?'<button class="btn sm" style="margin-left:4px;color:#92400e;border-color:#fcd34d" onclick="adminResetPassword('+usr.id+')">🔑 Reset pwd</button>':'')+
       '</div>'+
       (usr.role!=='admin'?'<div><div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Permissions</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0 12px">'+permHtml+'</div></div>':
         '<div style="font-size:12px;color:var(--text3);font-style:italic">Administrators have full access to all features.</div>')+
@@ -6259,6 +7349,17 @@ function saveProfile(){
   u.name=name;u.username=uname;if(pass)u.password=pass;
   var idx=DB.users.findIndex(function(x){return x.id===u.id;});if(idx>-1)DB.users[idx]=u;
   saveData();alert('Profile updated!');renderApp();
+}
+function adminResetPassword(userId){
+  var usr=DB.users.find(function(x){return x.id==userId;});
+  if(!usr){alert('User not found.');return;}
+  var newPass=prompt('Reset password for '+usr.name+'.\n\nEnter new password:');
+  if(!newPass)return;
+  if(newPass.length<4){alert('Password must be at least 4 characters.');return;}
+  usr.password=newPass;
+  saveData();
+  logActivity('Password reset','Admin reset password for '+usr.name,'');
+  alert('Password reset for '+usr.name+'. Make sure to inform them of their new password.');
 }
 function addUser(){
   var name=document.getElementById('nu-name').value.trim(),uname=document.getElementById('nu-user').value.trim(),pass=document.getElementById('nu-pass').value,role=document.getElementById('nu-role').value;
@@ -6458,6 +7559,7 @@ function recordCreditPayment(custId){
   DB.cashflow.push({id:uid(),desc:'Credit payment — '+cust.name,amount:amt,type:'in',cat:'Credit Payment',payMode:mode,bankId:bankId,posId:posId,date:date,month:month});
   saveData();
   alert('Payment of '+fmt(amt)+' recorded for '+cust.name+'. Remaining balance: '+fmt(Math.max(0,cust.creditBalance)));
+  logActivity('Credit payment','Payment of '+fmt(amt)+' from '+cust.name+'. Balance: '+fmt(Math.max(0,cust.creditBalance)),mode);
   renderApp();
 }
 
@@ -6605,7 +7707,41 @@ function supplyAllNow(invoiceNum){
 // ============================================================
 // STARTUP
 // ============================================================
-window.onload=function(){loadData();};
+window.onload=function(){
+  applyDarkMode();
+  loadData();
+  // Check backup reminder every minute
+  setInterval(function(){
+    if(DB.currentUser)checkBackupReminder();
+  },60000);
+
+  // ── Offline / Online handling ──────────────────────────────
+  window.addEventListener('offline',function(){
+    updateSyncStatus('offline');
+    showOfflineBanner(true);
+  });
+  window.addEventListener('online',function(){
+    showOfflineBanner(false);
+    updateSyncStatus('connecting');
+    // Flush any pending local saves to Firebase per-collection
+    var pending=localStorage.getItem(STORAGE_KEY+'_pending');
+    if(pending){
+      GCE_COLLECTIONS.forEach(function(c){ fbDirtyCollections.add(c); });
+      fbSyncDirty(function(ok){
+        if(ok){
+          fbLastSync=new Date();
+          updateSyncStatus('synced');
+          localStorage.removeItem(STORAGE_KEY+'_pending');
+          showToast('✅ Back online — all changes synced to Firebase!');
+        } else {
+          updateSyncStatus('error');
+        }
+      });
+    } else {
+      startFirebaseListener();
+    }
+  });
+};
 
 </script>
 </body>
