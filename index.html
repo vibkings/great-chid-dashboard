@@ -501,7 +501,7 @@ function fromFirestoreDoc(fields) {
 
 // ── Read a single collection doc ────────────────────────────
 function fbGetCollection(colName, callback) {
-  var url = GCE_REST_BASE + 'gce_cols/' + colName + GCE_API_KEY_QS;
+  var url = GCE_REST_BASE + GCE_COL_PATH + colName + GCE_API_KEY_QS;
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
   xhr.timeout = 12000;
@@ -519,7 +519,7 @@ function fbGetCollection(colName, callback) {
 
 // ── Write a single collection doc ───────────────────────────
 function fbSetCollection(colName, data, onSuccess, onError) {
-  var url = GCE_REST_BASE + 'gce_cols/' + colName + GCE_API_KEY_QS;
+  var url = GCE_REST_BASE + GCE_COL_PATH + colName + GCE_API_KEY_QS;
   var body = JSON.stringify(toFirestoreDoc(data));
   var xhr = new XMLHttpRequest();
   xhr.open('PATCH', url, true);
