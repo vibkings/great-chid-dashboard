@@ -521,13 +521,22 @@ function fbGetCollection(colName, callback) {
 function fbSetCollection(colName, data, onSuccess, onError) {
   var url = GCE_REST_BASE + GCE_COL_PATH + colName + GCE_API_KEY_QS;
   var body = JSON.stringify(toFirestoreDoc(data));
+  // Size guard: Firestore docs limited to ~1MB; log warning if approaching
+  if (body.length > 900000) {
+    console.warn('[Firebase] ' + colName + ' payload is ' + Math.round(body.length/1024) + 'KB — near Firestore 1MB limit');
+  }
   var xhr = new XMLHttpRequest();
   xhr.open('PATCH', url, true);
   xhr.setRequestHeader('Content-Type', 'application/json');
-  xhr.timeout = 15000;
+  xhr.timeout = 20000;
   xhr.onload = function() {
-    if (xhr.status >= 200 && xhr.status < 300) { if (onSuccess) onSuccess(); }
-    else { if (onError) onError({ code: xhr.status }); }
+    if (xhr.status >= 200 && xhr.status < 300) {
+      if (onSuccess) onSuccess();
+    } else {
+      var msg = xhr.responseText || '';
+      console.error('[Firebase] PATCH ' + colName + ' failed: HTTP ' + xhr.status + ' — ' + msg.slice(0,200));
+      if (onError) onError({ code: xhr.status, message: msg.slice(0,200) });
+    }
   };
   xhr.onerror = function() { if (onError) onError({ code:'network' }); };
   xhr.ontimeout = function() { if (onError) onError({ code:'timeout' }); };
@@ -687,6 +696,28 @@ function fbPullAll(onDone) {
         });
       }
     });
+  });
+}
+
+// ── Force push all local data to Firestore (one-time migration) ─
+function fbForceMigrate(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Pushing...'; }
+  updateSyncStatus('saving');
+  GCE_COLLECTIONS.forEach(function(c){ fbDirtyCollections.add(c); });
+  fbSyncInProgress = false; // reset in case stuck
+  fbSyncDirty(function(ok) {
+    if (ok) {
+      fbConnected = true;
+      fbLastSync = new Date();
+      updateSyncStatus('synced');
+      showToast('\u2705 All data pushed to Firebase successfully!');
+      var overlay = document.getElementById('fb-diag-overlay');
+      if (overlay) overlay.remove();
+    } else {
+      updateSyncStatus('error');
+      showToast('\u274c Push failed — check browser console (F12) for details');
+      if (btn) { btn.disabled = false; btn.textContent = '\ud83d\udce4 Force Push Data'; }
+    }
   });
 }
 
@@ -906,6 +937,7 @@ function showFirebaseDiag() {
       '<div style="padding:1.25rem" id="fb-diag-body">'+logLines.join('')+'</div>'+
       '<div style="padding:0 1.25rem 1rem;display:flex;gap:8px;flex-wrap:wrap">'+
         '<button onclick="fbConnected=false;startFirebaseListener();document.getElementById(\'fb-diag-overlay\').remove();" style="flex:1;padding:9px;background:#0d6efd;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🔄 Retry connection</button>'+
+        '<button onclick="fbForceMigrate(this)" style="flex:1;padding:9px;background:#198754;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📤 Force Push Data</button>'+
         '<button onclick="document.getElementById(\'fb-diag-overlay\').remove()" style="padding:9px 18px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
       '</div>'+
     '</div>';
