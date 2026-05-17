@@ -808,14 +808,15 @@ function startFirebaseListener() {
       }
       // ── Genuine change from another device — show popup, let user decide ──
       fbLastSeenRemoteSavedAt = payload._savedAt;
-      // Pull all collections into a pending snapshot first
-      fbPullAll(function() {
-        // Build snapshot of what we just pulled
-        var remoteSnapshot = buildSnapshot();
-        var remoteSalesCount = remoteSnapshot.sales ? remoteSnapshot.sales.length : 0;
-        var remoteTime = payload._savedAt ? new Date(payload._savedAt).toLocaleTimeString() : 'unknown';
-        // Store as pending — user decides whether to keep or discard
-        fbPendingSnapshot = remoteSnapshot;
+      var remoteTime = payload._savedAt ? new Date(payload._savedAt).toLocaleTimeString() : 'unknown';
+      // Fetch only the sales count from remote to show in popup (don't apply yet)
+      fbGetCollection('sales', function(err2, salesPayload) {
+        var remoteSalesCount = 0;
+        if (!err2 && salesPayload && salesPayload.data) {
+          remoteSalesCount = Array.isArray(salesPayload.data) ? salesPayload.data.length : 0;
+        }
+        // Store the remote savedAt so acceptFbSync knows what to pull
+        fbPendingSnapshot = { _savedAt: payload._savedAt, _deviceId: payload._deviceId, _pendingPull: true };
         showSyncPopup(remoteTime, remoteSalesCount);
       });
     });
@@ -871,16 +872,34 @@ function showSyncPopup(remoteTime, remoteSales) {
 
 function acceptFbSync() {
   if (!fbPendingSnapshot) return;
-  var savedUser = DB.currentUser; // preserve logged-in user
-  fbLastSavedAt = fbPendingSnapshot._savedAt;
-  applySnapshot(fbPendingSnapshot);
-  DB.currentUser = savedUser; // restore after sync
-  fbLastSync = new Date();
-  fbPendingSnapshot = null;
   var p = document.getElementById('fb-sync-popup');
-  if (p) p.remove();
-  updateSyncStatus('synced');
-  renderApp();
+  if (p) p.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:#0d6efd">&#8987; Syncing data from remote...</div>';
+  var savedUser = DB.currentUser;
+  var pendingSavedAt = fbPendingSnapshot._savedAt;
+  // If it's a pending pull (not yet fetched), pull now
+  if (fbPendingSnapshot._pendingPull) {
+    fbPullAll(function() {
+      fbLastSavedAt = pendingSavedAt;
+      fbLastSync = new Date();
+      DB.currentUser = savedUser;
+      fbPendingSnapshot = null;
+      if (p) p.remove();
+      updateSyncStatus('synced');
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(buildSnapshot())); } catch(e) {}
+      showToast('✅ Synced from remote device!');
+      renderPanel();
+    });
+  } else {
+    // Legacy: already have the snapshot
+    fbLastSavedAt = pendingSavedAt;
+    applySnapshot(fbPendingSnapshot);
+    DB.currentUser = savedUser;
+    fbLastSync = new Date();
+    fbPendingSnapshot = null;
+    if (p) p.remove();
+    updateSyncStatus('synced');
+    renderApp();
+  }
 }
 
 function dismissFbSync() {
@@ -888,6 +907,11 @@ function dismissFbSync() {
   var p = document.getElementById('fb-sync-popup');
   if (p) p.remove();
   updateSyncStatus('synced');
+  // Reclaim meta ownership so the same remote change doesn't trigger again
+  var reclaimMeta = buildCollectionSnapshot('meta');
+  fbSetCollection('meta', reclaimMeta, function() {
+    fbLastSavedAt = reclaimMeta._savedAt;
+  }, null);
 }
 
 // ---- Sync status indicator ----
