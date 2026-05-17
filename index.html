@@ -709,9 +709,9 @@ function fbPullAll(onDone) {
 function fbForceMigrate(btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Pushing...'; }
   updateSyncStatus('saving');
-  // First do a single test write to get the exact error if any
-  var testPayload = { _test: true, _savedAt: new Date().toISOString(), _deviceId: FB_DEVICE_ID };
-  fbSetCollection('meta', testPayload, function() {
+  // First do a small test write to 'settings' (least disruptive) to check permissions
+  var testPayload = buildCollectionSnapshot('settings');
+  fbSetCollection('settings', testPayload, function() {
     // Test write OK — push everything
     GCE_COLLECTIONS.forEach(function(c){ fbDirtyCollections.add(c); });
     fbSyncInProgress = false;
@@ -785,7 +785,11 @@ function startFirebaseListener() {
       if (!payload || !payload._savedAt) { updateSyncStatus('synced'); return; }
       if (payload._deviceId === FB_DEVICE_ID) { updateSyncStatus('synced'); return; }
       if (fbLastSavedAt && payload._savedAt <= fbLastSavedAt) { updateSyncStatus('synced'); return; }
-      // Another device saved — pull all updated collections
+      // Ignore if the remote save happened within 30s of our own last save (race condition guard)
+      if (fbLastOwnSaveTime && Date.now() - fbLastOwnSaveTime < 30000) { updateSyncStatus('synced'); return; }
+      // Ignore _test payloads from Force Push diagnostics
+      if (payload._test) { updateSyncStatus('synced'); return; }
+      // Another device saved — silently pull without blocking the UI
       fbPullAll(function() {
         fbLastSavedAt = payload._savedAt;
         fbLastSync = new Date();
