@@ -7410,7 +7410,12 @@ function buildPurchases(){
     return (p.invoiceNum||'').toLowerCase().indexOf(t)>-1||(p.supName||'').toLowerCase().indexOf(t)>-1||(p.items||[]).some(function(l){return l.name.toLowerCase().indexOf(t)>-1;});
   }).map(function(p,i){
     var totalItems=p.items.reduce(function(a,l){return a+l.qty;},0);
-    var payBadge=p.payType==='credit'?'<span class="badge owing">Credit</span>':p.payType==='part'?'<span class="badge low">Part pay</span>':'<span class="badge ok">Cash</span>';
+    var puModeLabel=p.payMode==='transfer'?'Transfer'+(p.bankId?' → '+getBankName(p.bankId):''):p.payMode==='pos'?'POS'+(p.posId?' ('+getPosName(p.posId)+')':''):'Cash';
+    var payBadge=p.payType==='credit'?'<span class="badge owing">Credit</span>':
+      p.payType==='part'?'<span class="badge low">Part pay</span>':
+      p.payMode==='transfer'?'<span class="badge" style="background:#0d6efd;color:#fff">Transfer</span>':
+      p.payMode==='pos'?'<span class="badge" style="background:#0891b2;color:#fff">POS</span>':
+      '<span class="badge ok">Cash</span>';
     return '<tr>'+
       '<td>'+p.date+'</td>'+
       '<td><b>'+(p.invoiceNum||'-')+'</b></td>'+
@@ -7418,7 +7423,7 @@ function buildPurchases(){
       '<td style="font-size:11px">'+p.items.map(function(l){return l.name+' x'+(l.qtyReceived||l.qty);}).join(', ')+'</td>'+
       '<td style="text-align:center">'+totalItems+'</td>'+
       '<td style="text-align:right"><b>'+fmt(p.grandTotal)+'</b></td>'+
-      '<td>'+payBadge+'</td>'+
+      '<td>'+payBadge+'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+puModeLabel+'</div></td>'+
       '<td>'+p.by+'</td>'+
       '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+
         '<button class="btn sm" onclick="printPurchaseRecord('+p.id+')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">&#128438; Print</button>'+
