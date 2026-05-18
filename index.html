@@ -707,41 +707,71 @@ function fbPullAll(onDone) {
 
 // ── Force push all local data to Firestore (one-time migration) ─
 function fbForceMigrate(btn) {
-  if (btn) { btn.disabled = true; btn.textContent = 'Pushing...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking...'; }
   updateSyncStatus('saving');
-  // First do a small test write to 'settings' (least disruptive) to check permissions
-  var testPayload = buildCollectionSnapshot('settings');
-  fbSetCollection('settings', testPayload, function() {
-    // Test write OK — push everything
-    GCE_COLLECTIONS.forEach(function(c){ fbDirtyCollections.add(c); });
-    fbSyncInProgress = false;
-    fbSyncDirty(function(ok) {
-      if (ok) {
-        fbConnected = true; fbLastSync = new Date();
-        updateSyncStatus('synced');
-        showToast('✅ All data pushed to Firebase successfully!');
-        var overlay = document.getElementById('fb-diag-overlay');
-        if (overlay) overlay.remove();
-      } else {
-        updateSyncStatus('error');
-        showToast('❌ Some collections failed — check browser console (F12)');
-        if (btn) { btn.disabled = false; btn.textContent = '📤 Force Push Data'; }
-      }
-    });
-  }, function(err) {
-    var code = String(err.code || '?');
-    var msg  = String(err.message || '');
-    var hint = '';
-    if (code === '403' || msg.indexOf('PERMISSION_DENIED') > -1) {
-      hint = 'FIX: Firebase Console > Firestore > Rules > publish: allow read, write: if true;';
-    } else if (code === '404') {
-      hint = 'FIX: Collection path not found. Check project ID in Firebase Console.';
-    } else if (err.code === 'network' || err.code === 'timeout') {
-      hint = 'FIX: Check your internet connection.';
+
+  // ── Safety check: compare local vs remote record counts before pushing ──
+  var localSales = DB.sales ? DB.sales.length : 0;
+  var localInv   = DB.inventory ? DB.inventory.length : 0;
+
+  // First peek at remote sales count
+  fbGetCollection('sales', function(err, remoteSalesData) {
+    var remoteSales = 0;
+    if (!err && remoteSalesData && remoteSalesData.data) {
+      remoteSales = Array.isArray(remoteSalesData.data) ? remoteSalesData.data.length : 0;
     }
-    updateSyncStatus('error');
-    alert('❌ Firebase write test failed!\n\nHTTP ' + code + ': ' + msg.slice(0,300) + (hint ? '\n\n' + hint : ''));
-    if (btn) { btn.disabled = false; btn.textContent = '📤 Force Push Data'; }
+
+    // SAFETY GUARD: if local has significantly fewer records than remote, warn user
+    if (remoteSales > 0 && localSales < remoteSales) {
+      if (btn) { btn.disabled = false; btn.textContent = '📤 Force Push Data'; }
+      updateSyncStatus('error');
+      var proceed = confirm(
+        'WARNING: Local data has FEWER records than Firebase!\n\n' +
+        'Local sales:  ' + localSales + ' records\n' +
+        'Remote sales: ' + remoteSales + ' records\n\n' +
+        'Pushing now will OVERWRITE Firebase with your smaller local copy\n' +
+        'and you could LOSE ' + (remoteSales - localSales) + ' sales records!\n\n' +
+        'Are you SURE you want to push your local data to Firebase?\n' +
+        '(Click Cancel to be safe, then use the Sync button instead)'
+      );
+      if (!proceed) return;
+    }
+
+    // Safety check passed — do a test write first
+    if (btn) { btn.textContent = 'Pushing...'; btn.disabled = true; }
+    var testPayload = buildCollectionSnapshot('settings');
+    fbSetCollection('settings', testPayload, function() {
+      // Test write OK — push everything
+      GCE_COLLECTIONS.forEach(function(c){ fbDirtyCollections.add(c); });
+      fbSyncInProgress = false;
+      fbSyncDirty(function(ok) {
+        if (ok) {
+          fbConnected = true; fbLastSync = new Date();
+          updateSyncStatus('synced');
+          showToast('✅ All data pushed to Firebase successfully!');
+          var overlay = document.getElementById('fb-diag-overlay');
+          if (overlay) overlay.remove();
+        } else {
+          updateSyncStatus('error');
+          showToast('❌ Some collections failed — check browser console (F12)');
+          if (btn) { btn.disabled = false; btn.textContent = '📤 Force Push Data'; }
+        }
+      });
+    }, function(err) {
+      var code = String(err.code || '?');
+      var msg  = String(err.message || '');
+      var hint = '';
+      if (code === '403' || msg.indexOf('PERMISSION_DENIED') > -1) {
+        hint = 'FIX: Firebase Console > Firestore > Rules > publish: allow read, write: if true;';
+      } else if (code === '404') {
+        hint = 'FIX: Collection path not found. Check project ID in Firebase Console.';
+      } else if (err.code === 'network' || err.code === 'timeout') {
+        hint = 'FIX: Check your internet connection.';
+      }
+      updateSyncStatus('error');
+      alert('❌ Firebase write test failed!\n\nHTTP ' + code + ': ' + msg.slice(0,300) + (hint ? '\n\n' + hint : ''));
+      if (btn) { btn.disabled = false; btn.textContent = '📤 Force Push Data'; }
+    });
   });
 }
 
