@@ -4548,7 +4548,7 @@ function buildInvoiceHTML(inv){
     '<div class="mr">'+
     '<div style="flex:1;margin-right:10px"><div style="font-size:9px;font-weight:600;margin-bottom:1px">Name:</div><div class="fl">'+inv.custName+'</div>'+
     '<div style="font-size:9px;font-weight:600;margin-top:6px;margin-bottom:1px">Address:</div><div class="fl">'+(inv.custAddr||'')+'</div></div>'+
-    '<div style="text-align:right"><div class="in">No: '+(inv.year&&!isNaN(inv.year)?inv.year:new Date().getFullYear())+'/ &nbsp;&nbsp;<span style="font-size:16px;font-weight:900">'+inv.invoiceNum+'</span></div>'+
+    '<div style="text-align:right"><div class="in">No: <span style="font-size:16px;font-weight:900">'+inv.invoiceNum+'</span></div>'+
     '<div class="dg" style="margin-top:4px"><div class="dh">DAY</div><div class="dh">MONTH</div><div class="dh">YEAR</div>'+
     '<div class="dv">'+inv.day+'</div><div class="dv">'+inv.month+'</div><div class="dv">'+(inv.year&&!isNaN(inv.year)?inv.year:new Date().getFullYear())+'</div></div></div></div>'+
     '<table><thead>'+
