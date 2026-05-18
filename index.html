@@ -2154,21 +2154,26 @@ function renderApp(){
   var todayRev=todaySales.reduce(function(a,s){return a+s.total;},0);
   var todayProfit=todaySales.reduce(function(a,s){return a+s.profit;},0);
   var todayInvoices=[...new Set(todaySales.map(function(s){return s.invoiceNum;}))].length;
-  // Split payments must be distributed into their component modes
+  // Group by invoice first to avoid double-counting split amounts across line items
   var todayCash=0,todayPos=0,todayTransfer=0,todayCredit=0,todayDeposit=0;
+  var _todayInvMap={};
   todaySales.forEach(function(s){
-    if(s.payment==='credit'){todayCredit+=s.total;return;}
-    if(s.payment==='deposit'||s.payMode==='deposit'){todayDeposit+=s.total;return;}
-    if(s.payMode==='split'&&s.splitPayment){
-      var sp=s.splitPayment;
-      function addTodaySplit(m,a){if(m==='pos')todayPos+=a;else if(m==='transfer')todayTransfer+=a;else todayCash+=a;}
-      addTodaySplit(sp.mode1,sp.amt1);
-      addTodaySplit(sp.mode2,sp.amt2);
+    var k=s.invoiceNum||s.id;
+    if(!_todayInvMap[k])_todayInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,total:0};
+    _todayInvMap[k].total+=s.total;
+  });
+  Object.values(_todayInvMap).forEach(function(g){
+    if(g.payment==='credit'){todayCredit+=g.total;return;}
+    if(g.payment==='deposit'||g.payMode==='deposit'){todayDeposit+=g.total;return;}
+    if(g.payMode==='split'&&g.splitPayment){
+      var sp=g.splitPayment;
+      if(sp.mode1==='pos')todayPos+=sp.amt1;else if(sp.mode1==='transfer')todayTransfer+=sp.amt1;else todayCash+=sp.amt1;
+      if(sp.mode2==='pos')todayPos+=sp.amt2;else if(sp.mode2==='transfer')todayTransfer+=sp.amt2;else todayCash+=sp.amt2;
       return;
     }
-    if(s.payMode==='pos'){todayPos+=s.total;return;}
-    if(s.payMode==='transfer'){todayTransfer+=s.total;return;}
-    todayCash+=s.total;
+    if(g.payMode==='pos'){todayPos+=g.total;return;}
+    if(g.payMode==='transfer'){todayTransfer+=g.total;return;}
+    todayCash+=g.total;
   });
   var openTill=DB.tillSessions&&DB.tillSessions.length?(DB.tillSessions.filter(function(t){return !t.closedAt;}).length>0):false;
   var tillFloat=0;
@@ -6017,7 +6022,11 @@ function processReturn(invoiceId){
     // Log adjustment
     if(invItem){DB.adjLog.push({id:uid(),itemId:invItem.id,itemName:invItem.name,type:'add',reason:'Sales return — Invoice #'+items[0].invoiceNum,before:invItem.qty-qty,change:qty,after:invItem.qty,date:date,by:DB.currentUser.name});}
     // Save return record
-    DB.salesReturns.push({id:uid(),invoiceId:invoiceId,invoiceNum:items[0].invoiceNum||invoiceId,itemId:s.id,itemName:s.name,qty:qty,refundAmt:refundAmt,adjPrice:adjPrice>0?adjPrice:null,origUnitPrice:origUnitPrice,refundType:refundType,reason:reason,custId:items[0].custId,custName:items[0].custName||'Walk-in customer',date:date,month:month,by:DB.currentUser.name});
+    // Store exchangeItems on first returned item only (to avoid duplication in view)
+    var _exchToStore=(refundType==='exchange'&&returnedItems.length===0&&exchangeItems&&exchangeItems.length)?
+      exchangeItems.map(function(e){return {name:e.invItem?e.invItem.name:e.name,qty:e.qty,price:e.price,total:e.total,itemId:e.invItem?e.invItem.id:e.itemId};})
+      :undefined;
+    DB.salesReturns.push({id:uid(),invoiceId:invoiceId,invoiceNum:items[0].invoiceNum||invoiceId,itemId:s.id,itemName:s.name,qty:qty,refundAmt:refundAmt,adjPrice:adjPrice>0?adjPrice:null,origUnitPrice:origUnitPrice,refundType:refundType,reason:reason,custId:items[0].custId,custName:items[0].custName||'Walk-in customer',date:date,month:month,by:DB.currentUser.name,exchangeItems:_exchToStore});
   });
   if(!returnedItems.length){alert('Enter at least one item quantity to return.');return;}
 
@@ -6166,17 +6175,26 @@ function buildSales(){
       '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th style="text-align:center">Ordered</th><th style="text-align:center">Supplied</th><th style="text-align:center">Pending</th><th>Progress</th><th></th></tr></thead><tbody>'+pRows+'</tbody></table></div></div>';
   }
   var totalRev=0,totalProfit=0,creditTotal=0,cashS=0,posS=0,transS=0;
+  // Group by invoice to avoid double-counting split amounts across line items
+  var _salesInvMap={};
   DB.sales.forEach(function(s){
     totalRev+=s.total;totalProfit+=s.profit;
-    if(s.payment==='credit'){creditTotal+=s.total;}
-    else if(s.payMode==='split'&&s.splitPayment){
-      var _sp=s.splitPayment;
-      function _addS(m,a){if(m==='pos')posS+=a;else if(m==='transfer')transS+=a;else cashS+=a;}
-      _addS(_sp.mode1,_sp.amt1);_addS(_sp.mode2,_sp.amt2);
+    var k=s.invoiceNum||s.id;
+    if(!_salesInvMap[k])_salesInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,total:0};
+    _salesInvMap[k].total+=s.total;
+  });
+  Object.values(_salesInvMap).forEach(function(g){
+    if(g.payment==='credit'){creditTotal+=g.total;return;}
+    if(g.payment==='deposit'||g.payMode==='deposit')return;
+    if(g.payMode==='split'&&g.splitPayment){
+      var _sp=g.splitPayment;
+      if(_sp.mode1==='pos')posS+=_sp.amt1;else if(_sp.mode1==='transfer')transS+=_sp.amt1;else cashS+=_sp.amt1;
+      if(_sp.mode2==='pos')posS+=_sp.amt2;else if(_sp.mode2==='transfer')transS+=_sp.amt2;else cashS+=_sp.amt2;
+      return;
     }
-    else if(s.payMode==='pos'){posS+=s.total;}
-    else if(s.payMode==='transfer'){transS+=s.total;}
-    else if(s.payment!=='deposit'){cashS+=s.total;}
+    if(g.payMode==='pos'){posS+=g.total;return;}
+    if(g.payMode==='transfer'){transS+=g.total;return;}
+    cashS+=g.total;
   });
   var io=DB.inventory.filter(function(i){return i.qty>0;}).map(function(i){return '<option value="'+i.id+'">'+i.name+' ('+i.qty+')</option>';}).join('');
   var rco=DB.customers.map(function(c){
