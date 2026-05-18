@@ -1431,17 +1431,25 @@ function buildClosingReport(){
   var depToday=(DB.deposits||[]).filter(function(d){return d.amount>0&&dateInRange(d.date,closingDate,closingDate);});
   var depTotal=depToday.reduce(function(a,d){return a+d.amount;},0);
   // Expenses today
-  var expToday=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&dateInRange(c.date,closingDate,closingDate);});
+  // Separate expenses from supplier/purchase payments
+  var expToday=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&dateInRange(c.date,closingDate,closingDate);});
   var expTotal=expToday.reduce(function(a,e){return a+e.amount;},0);
+  // Supplier payments today
+  var suppPayToday=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,closingDate,closingDate);});
+  var suppPayTotal=suppPayToday.reduce(function(a,e){return a+e.amount;},0);
   // Expense breakdown by payment mode
   var expCash=expToday.filter(function(e){return !e.payMode||e.payMode==='cash';}).reduce(function(a,e){return a+e.amount;},0);
   var expTransfer=expToday.filter(function(e){return e.payMode==='transfer';}).reduce(function(a,e){return a+e.amount;},0);
   var expPos=expToday.filter(function(e){return e.payMode==='pos';}).reduce(function(a,e){return a+e.amount;},0);
+  // Supplier payment breakdown
+  var suppCash=suppPayToday.filter(function(e){return !e.payMode||e.payMode==='cash';}).reduce(function(a,e){return a+e.amount;},0);
+  var suppTransfer=suppPayToday.filter(function(e){return e.payMode==='transfer';}).reduce(function(a,e){return a+e.amount;},0);
+  var suppPos=suppPayToday.filter(function(e){return e.payMode==='pos';}).reduce(function(a,e){return a+e.amount;},0);
   // Balance after expenses
   var balCash=cash-expCash;
   var balTransfer=transfer-expTransfer;
   var balPos=pos-expPos;
-  var balTotal=(cash+pos+transfer+partPaid+cpTotal+depTotal)-(expTotal+retTotal);
+  var balTotal=(cash+pos+transfer+partPaid+cpTotal+depTotal)-(expTotal+suppPayTotal+retTotal);
   // Returns today
   var retToday=(DB.salesReturns||[]).filter(function(r){return dateInRange(r.date,closingDate,closingDate);});
   var retTotal=retToday.reduce(function(a,r){return a+(r.refundAmt||0);},0);
@@ -1524,14 +1532,19 @@ function buildClosingReport(){
         (partPaid>0?'<tr><td style="font-weight:600">⏳ Part Paid</td><td style="text-align:right;color:#92400e">'+fmt(partPaid)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#92400e">'+fmt(partPaid)+'</td></tr>':'')+
         (cpTotal>0?'<tr><td style="font-weight:600">✅ Credit Payments</td><td style="text-align:right;color:#15803d">'+fmt(cpTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#15803d">'+fmt(cpTotal)+'</td></tr>':'')+
         (depTotal>0?'<tr><td style="font-weight:600">📥 Deposits</td><td style="text-align:right;color:#0369a1">'+fmt(depTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0369a1">'+fmt(depTotal)+'</td></tr>':'')+
+        (suppPayTotal>0?'<tr style="background:#fff8f0"><td style="font-weight:600;color:#92400e">🚛 Supplier Payments</td><td style="text-align:right">-</td><td style="text-align:right;color:#92400e">- '+fmt(suppPayTotal)+'</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(suppPayTotal)+'</td></tr>':'')+
         (retTotal>0?'<tr style="background:#fff5f5"><td style="font-weight:600;color:#c0392b">↩ Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">- '+fmt(retTotal)+'</td><td style="text-align:right;font-weight:700;color:#c0392b">- '+fmt(retTotal)+'</td></tr>':'')+
-        '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(cash+pos+transfer+partPaid+cpTotal+depTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+retTotal>0?'- '+fmt(expTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal)+'</td></tr>'+
+        '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(cash+pos+transfer+partPaid+cpTotal+depTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+suppPayTotal+retTotal>0?'- '+fmt(expTotal+suppPayTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal)+'</td></tr>'+
         '</tbody></table>'+
       '</div>'+
-      // Expense detail list
+      // Expense detail + Supplier payment detail
       (expToday.length?'<div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px">📋 Expense detail</div>'+
-        '<div class="tbl-wrap"><table style="font-size:11px"><thead><tr><th style="text-align:left">Description</th><th>Mode</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+
+        '<div class="tbl-wrap" style="margin-bottom:8px"><table style="font-size:11px"><thead><tr><th style="text-align:left">Description</th><th>Mode</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+
         expToday.map(function(e){return '<tr><td>'+e.desc+'</td><td>'+(e.payMode==='transfer'?'Transfer':e.payMode==='pos'?'POS':'Cash')+'</td><td style="text-align:right;color:#c0392b">'+fmt(e.amount)+'</td></tr>';}).join('')+
+        '</tbody></table></div>':'')+
+      (suppPayToday.length?'<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">🚛 Supplier payment detail</div>'+
+        '<div class="tbl-wrap"><table style="font-size:11px"><thead><tr><th style="text-align:left">Description</th><th>Mode</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+
+        suppPayToday.map(function(e){return '<tr><td>'+e.desc+'</td><td>'+(e.payMode==='transfer'?'Transfer':e.payMode==='pos'?'POS':'Cash')+'</td><td style="text-align:right;color:#92400e">'+fmt(e.amount)+'</td></tr>';}).join('')+
         '</tbody></table></div>':'')+
     '</div>'+
     // By staff
@@ -1587,14 +1600,16 @@ function printClosingReport(){
   });
   var cpTotal=(DB.creditPayments||[]).filter(function(p){return dateInRange(p.date,closingDate,closingDate);}).reduce(function(a,p){return a+p.amount;},0);
   var depTotal=(DB.deposits||[]).filter(function(d){return d.amount>0&&dateInRange(d.date,closingDate,closingDate);}).reduce(function(a,d){return a+d.amount;},0);
-  var expToday2=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&dateInRange(c.date,closingDate,closingDate);});
+  var expToday2=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&dateInRange(c.date,closingDate,closingDate);});
   var expTotal=expToday2.reduce(function(a,e){return a+e.amount;},0);
+  var suppPayToday2=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,closingDate,closingDate);});
+  var suppPayTotal2=suppPayToday2.reduce(function(a,e){return a+e.amount;},0);
   var expCash2=expToday2.filter(function(e){return !e.payMode||e.payMode==='cash';}).reduce(function(a,e){return a+e.amount;},0);
   var expTransfer2=expToday2.filter(function(e){return e.payMode==='transfer';}).reduce(function(a,e){return a+e.amount;},0);
   var expPos2=expToday2.filter(function(e){return e.payMode==='pos';}).reduce(function(a,e){return a+e.amount;},0);
   var retTotal2=(DB.salesReturns||[]).filter(function(r){return dateInRange(r.date,closingDate,closingDate);}).reduce(function(a,r){return a+(r.refundAmt||0);},0);
   var balCash2=cash-expCash2; var balPos2=pos-expPos2; var balTransfer2=transfer-expTransfer2;
-  var balTotal2=(cash+pos+transfer+partPaid+cpTotal+depTotal)-(expTotal+retTotal2);
+  var balTotal2=(cash+pos+transfer+partPaid+cpTotal+depTotal)-(expTotal+suppPayTotal2+retTotal2);
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
   var staffRows=Object.keys(byStaff).map(function(s){var st=byStaff[s];return '<tr><td>'+s+'</td><td>'+st.count+'</td><td>'+fmt(st.total)+'</td><td>'+fmt(st.profit)+'</td></tr>';}).join('');
@@ -1633,9 +1648,12 @@ function printClosingReport(){
     (cpTotal>0?'<tr><td>Credit Payments</td><td style="text-align:right">'+fmt(cpTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right">'+fmt(cpTotal)+'</td></tr>':'')+
     (depTotal>0?'<tr><td>Deposits</td><td style="text-align:right">'+fmt(depTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right">'+fmt(depTotal)+'</td></tr>':'')+
     (retTotal2>0?'<tr><td>Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">-'+fmt(retTotal2)+'</td><td style="text-align:right;color:#c0392b">-'+fmt(retTotal2)+'</td></tr>':'')+
-    '<tr style="background:#1a237e;color:#fff;font-weight:700"><td>TOTAL</td><td style="text-align:right">'+fmt(cash+pos+transfer+partPaid+cpTotal+depTotal)+'</td><td style="text-align:right;color:#fca5a5">-'+fmt(expTotal+retTotal2)+'</td><td style="text-align:right;font-size:12px">'+fmt(balTotal2)+'</td></tr>'+
+    (suppPayTotal2>0?'<tr style="background:#fff8f0"><td>Supplier Payments</td><td style="text-align:right">-</td><td style="text-align:right;color:#92400e">-'+fmt(suppPayTotal2)+'</td><td style="text-align:right;color:#92400e">-'+fmt(suppPayTotal2)+'</td></tr>':'')+
+    (retTotal2>0?'<tr><td>Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">-'+fmt(retTotal2)+'</td><td style="text-align:right;color:#c0392b">-'+fmt(retTotal2)+'</td></tr>':'')+
+    '<tr style="background:#1a237e;color:#fff;font-weight:700"><td>TOTAL</td><td style="text-align:right">'+fmt(cash+pos+transfer+partPaid+cpTotal+depTotal)+'</td><td style="text-align:right;color:#fca5a5">-'+fmt(expTotal+suppPayTotal2+retTotal2)+'</td><td style="text-align:right;font-size:12px">'+fmt(balTotal2)+'</td></tr>'+
     '</tbody></table>'+
     (expToday2.length?'<div class="sec">Expense Detail</div><table><thead><tr><th>Description</th><th>Mode</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+expToday2.map(function(e){return '<tr><td>'+e.desc+'</td><td>'+(e.payMode==='transfer'?'Transfer':e.payMode==='pos'?'POS':'Cash')+'</td><td style="text-align:right;color:#c0392b">'+fmt(e.amount)+'</td></tr>';}).join('')+'</tbody></table>':'')+
+    (suppPayToday2.length?'<div class="sec">Supplier Payment Detail</div><table><thead><tr><th>Description</th><th>Mode</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+suppPayToday2.map(function(e){return '<tr><td>'+e.desc+'</td><td>'+(e.payMode==='transfer'?'Transfer':e.payMode==='pos'?'POS':'Cash')+'</td><td style="text-align:right;color:#92400e">'+fmt(e.amount)+'</td></tr>';}).join('')+'</tbody></table>':'')+
     '<div class="sec">By Staff</div>'+
     '<table><thead><tr><th>Staff</th><th>Invoices</th><th>Sales</th><th>Profit</th></tr></thead><tbody>'+staffRows+'</tbody></table>'+
     '<div class="sec">Invoice Summary</div>'+
@@ -2075,7 +2093,9 @@ function sendDailySummaryWhatsApp(){
   var creditOwed=invList.filter(function(g){return g.payment==='credit';}).reduce(function(a,g){return a+g.total;},0);
   var totalPaid=totalRev-creditOwed;
   var cpToday=(DB.creditPayments||[]).filter(function(p){return dateInRange(p.date,new Date().toISOString().slice(0,10),new Date().toISOString().slice(0,10));}).reduce(function(a,p){return a+p.amount;},0);
-  var expenses=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&dateInRange(c.date,new Date().toISOString().slice(0,10),new Date().toISOString().slice(0,10));}).reduce(function(a,e){return a+e.amount;},0);
+  var _todayIso=new Date().toISOString().slice(0,10);
+  var expenses=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&dateInRange(c.date,_todayIso,_todayIso);}).reduce(function(a,e){return a+e.amount;},0);
+  var suppPayments=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,_todayIso,_todayIso);}).reduce(function(a,e){return a+e.amount;},0);
 
   var msg=
     '📊 *DAILY CLOSING REPORT*\n'+
@@ -2087,8 +2107,9 @@ function sendDailySummaryWhatsApp(){
     (creditOwed>0?'⚠️ *Credit Owed:* '+fmt(creditOwed)+'\n':'')+
     (cpToday>0?'💳 *Credit Payments:* '+fmt(cpToday)+'\n':'')+
     (expenses>0?'💸 *Expenses:* '+fmt(expenses)+'\n':'')+
+    (suppPayments>0?'🚛 *Supplier Payments:* '+fmt(suppPayments)+'\n':'')+
     '📈 *Profit:* '+fmt(totalProfit)+' ('+Math.round(totalProfit/Math.max(totalRev,1)*100)+'% margin)\n\n'+
-    '💵 *Net cash in:* '+fmt(totalPaid+cpToday-expenses)+'\n\n'+
+    '💵 *Net cash in:* '+fmt(totalPaid+cpToday-expenses-suppPayments)+'\n\n'+
     '_Sent from Great Chid Business Dashboard_';
 
   // Ask for owner's phone
@@ -2244,7 +2265,7 @@ function renderApp(){
   var navHtml='';
   var sections=[
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases']},
-    {label:'Finance',tabs:['expenses','finance','creditcust','reports']},
+    {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing']},
     {label:'Management',tabs:['suppliers','customers','settings','users','activitylog','recyclebin']},
   ];
   // Auto-purge bin items older than 30 days
