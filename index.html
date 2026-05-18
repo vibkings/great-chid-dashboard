@@ -2215,13 +2215,13 @@ function renderApp(){
   var sections=[
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases']},
     {label:'Finance',tabs:['expenses','finance','creditcust','reports']},
-    {label:'Management',tabs:['suppliers','customers','settings','users','recyclebin']},
+    {label:'Management',tabs:['suppliers','customers','settings','users','activitylog','recyclebin']},
   ];
   // Auto-purge bin items older than 30 days
   autoPurgeBin();
   var binCount=(DB.recycleBin||[]).length;
   sections.forEach(function(sec){
-    var items=sec.tabs.filter(function(id){var t=TABS.find(function(x){return x.id===id;});return t&&(id==='users'||id==='recyclebin'?isAdmin():canDo(t.perm));});
+    var items=sec.tabs.filter(function(id){var t=TABS.find(function(x){return x.id===id;});return t&&(id==='users'||id==='recyclebin'||id==='activitylog'?isAdmin():canDo(t.perm));});
     if(!items.length)return;
     navHtml+='<div class="sidebar-section"><div class="sidebar-label">'+sec.label+'</div>';
     items.forEach(function(id){
