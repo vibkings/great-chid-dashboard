@@ -5744,7 +5744,7 @@ function showReturnModal(invoiceId){
       '</div>'+
       '<div class="form-group">'+
         '<label>Refund type</label>'+
-        '<select id="ret-refund" onchange="var bt=document.getElementById(\'ret-bank-row\');if(bt)bt.style.display=(this.value===\'transfer\')?\'\':\'none\';">'+
+        '<select id="ret-refund" onchange="retRefundChange(this.value)">'+
           '<option value="cash">Cash refund</option>'+
           '<option value="transfer">Bank Transfer refund</option>'+
           '<option value="credit">Store credit (add to customer account)</option>'+
@@ -5761,12 +5761,140 @@ function showReturnModal(invoiceId){
           }).join('')+
         '</select>'+
       '</div>'+
+      // Exchange section — built from inventory
+      '<div id="ret-exchange-section" style="display:none;margin-top:8px">'+
+        '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;margin-bottom:10px">'+
+          '<div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:8px">🔄 Exchange Goods</div>'+
+          '<div style="font-size:11px;color:#166534;margin-bottom:10px">Select items the customer is taking in exchange. Total exchange value must not exceed the returned value.</div>'+
+          '<div id="ret-exch-items"></div>'+
+          '<button onclick="retAddExchangeRow()" style="margin-top:8px;padding:5px 12px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">+ Add item</button>'+
+          '<div style="margin-top:10px;padding:8px;background:#fff;border-radius:6px;border:1px solid #86efac">'+
+            '<div style="display:flex;justify-content:space-between;font-size:12px">'+
+              '<span style="color:#374151">Return value:</span><span id="ret-exch-return-val" style="font-weight:700;color:#dc2626">₦0</span>'+
+            '</div>'+
+            '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:4px">'+
+              '<span style="color:#374151">Exchange value:</span><span id="ret-exch-total" style="font-weight:700;color:#15803d">₦0</span>'+
+            '</div>'+
+            '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:6px;border-top:1px solid #86efac;padding-top:6px">'+
+              '<span>Balance:</span><span id="ret-exch-balance" style="color:#374151">₦0</span>'+
+            '</div>'+
+          '</div>'+
+          '<div id="ret-exch-payment-row" style="display:none;margin-top:10px">'+
+            '<div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:6px">⚠️ Exchange value exceeds return — collect balance payment:</div>'+
+            '<div style="display:flex;gap:8px">'+
+              '<select id="ret-exch-paymode" style="flex:1;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">'+
+                '<option value="cash">Cash</option>'+
+                '<option value="pos">POS</option>'+
+                '<option value="transfer">Bank Transfer</option>'+
+              '</select>'+
+              '<input type="number" id="ret-exch-payamt" readonly style="width:120px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#f9fafb">'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
       '<div style="display:flex;gap:8px;margin-top:1rem">'+
         '<button class="btn" onclick="document.getElementById(\'return-modal\').remove()">Cancel</button>'+
         '<button class="btn" style="background:#dc3545;color:#fff;border-color:#dc3545;font-weight:600" onclick="processReturn(\''+invoiceId+'\')">&#8617; Process Return</button>'+
       '</div>'+
     '</div></div>';
   document.body.appendChild(m);
+}
+
+// ── Return modal helpers ─────────────────────────────────────
+function retRefundChange(val){
+  var bankRow=document.getElementById('ret-bank-row');
+  var exchSection=document.getElementById('ret-exchange-section');
+  if(bankRow)bankRow.style.display=val==='transfer'?'':'none';
+  if(exchSection){
+    exchSection.style.display=val==='exchange'?'':'none';
+    if(val==='exchange'){
+      if(!document.getElementById('ret-exch-items').children.length)retAddExchangeRow();
+      retUpdateExchangeTotal();
+    }
+  }
+}
+
+var _retExchRowId=0;
+function retAddExchangeRow(){
+  var cont=document.getElementById('ret-exch-items');
+  if(!cont)return;
+  var rowId='exch-'+(_retExchRowId++);
+  var invOpts=DB.inventory.map(function(i){
+    return '<option value="'+i.id+'" data-price="'+i.sell+'" data-name="'+i.name.replace(/"/g,'&quot;')+'">'+i.name+' (Stock: '+i.qty+' @ '+fmt(i.sell)+')</option>';
+  }).join('');
+  var row=document.createElement('div');
+  row.id=rowId;
+  row.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:6px';
+  row.innerHTML=
+    '<select onchange="retExchItemChange(this,\''+rowId+'\')" style="flex:2;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">'+
+      '<option value="">-- Select item --</option>'+invOpts+
+    '</select>'+
+    '<input type="number" id="'+rowId+'-qty" min="1" value="1" placeholder="Qty" onchange="retUpdateExchangeTotal()" style="width:60px;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;text-align:center">'+
+    '<input type="number" id="'+rowId+'-price" min="0" placeholder="Price" onchange="retUpdateExchangeTotal()" style="width:90px;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;text-align:center">'+
+    '<button onclick="this.parentElement.remove();retUpdateExchangeTotal()" style="padding:4px 8px;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;font-size:14px;cursor:pointer;font-weight:700">&times;</button>';
+  cont.appendChild(row);
+}
+
+function retExchItemChange(sel,rowId){
+  var opt=sel.options[sel.selectedIndex];
+  var price=parseFloat(opt.getAttribute('data-price'))||0;
+  var priceInp=document.getElementById(rowId+'-price');
+  if(priceInp)priceInp.value=price;
+  retUpdateExchangeTotal();
+}
+
+function retUpdateExchangeTotal(){
+  // Calculate current total return value from filled qty inputs
+  var retTotal=0;
+  // Re-calculate from the current return qty + adj price inputs
+  var allQtyInps=document.querySelectorAll('[id^="ret-qty-"]');
+  allQtyInps.forEach(function(inp){
+    var sId=inp.id.replace('ret-qty-','');
+    var qty=parseInt(inp.value)||0;
+    if(qty<=0)return;
+    var priceInp=document.getElementById('ret-price-'+sId);
+    // We need the original unit price — stored as placeholder
+    var origPrice=parseFloat(priceInp?priceInp.placeholder:0)||0;
+    var adjPrice=priceInp&&priceInp.value?parseFloat(priceInp.value):0;
+    var unitPrice=adjPrice>0?adjPrice:origPrice;
+    retTotal+=unitPrice*qty;
+  });
+  // Calculate exchange total
+  var exchTotal=0;
+  var cont=document.getElementById('ret-exch-items');
+  if(cont){
+    Array.from(cont.children).forEach(function(row){
+      var sel=row.querySelector('select');
+      var qtyInp=row.querySelector('[id$="-qty"]');
+      var priceInp=row.querySelector('[id$="-price"]');
+      if(!sel||!sel.value)return;
+      var qty=parseInt(qtyInp?qtyInp.value:1)||1;
+      var price=parseFloat(priceInp?priceInp.value:0)||0;
+      exchTotal+=qty*price;
+    });
+  }
+  var balance=exchTotal-retTotal;
+  var retValEl=document.getElementById('ret-exch-return-val');
+  var exchTotalEl=document.getElementById('ret-exch-total');
+  var balEl=document.getElementById('ret-exch-balance');
+  var payRow=document.getElementById('ret-exch-payment-row');
+  var payAmtInp=document.getElementById('ret-exch-payamt');
+  if(retValEl)retValEl.textContent='₦'+Math.round(retTotal).toLocaleString();
+  if(exchTotalEl)exchTotalEl.textContent='₦'+Math.round(exchTotal).toLocaleString();
+  if(balEl){
+    if(balance>0){
+      balEl.textContent='Customer pays ₦'+Math.round(balance).toLocaleString()+' extra';
+      balEl.style.color='#dc2626';
+    } else if(balance<0){
+      balEl.textContent='Shop refunds ₦'+Math.round(Math.abs(balance)).toLocaleString()+' change';
+      balEl.style.color='#15803d';
+    } else {
+      balEl.textContent='Even exchange';
+      balEl.style.color='#374151';
+    }
+  }
+  if(payRow)payRow.style.display=balance>0?'block':'none';
+  if(payAmtInp)payAmtInp.value=balance>0?Math.round(balance):'';
 }
 
 function processReturn(invoiceId){
@@ -5830,7 +5958,57 @@ function processReturn(invoiceId){
     DB.salesReturns.push({id:uid(),invoiceId:invoiceId,invoiceNum:items[0].invoiceNum||invoiceId,itemId:s.id,itemName:s.name,qty:qty,refundAmt:refundAmt,adjPrice:adjPrice>0?adjPrice:null,origUnitPrice:origUnitPrice,refundType:refundType,reason:reason,custId:items[0].custId,custName:items[0].custName||'Walk-in customer',date:date,month:month,by:DB.currentUser.name});
   });
   if(!returnedItems.length){alert('Enter at least one item quantity to return.');return;}
-  // Handle refund
+
+  // ── Handle exchange goods ─────────────────────────────────────
+  var exchangeItems=[];
+  var exchTotal=0;
+  if(refundType==='exchange'){
+    var exchCont=document.getElementById('ret-exch-items');
+    if(exchCont){
+      var valid=true;
+      Array.from(exchCont.children).forEach(function(row){
+        var sel=row.querySelector('select');
+        var qtyInp=row.querySelector('[id$="-qty"]');
+        var priceInp=row.querySelector('[id$="-price"]');
+        if(!sel||!sel.value)return;
+        var invItem=DB.inventory.find(function(i){return i.id==sel.value;});
+        if(!invItem)return;
+        var qty=parseInt(qtyInp?qtyInp.value:1)||1;
+        var price=parseFloat(priceInp?priceInp.value:0)||invItem.sell;
+        if(qty>invItem.qty){
+          alert('Not enough stock for "'+invItem.name+'". Available: '+invItem.qty+', requested: '+qty);
+          valid=false;return;
+        }
+        exchTotal+=qty*price;
+        exchangeItems.push({invItem:invItem,qty:qty,price:price,total:qty*price});
+      });
+      if(!valid)return;
+      if(exchangeItems.length===0){alert('Please add at least one item for exchange.');return;}
+      // Deduct exchanged items from inventory
+      exchangeItems.forEach(function(e){
+        var before=e.invItem.qty;
+        e.invItem.qty-=e.qty;
+        DB.adjLog.push({id:uid(),itemId:e.invItem.id,itemName:e.invItem.name,type:'remove',
+          reason:'Exchange — Return Invoice #'+items[0].invoiceNum,
+          before:before,change:-e.qty,after:e.invItem.qty,date:date,by:DB.currentUser.name});
+      });
+      // Handle balance payment if exchange > return
+      var balance=Math.round(exchTotal-totalRefund);
+      if(balance>0){
+        var exchPayMode=(document.getElementById('ret-exch-paymode')||{}).value||'cash';
+        DB.cashflow.push({id:uid(),
+          desc:'Exchange balance payment — Return of Invoice #'+items[0].invoiceNum+' ('+items[0].custName+')',
+          amount:balance,type:'in',cat:'Sales',payMode:exchPayMode,date:date,month:month,isExchange:true});
+      } else if(balance<0){
+        // Shop owes change back
+        DB.cashflow.push({id:uid(),
+          desc:'Exchange change given — Return of Invoice #'+items[0].invoiceNum+' ('+items[0].custName+')',
+          amount:Math.abs(balance),type:'out',cat:'Sales Return',payMode:'cash',date:date,month:month,isExchange:true});
+      }
+    }
+  }
+
+  // ── Handle cash/transfer/credit refund ───────────────────────
   var retBankId=document.getElementById('ret-bank-id')?document.getElementById('ret-bank-id').value:'';
   if(refundType==='cash'){
     DB.cashflow.push({id:uid(),desc:'Sales return refund — Invoice #'+items[0].invoiceNum+' ('+items[0].custName+')',amount:totalRefund,type:'out',cat:'Sales Return',payMode:'cash',date:date,month:month,isReturn:true});
@@ -5842,12 +6020,16 @@ function processReturn(invoiceId){
     var cust=DB.customers.find(function(c){return c.id==items[0].custId;});
     if(cust)cust.creditBalance=Math.max(0,(cust.creditBalance||0)-totalRefund);
   }
+
   saveData();
-  logActivity('Sales return','Invoice #'+(items[0].invoiceNum||invoiceId)+' — '+returnedItems.map(function(r){return r.name+' ×'+r.qty;}).join(', ')+(totalRefund>0?' — Refund: '+fmt(totalRefund):''),refundType);
+  var exchSummary=exchangeItems.length?'\n\n🔄 Exchanged for:\n'+exchangeItems.map(function(e){return e.invItem.name+' × '+e.qty+' @ ₦'+Math.round(e.price).toLocaleString();}).join('\n'):'';
+  var balance2=Math.round(exchTotal-totalRefund);
+  var balMsg=refundType==='exchange'&&exchangeItems.length?(balance2>0?'\n💰 Balance collected: ₦'+Math.round(balance2).toLocaleString():balance2<0?'\n💵 Change given: ₦'+Math.round(Math.abs(balance2)).toLocaleString():'\n✅ Even exchange'):'';
+  logActivity('Sales return','Invoice #'+(items[0].invoiceNum||invoiceId)+' — '+returnedItems.map(function(r){return r.name+' ×'+r.qty;}).join(', ')+(totalRefund>0?' — Refund: '+fmt(totalRefund):'')+exchSummary,refundType);
   document.getElementById('return-modal').remove();
   renderApp();
   var refundModeLabel=refundType==='cash'?'Cash':refundType==='transfer'?'Bank Transfer':refundType==='credit'?'Store Credit':'Exchange';
-  alert('✅ Return processed!\n\n'+returnedItems.map(function(r){return r.name+' × '+r.qty+(r.adjPrice?' @ ₦'+Math.round(r.adjPrice).toLocaleString()+' (adjusted)':'');}).join('\n')+'\n\nStock added back to inventory.'+(totalRefund>0?'\nTotal Refund: ₦'+Math.round(totalRefund).toLocaleString()+' via '+refundModeLabel:''));
+  alert('✅ Return processed!\n\n'+returnedItems.map(function(r){return r.name+' × '+r.qty+(r.adjPrice?' @ ₦'+Math.round(r.adjPrice).toLocaleString()+' (adjusted)':'');}).join('\n')+'\n\nStock added back to inventory.'+(totalRefund>0&&refundType!=='exchange'?'\nTotal Refund: ₦'+Math.round(totalRefund).toLocaleString()+' via '+refundModeLabel:'')+exchSummary+balMsg);
 }
 
 function checkDupInvoice(val){
