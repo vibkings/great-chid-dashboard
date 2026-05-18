@@ -7399,6 +7399,63 @@ function printPurchaseRecord(id){
 // ============================================================
 // PURCHASES TAB
 // ============================================================
+function receiveDelivery(deliveryId){
+  var d=DB.pendingDeliveries.find(function(x){return x.id==deliveryId;});
+  if(!d){alert('Delivery record not found.');return;}
+
+  var remaining=d.qtyPending;
+  var qtyToReceive=parseInt(prompt(
+    'Receive delivery for: '+d.itemName+
+    '\nSupplier: '+d.supName+
+    '\nPending qty: '+remaining+
+    '\n\nHow many units are you receiving now?'
+    ,remaining));
+
+  if(isNaN(qtyToReceive)||qtyToReceive<=0){return;}
+  if(qtyToReceive>remaining){
+    alert('Cannot receive more than pending qty ('+remaining+').');return;
+  }
+
+  // Update inventory stock
+  var invItem=DB.inventory.find(function(i){return i.id==d.itemId;});
+  if(invItem){
+    var before=invItem.qty;
+    invItem.qty+=qtyToReceive;
+    DB.adjLog.push({id:uid(),itemId:invItem.id,itemName:invItem.name,
+      type:'add',reason:'Pending delivery received — Invoice #'+d.invoiceNum+' from '+d.supName,
+      before:before,change:qtyToReceive,after:invItem.qty,
+      date:new Date().toLocaleDateString(),by:DB.currentUser.name});
+  }
+
+  // Update delivery record
+  d.qtyReceived=(d.qtyReceived||0)+qtyToReceive;
+  d.qtyPending=d.qtyOrdered-d.qtyReceived;
+  d.lastReceivedDate=new Date().toLocaleDateString();
+  if(d.qtyPending<=0){
+    d.status='complete';
+    d.completedDate=new Date().toLocaleDateString();
+  }
+
+  // Update original purchase item received qty
+  var purchase=DB.purchases.find(function(p){return p.id==d.purchaseId||p.invoiceNum==d.invoiceNum;});
+  if(purchase){
+    var pItem=purchase.items.find(function(l){return l.name===d.itemName||(l.itemId&&l.itemId==d.itemId);});
+    if(pItem){
+      pItem.qtyReceived=(pItem.qtyReceived||0)+qtyToReceive;
+      pItem.qtyPending=pItem.qtyOrdered-pItem.qtyReceived;
+    }
+  }
+
+  logActivity('Delivery received',
+    d.itemName+' × '+qtyToReceive+' received from '+d.supName+' — Invoice #'+d.invoiceNum+
+    (d.qtyPending<=0?' (Fully delivered)':' ('+d.qtyPending+' still pending)'),
+    'purchase');
+
+  saveData();
+  renderPanel();
+  showToast('✅ '+qtyToReceive+' units of '+d.itemName+' added to stock.'+(d.qtyPending<=0?' Delivery complete!':' '+d.qtyPending+' still pending.'));
+}
+
 function buildPurchases(){
   if(!canDo('purchases'))return '<div class="empty">Access denied.</div>';
   var supOpts=DB.suppliers.map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('');
@@ -7438,7 +7495,7 @@ function buildPurchases(){
     var openPending=DB.pendingDeliveries.filter(function(d){return d.status!=='complete';});
     if(openPending.length){
       pendingRows='<p class="sec-title" style="margin-top:1.5rem;color:var(--warning-text)">&#128230; Pending Deliveries ('+openPending.length+')</p>'+
-        '<div class="tbl-wrap"><table><thead><tr><th>Date ordered</th><th>Invoice #</th><th>Supplier</th><th>Item</th><th style="text-align:center">Ordered</th><th style="text-align:center">Received</th><th style="text-align:center">Pending</th><th>Status</th></tr></thead><tbody>'+
+        '<div class="tbl-wrap"><table><thead><tr><th>Date ordered</th><th>Invoice #</th><th>Supplier</th><th>Item</th><th style="text-align:center">Ordered</th><th style="text-align:center">Received</th><th style="text-align:center">Pending</th><th>Status</th><th></th></tr></thead><tbody>'+
         openPending.map(function(d){
           return '<tr style="background:#fffbeb">'+
             '<td>'+d.dateOrdered+'</td>'+
@@ -7449,6 +7506,7 @@ function buildPurchases(){
             '<td style="text-align:center;color:var(--success)">'+d.qtyReceived+'</td>'+
             '<td style="text-align:center;color:var(--danger);font-weight:700">'+d.qtyPending+'</td>'+
             '<td><span class="badge low">Pending</span></td>'+
+            '<td><button class="btn sm" onclick="receiveDelivery(\''+d.id+'\')" style="background:#16a34a;color:#fff;border-color:#16a34a;font-size:11px;font-weight:700">&#10003; Receive</button></td>'+
           '</tr>';
         }).join('')+
         '</tbody></table></div>';
