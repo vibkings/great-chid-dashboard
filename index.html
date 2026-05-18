@@ -5819,27 +5819,77 @@ function retAddExchangeRow(){
   var cont=document.getElementById('ret-exch-items');
   if(!cont)return;
   var rowId='exch-'+(_retExchRowId++);
-  var invOpts=DB.inventory.map(function(i){
-    return '<option value="'+i.id+'" data-price="'+i.sell+'" data-name="'+i.name.replace(/"/g,'&quot;')+'">'+i.name+' (Stock: '+i.qty+' @ '+fmt(i.sell)+')</option>';
-  }).join('');
   var row=document.createElement('div');
   row.id=rowId;
-  row.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:6px';
+  row.setAttribute('data-itemid','');
+  row.style.cssText='margin-bottom:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px';
   row.innerHTML=
-    '<select onchange="retExchItemChange(this,\''+rowId+'\')" style="flex:2;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">'+
-      '<option value="">-- Select item --</option>'+invOpts+
-    '</select>'+
-    '<input type="number" id="'+rowId+'-qty" min="1" value="1" placeholder="Qty" onchange="retUpdateExchangeTotal()" style="width:60px;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;text-align:center">'+
-    '<input type="number" id="'+rowId+'-price" min="0" placeholder="Price" onchange="retUpdateExchangeTotal()" style="width:90px;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;text-align:center">'+
-    '<button onclick="this.parentElement.remove();retUpdateExchangeTotal()" style="padding:4px 8px;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;font-size:14px;cursor:pointer;font-weight:700">&times;</button>';
+    '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">'+
+      '<div style="flex:1;position:relative">'+
+        '<input type="text" id="'+rowId+'-search" placeholder="Type item name to search..." autocomplete="off"'+
+          ' oninput="retExchSearch(this,\''+rowId+'\')"'+
+          ' onfocus="retExchSearch(this,\''+rowId+'\',true)"'+
+          ' onblur="setTimeout(function(){var d=document.getElementById(\''+rowId+'-dd\');if(d)d.style.display=\'none\';},200)"'+
+          ' style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;box-sizing:border-box">'+
+        '<div id="'+rowId+'-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:180px;overflow-y:auto;margin-top:2px"></div>'+
+      '</div>'+
+      '<button onclick="var r=document.getElementById(\''+rowId+'\');if(r){r.remove();retUpdateExchangeTotal();}" style="padding:4px 8px;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;font-size:14px;cursor:pointer;font-weight:700;flex-shrink:0">&times;</button>'+
+    '</div>'+
+    '<div id="'+rowId+'-selected" style="display:none;font-size:11px;color:#15803d;font-weight:600;margin-bottom:6px;padding:4px 8px;background:#f0fdf4;border-radius:4px"></div>'+
+    '<div style="display:flex;gap:6px;align-items:center">'+
+      '<div style="flex:1;font-size:11px;color:#6b7280">Qty:</div>'+
+      '<input type="number" id="'+rowId+'-qty" min="1" value="1" placeholder="Qty" oninput="retUpdateExchangeTotal()" style="width:70px;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;text-align:center">'+
+      '<div style="flex:1;font-size:11px;color:#6b7280">Price (₦):</div>'+
+      '<input type="number" id="'+rowId+'-price" min="0" placeholder="0" oninput="retUpdateExchangeTotal()" style="width:100px;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;text-align:center">'+
+    '</div>';
   cont.appendChild(row);
 }
 
-function retExchItemChange(sel,rowId){
-  var opt=sel.options[sel.selectedIndex];
-  var price=parseFloat(opt.getAttribute('data-price'))||0;
+function retExchSearch(inp, rowId, showAll){
+  var dd=document.getElementById(rowId+'-dd');
+  if(!dd)return;
+  var val=(inp.value||'').toLowerCase().trim();
+  var matches=DB.inventory.filter(function(i){
+    return showAll||!val||i.name.toLowerCase().indexOf(val)>=0||(i.cat||'').toLowerCase().indexOf(val)>=0;
+  }).slice(0,30);
+  if(!matches.length){dd.style.display='none';return;}
+  dd.style.display='block';
+  dd.innerHTML=matches.map(function(i){
+    var stockColor=i.qty===0?'#dc2626':i.qty<=i.minQty?'#d97706':'#16a34a';
+    var stockLabel=i.qty===0?'Out':''+i.qty+' left';
+    var safeName=i.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    return '<div onmousedown="event.preventDefault();retExchSelectItem(\''+rowId+'\','+i.id+',\''+safeName+'\','+i.sell+','+i.qty+')"'+
+      ' style="padding:7px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;font-size:12px"'+
+      ' onmouseover="this.style.background=\'#f0fdf4\'" onmouseout="this.style.background=\'\'">'+
+      '<div>'+
+        '<div style="font-weight:600;color:#111">'+i.name+'</div>'+
+        '<div style="font-size:10px;color:#6b7280">'+(i.cat||'')+'</div>'+
+      '</div>'+
+      '<div style="text-align:right;flex-shrink:0;margin-left:8px">'+
+        '<div style="font-weight:700;color:#1a237e">'+fmt(i.sell)+'</div>'+
+        '<div style="font-size:10px;font-weight:600;color:'+stockColor+'">'+stockLabel+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function retExchSelectItem(rowId, itemId, itemName, itemPrice, itemStock){
+  var row=document.getElementById(rowId);
+  if(!row)return;
+  row.setAttribute('data-itemid', itemId);
+  var searchInp=document.getElementById(rowId+'-search');
+  var dd=document.getElementById(rowId+'-dd');
+  var selectedLabel=document.getElementById(rowId+'-selected');
   var priceInp=document.getElementById(rowId+'-price');
-  if(priceInp)priceInp.value=price;
+  var qtyInp=document.getElementById(rowId+'-qty');
+  if(searchInp)searchInp.value=itemName;
+  if(dd)dd.style.display='none';
+  if(selectedLabel){
+    selectedLabel.style.display='block';
+    selectedLabel.textContent='✓ '+itemName+' — Stock: '+itemStock+' @ '+fmt(itemPrice);
+  }
+  if(priceInp&&!priceInp.value)priceInp.value=itemPrice;
+  if(qtyInp)qtyInp.setAttribute('max', itemStock);
   retUpdateExchangeTotal();
 }
 
@@ -5864,10 +5914,10 @@ function retUpdateExchangeTotal(){
   var cont=document.getElementById('ret-exch-items');
   if(cont){
     Array.from(cont.children).forEach(function(row){
-      var sel=row.querySelector('select');
+      var itemId=row.getAttribute('data-itemid');
+      if(!itemId)return;
       var qtyInp=row.querySelector('[id$="-qty"]');
       var priceInp=row.querySelector('[id$="-price"]');
-      if(!sel||!sel.value)return;
       var qty=parseInt(qtyInp?qtyInp.value:1)||1;
       var price=parseFloat(priceInp?priceInp.value:0)||0;
       exchTotal+=qty*price;
@@ -5967,11 +6017,11 @@ function processReturn(invoiceId){
     if(exchCont){
       var valid=true;
       Array.from(exchCont.children).forEach(function(row){
-        var sel=row.querySelector('select');
+        var itemId=row.getAttribute('data-itemid');
+        if(!itemId)return;
         var qtyInp=row.querySelector('[id$="-qty"]');
         var priceInp=row.querySelector('[id$="-price"]');
-        if(!sel||!sel.value)return;
-        var invItem=DB.inventory.find(function(i){return i.id==sel.value;});
+        var invItem=DB.inventory.find(function(i){return i.id==itemId;});
         if(!invItem)return;
         var qty=parseInt(qtyInp?qtyInp.value:1)||1;
         var price=parseFloat(priceInp?priceInp.value:0)||invItem.sell;
