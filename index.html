@@ -1445,14 +1445,14 @@ function buildClosingReport(){
   var suppCash=suppPayToday.filter(function(e){return !e.payMode||e.payMode==='cash';}).reduce(function(a,e){return a+e.amount;},0);
   var suppTransfer=suppPayToday.filter(function(e){return e.payMode==='transfer';}).reduce(function(a,e){return a+e.amount;},0);
   var suppPos=suppPayToday.filter(function(e){return e.payMode==='pos';}).reduce(function(a,e){return a+e.amount;},0);
+  // Returns today
+  var retToday=(DB.salesReturns||[]).filter(function(r){return dateInRange(r.date,closingDate,closingDate);});
+  var retTotal=retToday.reduce(function(a,r){return a+(r.refundAmt||0);},0);
   // Balance after expenses
   var balCash=cash-expCash;
   var balTransfer=transfer-expTransfer;
   var balPos=pos-expPos;
   var balTotal=(cash+pos+transfer+partPaid+cpTotal+depTotal)-(expTotal+suppPayTotal+retTotal);
-  // Returns today
-  var retToday=(DB.salesReturns||[]).filter(function(r){return dateInRange(r.date,closingDate,closingDate);});
-  var retTotal=retToday.reduce(function(a,r){return a+(r.refundAmt||0);},0);
   // By staff
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
