@@ -1731,13 +1731,20 @@ function getBankName(id){var b=DB.banks.find(function(b){return b.id==id;});retu
 function getPosName(id){var p=DB.posTerminals.find(function(p){return p.id==id;});return p?p.name:' - ';}
 function payModeLabel(s){
   if(s.payment==='deposit'||s.payMode==='deposit') return 'Deposit';
+  if(s.payment==='credit') return '—'; // credit sales have no payment mode
   if(s.payMode==='split'&&s.splitPayment){
     var sp=s.splitPayment;
-    function modeStr(m,amt,bid,pid){var l=m==='pos'?'POS'+(pid?' ('+getPosName(pid)+')':''):m==='transfer'?'Transfer'+(bid?' ('+getBankName(bid)+')':''):'Cash';return l+' '+fmt(amt);}
-    return modeStr(sp.mode1,sp.amt1,sp.bankId,sp.posId)+' + '+modeStr(sp.mode2,sp.amt2,sp.bankId,sp.posId);
+    // Use the bank/pos IDs stored on the split object itself
+    function modeStr(m,amt){
+      if(m==='pos') return 'POS'+(sp.posId?' ('+getPosName(sp.posId)+')':'')+' '+fmt(amt);
+      if(m==='transfer') return 'Transfer'+(sp.bankId?' → '+getBankName(sp.bankId):'')+' '+fmt(amt);
+      return 'Cash '+fmt(amt);
+    }
+    return modeStr(sp.mode1,sp.amt1)+' + '+modeStr(sp.mode2,sp.amt2);
   }
   if(s.payMode==='pos')return 'POS'+(s.posId?' ('+getPosName(s.posId)+')':'');
   if(s.payMode==='transfer')return 'Transfer'+(s.bankId?' → '+getBankName(s.bankId):'');
+  if(s.payment==='part') return 'Part — '+(s.payMode==='pos'?'POS':s.payMode==='transfer'?'Transfer':'Cash');
   return 'Cash';
 }
 function bankOpts(){return DB.banks.map(function(b){return '<option value="'+b.id+'">'+b.name+(b.acct?'  -  '+b.acct:'')+'</option>';}).join('');}
