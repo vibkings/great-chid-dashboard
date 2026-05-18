@@ -1442,7 +1442,7 @@ function buildClosingReport(){
   var staffRows=Object.keys(byStaff).map(function(s){var st=byStaff[s];return '<tr><td>'+s+'</td><td style="text-align:center">'+st.count+'</td><td style="text-align:right">'+fmt(st.total)+'</td><td style="text-align:right;color:#15803d">'+fmt(st.profit)+'</td></tr>';}).join('');
   // Invoice rows
   var invRows=invList.map(function(g,i){
-    var payBadge=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':g.payment==='part'?'<span class="badge low">Part</span>':'<span class="badge ok">Cash</span>';
+    var payBadge=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':g.payment==='part'?'<span class="badge low">Part</span>':g.payment==='split'?'<span class="badge" style="background:#6f42c1;color:#fff">Split</span>':g.payMode==='pos'?'<span class="badge" style="background:#0891b2;color:#fff">POS</span>':g.payMode==='transfer'?'<span class="badge" style="background:#0d6efd;color:#fff">Transfer</span>':'<span class="badge ok">Cash</span>';
     return '<tr><td>'+(i+1)+'</td><td style="font-weight:700">'+g.invoiceNum+'</td><td>'+g.custName+'</td><td>'+payBadge+'</td><td style="text-align:right">'+fmt(g.total)+'</td><td style="text-align:right;color:#15803d">'+fmt(g.profit)+'</td><td style="font-size:11px">'+payModeLabel(g)+'</td><td>'+g.seller+'</td></tr>';
   }).join('');
 
@@ -4562,7 +4562,7 @@ function printCustomerReport(custId){
   var custSales=DB.sales.filter(function(s){return s.custId==custId;});
   var invGroups={};custSales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invGroups[k])invGroups[k]={invoiceNum:k,date:s.date,items:[],total:0,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,seller:s.seller,_s:s};invGroups[k].items.push(s);invGroups[k].total+=s.total;});
   var invKeys=Object.keys(invGroups).sort();
-  var rows=invKeys.map(function(k){var g=invGroups[k];var items=g.items.map(function(s){return s.name+' ×'+s.qty;}).join(', ');return '<tr><td>'+g.invoiceNum+'</td><td>'+g.date+'</td><td>'+items+'</td><td style="text-align:right">'+fmt(g.total)+'</td><td>'+(g.payment==='credit'?'Credit':'Cash')+' / '+payModeLabel(g)+'</td><td>'+g.seller+'</td></tr>';}).join('');
+  var rows=invKeys.map(function(k){var g=invGroups[k];var items=g.items.map(function(s){return s.name+' ×'+s.qty;}).join(', ');var custPayLabel=g.payment==='credit'?'Credit':g.payment==='split'?'Split':g.payment==='part'?'Part':g.payment==='deposit'?'Deposit':g.payMode==='pos'?'POS':g.payMode==='transfer'?'Transfer':'Cash';return '<tr><td>'+g.invoiceNum+'</td><td>'+g.date+'</td><td>'+items+'</td><td style="text-align:right">'+fmt(g.total)+'</td><td>'+custPayLabel+' / '+payModeLabel(g)+'</td><td>'+g.seller+'</td></tr>';}).join('');
   var grandTotal=custSales.reduce(function(a,s){return a+s.total;},0);
   var custDeposits=(DB.deposits||[]).filter(function(d){return String(d.custId)===String(custId);});
   var depositTotal=custDeposits.reduce(function(a,d){return a+d.amount;},0);
@@ -6041,7 +6041,7 @@ function buildSales(){
       '<div style="margin-top:3px"><span style="background:#fff3cd;color:#664d03;border:1px solid #ffe69c;border-radius:10px;font-size:10px;font-weight:700;padding:2px 7px">⏳ Goods not yet supplied</span></div>':
       (g.items[0]&&g.items[0].supplyDate&&g.items[0].supplyDate!==g.date?
         '<div style="margin-top:3px"><span style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;border-radius:10px;font-size:10px;font-weight:700;padding:2px 7px">✅ Supplied: '+g.items[0].supplyDate+'</span></div>':'');
-    var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='part'?'<span class="badge low">Part pay</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':'<span class="badge ok">Cash</span>';
+    var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='part'?'<span class="badge low">Part pay</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':g.payment==='split'?'<span class="badge" style="background:#6f42c1;color:#fff">Split</span>':g.payMode==='pos'?'<span class="badge" style="background:#0891b2;color:#fff">POS</span>':g.payMode==='transfer'?'<span class="badge" style="background:#0d6efd;color:#fff">Transfer</span>':'<span class="badge ok">Cash</span>';
     return '<tr'+(isPending?' style="background:#fffbeb"':'')+
       ' data-inv="'+(g.invoiceNum||'').toLowerCase()+'"'+
       ' data-cust="'+(g.custName||'').toLowerCase()+'"'+
@@ -6327,7 +6327,7 @@ function viewInvoiceDetail(invNum){
     '</tr>';
   }).join('');
 
-  var payType=s0.payment==='credit'?'<span style="color:#dc3545;font-weight:700">Credit</span>':s0.payment==='part'?'<span style="color:#856404;font-weight:700">Part payment</span>':'<span style="color:#198754;font-weight:700">Cash</span>';
+  var payType=s0.payment==='credit'?'<span style="color:#dc3545;font-weight:700">Credit</span>':s0.payment==='part'?'<span style="color:#856404;font-weight:700">Part payment</span>':s0.payment==='split'?'<span style="color:#6f42c1;font-weight:700">Split payment</span>':s0.payment==='deposit'?'<span style="color:#0d6efd;font-weight:700">Deposit</span>':s0.payMode==='pos'?'<span style="color:#0891b2;font-weight:700">POS</span>':s0.payMode==='transfer'?'<span style="color:#0d6efd;font-weight:700">Transfer</span>':'<span style="color:#198754;font-weight:700">Cash</span>';
 
   var modal=document.createElement('div');
   modal.id='inv-detail-modal';
@@ -6399,7 +6399,7 @@ function shareInvoiceWhatsApp(invNum){
   Object.keys(invMap).forEach(function(name){
     itemLines.push('  • '+name+' — '+fmt(invMap[name]));
   });
-  var payLabel=s0.payment==='credit'?'Credit (amount owed)':s0.payment==='part'?'Part payment (paid: '+fmt(s0.partPayment||0)+')':s0.payment==='deposit'?'Deposit':'Cash';
+  var payLabel=s0.payment==='credit'?'Credit (amount owed)':s0.payment==='part'?'Part payment (paid: '+fmt(s0.partPayment||0)+')':s0.payment==='deposit'?'Deposit':s0.payment==='split'?'Split payment':s0.payMode==='pos'?'POS':s0.payMode==='transfer'?'Bank Transfer':'Cash';
   var msg=
     '🧾 *INVOICE #'+invNum+'*\n'+
     '📅 Date: '+s0.date+'\n'+
