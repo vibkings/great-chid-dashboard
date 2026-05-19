@@ -1477,7 +1477,19 @@ function buildClosingReport(){
   var suppPos=suppPayToday.filter(function(e){return e.payMode==='pos';}).reduce(function(a,e){return a+e.amount;},0);
   // Returns today
   var retToday=(DB.salesReturns||[]).filter(function(r){return dateInRange(r.date,closingDate,closingDate);});
-  var retTotal=retToday.reduce(function(a,r){return a+(r.refundAmt||0);},0);
+  // Only count actual cash/transfer refunds — exclude exchanges (no money paid out)
+  // Use cashflow isReturn entries which are only created when real money leaves
+  var retTotal=DB.cashflow.filter(function(c){
+    return c.isReturn&&c.type==='out'&&dateInRange(c.date,closingDate,closingDate);
+  }).reduce(function(a,c){return a+c.amount;},0);
+  // Add exchange balance payments to the appropriate mode totals
+  DB.cashflow.filter(function(c){
+    return c.isExchange&&c.type==='in'&&dateInRange(c.date,closingDate,closingDate);
+  }).forEach(function(c){
+    if(c.payMode==='pos')pos+=c.amount;
+    else if(c.payMode==='transfer')transfer+=c.amount;
+    else cash+=c.amount;
+  });
   // Balance after expenses
   var balCash=cash-expCash;
   var balTransfer=transfer-expTransfer;
@@ -1637,7 +1649,9 @@ function printClosingReport(){
   var expCash2=expToday2.filter(function(e){return !e.payMode||e.payMode==='cash';}).reduce(function(a,e){return a+e.amount;},0);
   var expTransfer2=expToday2.filter(function(e){return e.payMode==='transfer';}).reduce(function(a,e){return a+e.amount;},0);
   var expPos2=expToday2.filter(function(e){return e.payMode==='pos';}).reduce(function(a,e){return a+e.amount;},0);
-  var retTotal2=(DB.salesReturns||[]).filter(function(r){return dateInRange(r.date,closingDate,closingDate);}).reduce(function(a,r){return a+(r.refundAmt||0);},0);
+  var retTotal2=DB.cashflow.filter(function(c){
+    return c.isReturn&&c.type==='out'&&dateInRange(c.date,closingDate,closingDate);
+  }).reduce(function(a,c){return a+c.amount;},0);
   var balCash2=cash-expCash2; var balPos2=pos-expPos2; var balTransfer2=transfer-expTransfer2;
   var balTotal2=(cash+pos+transfer+partPaid+cpTotal+depTotal)-(expTotal+suppPayTotal2+retTotal2);
   var byStaff={};
@@ -8345,6 +8359,16 @@ function buildReports(){
       return true;
     }).forEach(function(d){
       incEvents.push({date:d.date,desc:'Customer deposit — '+d.custName+(d.note?' ('+d.note+')':''),cat:'Deposit',amount:d.amount,mode:payModeLabel(d)});
+    });
+
+    // 4. Exchange balance payments (customer paid extra during exchange)
+    (DB.cashflow||[]).filter(function(c){
+      if(!c.isExchange||c.type!=='in')return false;
+      if(reportDateFrom&&!dateInRange(c.date,reportDateFrom,''))return false;
+      if(reportDateTo&&!dateInRange(c.date,'',reportDateTo))return false;
+      return true;
+    }).forEach(function(c){
+      incEvents.push({date:c.date,desc:c.desc||'Exchange balance payment',cat:'Exchange balance',amount:c.amount,mode:c.payMode==='pos'?'POS':c.payMode==='transfer'?'Transfer':'Cash'});
     });
 
     // Sort by date desc
