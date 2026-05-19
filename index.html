@@ -1455,7 +1455,7 @@ function buildClosingReport(){
   });
   var totalPaid=cash+pos+transfer+partPaid+deposit;
   // Credit payments received today
-  var cpToday=(DB.creditPayments||[]).filter(function(p){return dateInRange(p.date,closingDate,closingDate);});
+  var cpToday=(DB.creditPayments||[]).filter(function(p){return p.payMode!=='writeoff'&&dateInRange(p.date,closingDate,closingDate);});
   var cpTotal=cpToday.reduce(function(a,p){return a+p.amount;},0);
   // Deposits received today
   var depToday=(DB.deposits||[]).filter(function(d){return d.amount>0&&dateInRange(d.date,closingDate,closingDate);});
@@ -2122,7 +2122,7 @@ function sendDailySummaryWhatsApp(){
   var totalProfit=invList.reduce(function(a,g){return a+g.profit;},0);
   var creditOwed=invList.filter(function(g){return g.payment==='credit';}).reduce(function(a,g){return a+g.total;},0);
   var totalPaid=totalRev-creditOwed;
-  var cpToday=(DB.creditPayments||[]).filter(function(p){return dateInRange(p.date,new Date().toISOString().slice(0,10),new Date().toISOString().slice(0,10));}).reduce(function(a,p){return a+p.amount;},0);
+  var cpToday=(DB.creditPayments||[]).filter(function(p){return p.payMode!=='writeoff'&&dateInRange(p.date,new Date().toISOString().slice(0,10),new Date().toISOString().slice(0,10));}).reduce(function(a,p){return a+p.amount;},0);
   var _todayIso=new Date().toISOString().slice(0,10);
   var expenses=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&dateInRange(c.date,_todayIso,_todayIso);}).reduce(function(a,e){return a+e.amount;},0);
   var suppPayments=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,_todayIso,_todayIso);}).reduce(function(a,e){return a+e.amount;},0);
@@ -8334,7 +8334,7 @@ function buildReports(){
       if(reportDateTo&&!dateInRange(p.date,'',reportDateTo))return false;
       return true;
     }).forEach(function(p){
-      incEvents.push({date:p.date,desc:'Credit payment — '+p.custName,cat:'Credit payment',amount:p.amount,mode:payModeLabel(p)});
+      if(p.payMode!=='writeoff')incEvents.push({date:p.date,desc:'Credit payment — '+p.custName,cat:'Credit payment',amount:p.amount,mode:payModeLabel(p)});
     });
 
     // 3. Customer deposits (new deposits, not applied ones)
@@ -8679,7 +8679,7 @@ function printIncomeReport(){
     if(reportDateTo&&!dateInRange(p.date,'',reportDateTo))return false;
     return true;
   }).forEach(function(p){
-    incEvents.push({date:p.date,desc:'Credit payment — '+p.custName,cat:'Credit payment',amount:p.amount,mode:payModeLabel(p)});
+    if(p.payMode!=='writeoff')incEvents.push({date:p.date,desc:'Credit payment — '+p.custName,cat:'Credit payment',amount:p.amount,mode:payModeLabel(p)});
   });
   (DB.deposits||[]).filter(function(d){
     if(d.amount<=0)return false;
