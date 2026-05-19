@@ -6899,14 +6899,14 @@ function editInvoice(invNum){
           '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Bank account</label>'+
           '<select id="ei-bankid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select bank --</option>'+
-            (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(b.id==s0.bankId?' selected':'')+'>'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('')+
+            (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(String(b.id)===String(s0.bankId)?' selected':'')+'>'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
         '<div id="ei-pos-wrap" style="display:'+(s0.payMode==='pos'&&s0.payment!=='split'?'block':'none')+'">'+
           '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">POS terminal</label>'+
           '<select id="ei-posid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select POS --</option>'+
-            (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(p.id==s0.posId?' selected':'')+'>'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
+            (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(String(p.id)===String(s0.posId)?' selected':'')+'>'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
         '<div id="ei-partamt-wrap" style="display:'+(s0.payment==='part'?'block':'none')+'">'+
@@ -6918,9 +6918,16 @@ function editInvoice(invNum){
         '<thead><tr style="background:#f5f5f5"><th style="padding:6px;text-align:left">Item</th><th style="padding:6px">Qty</th><th style="padding:6px">Unit price</th><th style="padding:6px">Disc amt</th><th style="padding:6px">Total</th></tr></thead>'+
         '<tbody>'+itemRows+'</tbody>'+
       '</table>'+
-      '<div style="margin-bottom:16px">'+
-        '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reason for edit *</label>'+
-        '<input type="text" id="ei-reason" placeholder="e.g. Wrong price entered, customer negotiated discount" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'+
+        '<div>'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Invoice-level discount (₦)</label>'+
+          '<input type="number" id="ei-inv-disc" value="'+(s0.invoiceDiscAmt||0)+'" min="0" placeholder="0" style="width:100%;padding:8px;border:1px solid #f59e0b;border-radius:6px;font-size:13px" title="Applied to the whole invoice total">'+
+          '<div style="font-size:10px;color:var(--text3);margin-top:3px">Reduces the overall invoice total</div>'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reason for edit *</label>'+
+          '<input type="text" id="ei-reason" placeholder="e.g. Wrong price, customer discount" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
+        '</div>'+
       '</div>'+
       '<div style="display:flex;gap:10px">'+
         '<button onclick="saveInvoiceEdit(\''+invNum+'\')" style="flex:1;padding:11px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">✅ Save changes</button>'+
@@ -6939,6 +6946,9 @@ function saveInvoiceEdit(invNum){
   var custName=document.getElementById('ei-custname').value.trim();
   var oldTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var stockChanges=[];
+  // Read invoice-level discount
+  var eiInvDisc=parseFloat((document.getElementById('ei-inv-disc')||{}).value)||0;
+
   // Read payment changes
   var eiPayVal=document.getElementById('ei-payment').value;
   var eiBankId=(document.getElementById('ei-bankid')||{}).value||null;
@@ -6994,7 +7004,22 @@ function saveInvoiceEdit(invNum){
     if(newPosId!==null)s.posId=newPosId;
     if(newPartPayment!==null)s.partPayment=newPartPayment;
     if(newDate){s.date=newDate;s.month=newMonth;}
+    // Save invoice-level discount on all items (for invoice display)
+    s.invoiceDiscAmt=eiInvDisc;
   });
+  // Adjust grand total to apply invoice-level discount
+  if(eiInvDisc>0){
+    var newGrand=invSales.reduce(function(a,s){return a+s.total;},0)-eiInvDisc;
+    if(newGrand<0)newGrand=0;
+    // Distribute discount proportionally across items for reporting
+    var preDiscTotal=invSales.reduce(function(a,s){return a+s.total;},0);
+    if(preDiscTotal>0){
+      invSales.forEach(function(s){
+        var share=s.total/preDiscTotal;
+        s.grandTotal=Math.round((s.total-(eiInvDisc*share))*100)/100;
+      });
+    }
+  }
   var newTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   saveData();
   logActivity('Invoice edited','Invoice #'+invNum+' — total: '+fmt(oldTotal)+' → '+fmt(newTotal)+'. Reason: '+reason,'Admin: '+DB.currentUser.name);
