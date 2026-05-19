@@ -4085,7 +4085,12 @@ function buildCustomers(){
             '<div class="form-group" id="cp-bank-wrap-'+cust.id+'" style="display:none"><label>Bank</label><select id="cp-bank-'+cust.id+'"><option value="">Select...</option>'+bankOpts()+'</select></div>'+
             '<div class="form-group" id="cp-pos-wrap-'+cust.id+'" style="display:none"><label>POS</label><select id="cp-pos-'+cust.id+'"><option value="">Select...</option>'+posOpts()+'</select></div>'+
             '<div class="form-group"><label>Payment date</label><input type="date" id="cp-date-'+cust.id+'" value="'+new Date().toISOString().slice(0,10)+'"></div>'+
-            '<div class="form-group"><label>&nbsp;</label><button class="btn primary" onclick="recordCreditPayment('+cust.id+')" style="background:#16a34a;border-color:#16a34a">✓ Record payment</button></div>'+
+            '<div class="form-group"><label>&nbsp;</label>'+
+              '<div style="display:flex;gap:6px">'+
+                '<button class="btn primary" onclick="recordCreditPayment('+cust.id+')" style="background:#16a34a;border-color:#16a34a;flex:1">✓ Record payment</button>'+
+                '<button class="btn" onclick="writeOffCredit('+cust.id+')" style="background:#f59e0b;border-color:#f59e0b;color:#fff;font-size:11px" title="Write off / discount balance">✂ Write-off</button>'+
+              '</div>'+
+            '</div>'+
           '</div>'+
           (function(){
             var custPays=(DB.creditPayments||[]).filter(function(p){return String(p.custId)==String(cust.id);});
@@ -4355,7 +4360,10 @@ function printCustomerStatement(custId){
   });
   Object.values(custInvs).forEach(function(e){allEvents.push(e);});
   (DB.creditPayments||[]).filter(function(p){return String(p.custId)==String(custId);}).forEach(function(p){
-    allEvents.push({type:'payment',date:p.date,label:'Payment received',amount:p.amount,mode:payModeLabel(p),by:p.by});
+    var isWO=p.payMode==='writeoff';
+    allEvents.push({type:isWO?'writeoff':'payment',date:p.date,
+      label:isWO?'✂ Write-off / Discount':'Payment received',
+      amount:p.amount,mode:isWO?'Discount':payModeLabel(p),by:p.by});
   });
   var retMap={};
   (DB.salesReturns||[]).filter(function(r){return String(r.custId)==String(custId);}).forEach(function(r){
@@ -4368,11 +4376,11 @@ function printCustomerStatement(custId){
   var running=0;
   var rows=allEvents.map(function(e,i){
     if(e.type==='opening'||e.type==='invoice')running+=e.amount;
-    else if(e.type==='payment')running-=e.amount;
+    else if(e.type==='payment'||e.type==='writeoff')running-=e.amount;
     else if(e.type==='return'&&(e.refundType==='credit'||e.refundType==='exchange'))running-=e.amount;
     running=Math.round(running*100)/100;
     var dr=e.type==='invoice'||e.type==='opening'?fmt(e.amount):'';
-    var cr=e.type==='payment'||(e.type==='return'&&(e.refundType==='credit'||e.refundType==='exchange'))?fmt(e.amount):'';
+    var cr=(e.type==='payment'||e.type==='writeoff')||(e.type==='return'&&(e.refundType==='credit'||e.refundType==='exchange'))?fmt(e.amount):'';
     return '<tr>'+
       '<td>'+e.date+'</td>'+
       '<td>'+e.label+'</td>'+
@@ -6102,12 +6110,8 @@ function processReturn(invoiceId){
     if(invItem)invItem.qty+=qty;
     // Log adjustment
     if(invItem){DB.adjLog.push({id:uid(),itemId:invItem.id,itemName:invItem.name,type:'add',reason:'Sales return — Invoice #'+items[0].invoiceNum,before:invItem.qty-qty,change:qty,after:invItem.qty,date:date,by:DB.currentUser.name});}
-    // Save return record
-    // Store exchangeItems on first returned item only (to avoid duplication in view)
-    var _exchToStore=(refundType==='exchange'&&returnedItems.length===0&&exchangeItems&&exchangeItems.length)?
-      exchangeItems.map(function(e){return {name:e.invItem?e.invItem.name:e.name,qty:e.qty,price:e.price,total:e.total,itemId:e.invItem?e.invItem.id:e.itemId};})
-      :undefined;
-    DB.salesReturns.push({id:uid(),invoiceId:invoiceId,invoiceNum:items[0].invoiceNum||invoiceId,itemId:s.id,itemName:s.name,qty:qty,refundAmt:refundAmt,adjPrice:adjPrice>0?adjPrice:null,origUnitPrice:origUnitPrice,refundType:refundType,reason:reason,custId:items[0].custId,custName:items[0].custName||'Walk-in customer',date:date,month:month,by:DB.currentUser.name,exchangeItems:_exchToStore});
+    // Save return record (exchangeItems added after exchange processing below)
+    DB.salesReturns.push({id:uid(),invoiceId:invoiceId,invoiceNum:items[0].invoiceNum||invoiceId,itemId:s.id,itemName:s.name,qty:qty,refundAmt:refundAmt,adjPrice:adjPrice>0?adjPrice:null,origUnitPrice:origUnitPrice,refundType:refundType,reason:reason,custId:items[0].custId,custName:items[0].custName||'Walk-in customer',date:date,month:month,by:DB.currentUser.name,exchangeItems:null});
   });
   if(!returnedItems.length){alert('Enter at least one item quantity to return.');return;}
 
@@ -6144,6 +6148,17 @@ function processReturn(invoiceId){
           reason:'Exchange — Return Invoice #'+items[0].invoiceNum,
           before:before,change:-e.qty,after:e.invItem.qty,date:date,by:DB.currentUser.name});
       });
+      // ── Save exchange items to the return records ──────────────
+      // Update ALL return records from this invoice to include exchangeItems on the first one
+      var exchStoreData=exchangeItems.map(function(e){
+        return {name:e.invItem?e.invItem.name:e.name,qty:e.qty,price:e.price,total:e.total,itemId:e.invItem?e.invItem.id:e.itemId};
+      });
+      var thisInvReturns=DB.salesReturns.filter(function(r){
+        return r.invoiceNum===items[0].invoiceNum&&r.date===date&&r.refundType==='exchange';
+      });
+      if(thisInvReturns.length>0){
+        thisInvReturns[0].exchangeItems=exchStoreData; // store on first record only
+      }
       // Handle balance payment if exchange > return
       var balance=Math.round(exchTotal-totalRefund);
       if(balance>0){
@@ -6609,11 +6624,11 @@ function viewReturnDetail(gKey){
     '</tr>';
   }).join('');
 
-  // Exchange items (from adjLog or exchangeItems stored on return)
-  var exchItems=g.items.filter(function(r){return r.exchangeItems&&r.exchangeItems.length;});
+  // Exchange items — search all records in this group for exchangeItems
+  var exchRecord=g.items.find(function(r){return r.exchangeItems&&r.exchangeItems.length;});
   var exchItemRows='';
-  if(exchItems.length){
-    exchItemRows=exchItems[0].exchangeItems.map(function(e){
+  if(exchRecord){
+    exchItemRows=exchRecord.exchangeItems.map(function(e){
       return '<tr>'+
         '<td style="padding:7px 10px;font-weight:600">'+e.name+'</td>'+
         '<td style="padding:7px 10px;text-align:center">'+e.qty+'</td>'+
@@ -6737,10 +6752,10 @@ function printReturnRecord(gKey){
     '</tr>';
   }).join('');
 
-  var exchItems=g.items.filter(function(r){return r.exchangeItems&&r.exchangeItems.length;});
+  var exchRecord2=g.items.find(function(r){return r.exchangeItems&&r.exchangeItems.length;});
   var exchSection='';
-  if(g.refundType==='exchange'&&exchItems.length){
-    var exchRows=exchItems[0].exchangeItems.map(function(e,i){
+  if(g.refundType==='exchange'&&exchRecord2){
+    var exchRows=exchRecord2.exchangeItems.map(function(e,i){
       return '<tr><td>'+(i+1)+'</td><td>'+e.name+'</td><td style="text-align:center">'+e.qty+'</td><td style="text-align:right">₦'+Math.round(e.price).toLocaleString()+'</td><td style="text-align:right;font-weight:700">₦'+Math.round(e.total).toLocaleString()+'</td></tr>';
     }).join('');
     exchSection='<div style="margin-top:12px"><div style="font-weight:700;font-size:12px;color:#15803d;border-bottom:1px solid #86efac;padding-bottom:4px;margin-bottom:6px">EXCHANGED GOODS GIVEN</div>'+
@@ -8990,6 +9005,47 @@ function recordDeposit(custId){
   setTimeout(function(){
     showConfirm({type:'success',title:'Deposit recorded',msg:'',detail:fmt(amt)+' deposit saved for '+cust.name+'. Balance updated.',confirmLabel:'OK',cancelLabel:null},function(){});
   },100);
+}
+
+function writeOffCredit(custId){
+  var cust=DB.customers.find(function(c){return c.id==custId;});
+  if(!cust){alert('Customer not found.');return;}
+  var amtEl=document.getElementById('cp-amt-'+custId);
+  var dateEl=document.getElementById('cp-date-'+custId);
+  var balance=cust.creditBalance||0;
+  // Use entered amount if available, else offer full balance
+  var suggested=amtEl&&amtEl.value?parseFloat(amtEl.value):balance;
+  var amt=parseFloat(prompt(
+    'Write-off / Discount for '+cust.name+'\nCurrent balance owed: '+fmt(balance)+'\n\nEnter amount to write off as discount:',
+    Math.round(suggested)
+  ));
+  if(isNaN(amt)||amt<=0)return;
+  if(amt>balance){alert('Cannot write off more than the outstanding balance ('+fmt(balance)+').');return;}
+  if(!confirm('Write off '+fmt(amt)+' from '+cust.name+"'s balance as a discount?\n\nThis will NOT be recorded as cash received.\nRemaining balance after write-off: "+fmt(balance-amt)))return;
+
+  var rawDate=dateEl&&dateEl.value?new Date(dateEl.value):new Date();
+  var date=rawDate.toLocaleDateString();
+  var month=rawDate.toISOString().slice(0,7);
+
+  // Reduce credit balance
+  cust.creditBalance=Math.round((balance-amt)*100)/100;
+
+  // Record as write-off in credit payments (mode = writeoff, not added to cashflow income)
+  if(!DB.creditPayments)DB.creditPayments=[];
+  DB.creditPayments.push({
+    id:uid(),custId:custId,custName:cust.name,
+    amount:amt,payMode:'writeoff',
+    date:date,month:month,
+    note:'Write-off / Discount',
+    by:DB.currentUser.name
+  });
+
+  logActivity('Credit write-off',
+    'Discount of '+fmt(amt)+' applied to '+cust.name+'. Remaining balance: '+fmt(Math.max(0,cust.creditBalance)),
+    'writeoff');
+  saveData();
+  renderApp();
+  alert('Write-off of '+fmt(amt)+' applied to '+cust.name+'.\nRemaining balance: '+fmt(Math.max(0,cust.creditBalance)));
 }
 
 function recordCreditPayment(custId){
