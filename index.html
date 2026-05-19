@@ -7007,16 +7007,20 @@ function saveInvoiceEdit(invNum){
     // Save invoice-level discount on all items (for invoice display)
     s.invoiceDiscAmt=eiInvDisc;
   });
-  // Adjust grand total to apply invoice-level discount
+  // Apply invoice-level discount — store on first item, subtract from total
   if(eiInvDisc>0){
-    var newGrand=invSales.reduce(function(a,s){return a+s.total;},0)-eiInvDisc;
-    if(newGrand<0)newGrand=0;
-    // Distribute discount proportionally across items for reporting
     var preDiscTotal=invSales.reduce(function(a,s){return a+s.total;},0);
+    var actualDisc=Math.min(eiInvDisc,preDiscTotal); // can't discount more than total
     if(preDiscTotal>0){
-      invSales.forEach(function(s){
-        var share=s.total/preDiscTotal;
-        s.grandTotal=Math.round((s.total-(eiInvDisc*share))*100)/100;
+      var remaining=actualDisc;
+      invSales.forEach(function(s,idx){
+        // Apply proportional share of discount to each item's total
+        var share=idx<invSales.length-1?Math.round((s.total/preDiscTotal)*actualDisc*100)/100:remaining;
+        remaining=Math.round((remaining-share)*100)/100;
+        s.total=Math.max(0,Math.round((s.total-share)*100)/100);
+        s.profit=Math.round((s.total-(s.cost*s.qty))*100)/100;
+        // Store full invoiceDiscAmt on first item for display on invoice print
+        s.invoiceDiscAmt=idx===0?actualDisc:0;
       });
     }
   }
@@ -7037,6 +7041,8 @@ function viewInvoiceDetail(invNum){
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var grandProfit=invSales.reduce(function(a,s){return a+s.profit;},0);
   var totalDisc=invSales.reduce(function(a,s){return a+(s.discAmt||0);},0);
+  var invDiscAmt=invSales.reduce(function(a,s){return a+(s.invoiceDiscAmt||0);},0);
+  var subtotalBeforeInvDisc=invSales.reduce(function(a,s){return a+s.total;},0)+(invDiscAmt||0);
 
   // Remove old modal if exists
   var old=document.getElementById('inv-detail-modal');if(old)old.remove();
@@ -7087,8 +7093,9 @@ function viewInvoiceDetail(invNum){
             (s0.partPayment>0?'<div><span style="color:#6c757d">Paid now:</span> <b>'+fmt(s0.partPayment)+'</b></div>':'')+
           '</div>'+
           '<div style="background:#f8f9fa;border-radius:8px;padding:.875rem 1rem;font-size:13px">'+
-            (totalDisc>0?'<div style="margin-bottom:5px"><span style="color:#6c757d">Total discount:</span> <span style="color:#dc3545">-'+fmt(totalDisc)+'</span></div>':'')+
-            '<div style="margin-bottom:5px;font-size:15px;font-weight:700"><span style="color:#6c757d;font-size:13px;font-weight:400">Grand total:</span> '+fmt(grandTotal)+'</div>'+
+            (totalDisc>0?'<div style="margin-bottom:5px"><span style="color:#6c757d">Item discounts:</span> <span style="color:#dc3545">-'+fmt(totalDisc)+'</span></div>':'')+
+            (invDiscAmt>0?'<div style="margin-bottom:5px"><span style="color:#6c757d">Invoice discount:</span> <span style="color:#dc3545;font-weight:700">-'+fmt(invDiscAmt)+'</span></div>':'')+
+            '<div style="margin-bottom:5px;font-size:15px;font-weight:700"><span style="color:#6c757d;font-size:13px;font-weight:400">'+(invDiscAmt>0?'Net total':'Grand total')+':</span> '+fmt(grandTotal)+'</div>'+
             '<div><span style="color:#6c757d">Gross profit:</span> <span style="color:#198754;font-weight:700">'+fmt(grandProfit)+'</span></div>'+
           '</div>'+
         '</div>'+
