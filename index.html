@@ -1,14 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
+<!-- saved from url=(0049)file:///C:/Users/DELL/Downloads/index__4__15.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <!-- v28 - Partial qty supply modal | Firebase via REST API (no SDK) -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Great Chid Electro — Business Dashboard v28</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="./index_files/css2" rel="stylesheet">
 <style>
 :root{
   /* ── Bootstrap Professional Standard Palette ── */
@@ -352,7 +352,7 @@ input.inline-edit{border:1.5px solid var(--primary);border-radius:5px;padding:4p
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div id="root"><div class="auth-screen"><div class="auth-card"><div class="auth-logo-row"><div class="auth-logo">GCE</div><div><div class="auth-title">Great Chid Electro</div><div class="auth-sub">Business Management Dashboard</div></div></div><div style="display:grid;gap:12px"><div class="form-group"><label>Username</label><input type="text" id="au-user" placeholder="Enter your username" autofocus=""></div><div class="form-group"><label>Password</label><input type="password" id="au-pass" placeholder="Enter your password" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()"></div><button class="btn primary" onclick="doLogin()" style="width:100%;margin-top:4px;justify-content:center;font-size:13.5px;padding:10px">Sign in to dashboard</button></div><div class="auth-hint">Default credentials: <strong>admin</strong> / <strong>admin123</strong></div></div></div></div>
 
 <script>
 var DB={
@@ -1159,6 +1159,7 @@ function applySnapshot(snapshot) {
   // ── One-time migration: stamp depositApplied on existing sale records ──
   // Finds negative deposit entries (auto-applied) and patches the matching sale items
   migrateDepositApplied();
+  migrateDepositTopup();
 }
 
 function migrateDepositApplied(){
@@ -1192,6 +1193,74 @@ function migrateDepositApplied(){
     console.log('Migration: fixed '+patched+' deposit-covered invoice(s)');
     saveData();
   }
+}
+
+// ── One-time migration: fix bad depositTopupAmt on existing sale items ──
+// Old code stamped the FULL topup amount on every item; now it's proportional.
+// Also fixes cashflow: removes duplicate non-topup cash entries for deposit invoices.
+function diagDepositInvoice(invNum){
+  invNum=invNum||'2026/0118';
+  console.log('=== DIAGNOSTIC FOR INVOICE #'+invNum+' ===');
+  var sales=(DB.sales||[]).filter(function(s){return String(s.invoiceNum||s.id)===String(invNum);});
+  console.log('SALES ('+sales.length+' items):');
+  sales.forEach(function(s){console.log(' payment:'+s.payment+' payMode:'+s.payMode+' total:'+s.total+' depositApplied:'+s.depositApplied+' depositTopupMode:'+s.depositTopupMode+' depositTopupAmt:'+s.depositTopupAmt);});
+  var deps=(DB.deposits||[]).filter(function(d){return String(d.desc||d.note||'').indexOf(invNum)>-1||(d.custId&&sales.length&&String(d.custId)===String(sales[0].custId));});
+  console.log('DEPOSITS related to customer:');
+  deps.forEach(function(d){console.log(' amount:'+d.amount+' note:'+d.note+' custId:'+d.custId+' date:'+d.date);});
+  var cfs=(DB.cashflow||[]).filter(function(c){return String(c.desc||'').indexOf(invNum)>-1;});
+  console.log('CASHFLOW for invoice:');
+  cfs.forEach(function(c){console.log(' desc:'+c.desc+' amount:'+c.amount+' payMode:'+c.payMode+' type:'+c.type);});
+  console.log('=== END DIAGNOSTIC ===');
+  return {sales:sales,deps:deps,cashflow:cfs};
+}
+
+function migrateDepositTopup(){
+  var patched=0;
+  // Find all deposit sales that have a topupMode but missing cashflow entries
+  var depositInvNums={};
+  (DB.sales||[]).forEach(function(s){
+    if((s.payment==='deposit'||s.payMode==='deposit')&&s.depositTopupMode&&(s.depositTopupAmt||0)>0){
+      var k=String(s.invoiceNum||s.id);
+      if(!depositInvNums[k])depositInvNums[k]={
+        invNum:k, tuMode:s.depositTopupMode, custName:s.custName||'', date:s.date||'', month:s.month||'',
+        sales:[], depAmt:0, tuAmt:0
+      };
+      depositInvNums[k].sales.push(s);
+    }
+  });
+  Object.keys(depositInvNums).forEach(function(invNum){
+    var inv=depositInvNums[invNum];
+    var invSales=inv.sales;
+    var invTotal=invSales.reduce(function(a,s){return a+s.total;},0);
+    // Real amounts from stored item values (already correct per diagnostic)
+    var realDepAmt=invSales.reduce(function(a,s){return a+(parseFloat(s.depositApplied)||0);},0);
+    var realTuAmt=invSales.reduce(function(a,s){return a+(parseFloat(s.depositTopupAmt)||0);},0);
+    if(realDepAmt<=0||realTuAmt<=0)return;
+    // Check if cashflow entries exist for this invoice
+    var existingCF=(DB.cashflow||[]).filter(function(c){
+      return c.type==='in'&&(String(c.desc||'').indexOf('Invoice #'+invNum)>-1);
+    });
+    var hasDepositCF=existingCF.some(function(c){return c.payMode==='deposit';});
+    var hasTopupCF=existingCF.some(function(c){return c.payMode===inv.tuMode;});
+    // Write missing cashflow entries
+    if(!hasDepositCF){
+      DB.cashflow.push({id:uid(),desc:'Deposit used — '+inv.custName+' Invoice #'+invNum,amount:realDepAmt,type:'in',cat:'Sales',payMode:'deposit',date:inv.date,month:inv.month});
+      console.log('[Migration] Added deposit cashflow for Invoice #'+invNum+': '+realDepAmt);
+    }
+    if(!hasTopupCF){
+      DB.cashflow.push({id:uid(),desc:'Cash top-up for deposit shortfall — '+inv.custName+' Invoice #'+invNum,amount:realTuAmt,type:'in',cat:'Sales',payMode:inv.tuMode,date:inv.date,month:inv.month});
+      console.log('[Migration] Added topup cashflow for Invoice #'+invNum+': '+realTuAmt+' via '+inv.tuMode);
+    }
+    if(!hasDepositCF||!hasTopupCF)patched++;
+  });
+  if(patched>0){
+    saveData();
+    renderApp();
+    alert('\u2705 Fixed '+patched+' invoice(s) — missing cashflow entries added. Click Sync to save to Firebase.');
+  } else {
+    alert('\u2139\ufe0f No invoices needed fixing — all cashflow entries are present.');
+  }
+  return 'Done — '+patched+' invoice(s) fixed';
 }
 
 function buildSnapshot() {
@@ -1432,35 +1501,39 @@ function buildClosingReport(){
   var invMap={};
   daySales.forEach(function(s){
     var k=s.invoiceNum||s.id;
-    if(!invMap[k])invMap[k]={invoiceNum:k,custName:s.printName||s.custName,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,splitPayment:s.splitPayment||null,total:0,profit:0,partPayment:s.partPayment||0,seller:s.seller};
+    if(!invMap[k])invMap[k]={invoiceNum:k,custName:s.printName||s.custName,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,splitPayment:s.splitPayment||null,total:0,profit:0,partPayment:s.partPayment||0,seller:s.seller,depositTopupMode:s.depositTopupMode||null,depositTopupAmt:s.depositTopupAmt||0};
     invMap[k].total+=s.total;invMap[k].profit+=s.profit;
+    if(s.depositTopupMode)invMap[k].depositTopupMode=s.depositTopupMode;
+    if(s.depositTopupAmt)invMap[k].depositTopupAmt=(parseFloat(invMap[k].depositTopupAmt)||0)+(parseFloat(s.depositTopupAmt)||0);
   });
   var invList=Object.values(invMap);
   var totalRevenue=invList.reduce(function(a,g){return a+g.total;},0);
   var totalProfit=invList.reduce(function(a,g){return a+g.profit;},0);
-  // Payment breakdown
-  var cash=0,pos=0,transfer=0,credit=0,partPaid=0,deposit=0;
+  // Credit owed from today's sales (sales-side only — not payments received)
+  var credit=0;
   invList.forEach(function(g){
     if(g.payment==='credit'){credit+=g.total;}
-    else if(g.payment==='deposit'){deposit+=g.total;}
-    else if(g.payment==='part'){
-      // Distribute part payment into its actual mode (cash/pos/transfer)
-      var pp=g.partPayment||0;
-      if(g.payMode==='pos')pos+=pp;
-      else if(g.payMode==='transfer')transfer+=pp;
-      else cash+=pp;
-      credit+=Math.max(0,g.total-pp); // remaining is credit owed
-    }
-    else if(g.payMode==='split'&&g.splitPayment){
-      var sp=g.splitPayment;
-      function addSplit(m,a){if(m==='pos')pos+=a;else if(m==='transfer')transfer+=a;else cash+=a;}
-      addSplit(sp.mode1,sp.amt1);addSplit(sp.mode2,sp.amt2);
-    }
-    else if(g.payMode==='pos')pos+=g.total;
-    else if(g.payMode==='transfer')transfer+=g.total;
-    else cash+=g.total;
+    else if(g.payment==='part'){credit+=Math.max(0,g.total-(g.partPayment||0));}
   });
-  var totalPaid=cash+pos+transfer+deposit; // part payment already in cash/pos/transfer
+
+  // ── Payment breakdown driven entirely from cashflow for that date ──
+  // This ensures only money actually received on this date is counted,
+  // regardless of when the invoice was created.
+  var dayCashflow=DB.cashflow.filter(function(c){
+    return c.type==='in' && !c.isExchange && dateInRange(c.date,closingDate,closingDate);
+  });
+  var cash=0,pos=0,transfer=0,deposit=0;
+  dayCashflow.forEach(function(c){
+    var pm=c.payMode||'cash';
+    // Skip credit-payment entries here (counted separately via DB.creditPayments)
+    if(pm==='credit')return;
+    // Deposit top-up entries (cash/pos/transfer) are already recorded with correct payMode
+    if(pm==='deposit'){deposit+=c.amount;return;}
+    if(pm==='pos'){pos+=c.amount;return;}
+    if(pm==='transfer'){transfer+=c.amount;return;}
+    cash+=c.amount;
+  });
+  var totalPaid=cash+pos+transfer+deposit;
   // Credit payments received today
   var cpToday=(DB.creditPayments||[]).filter(function(p){return p.payMode!=='writeoff'&&dateInRange(p.date,closingDate,closingDate);});
   var cpTotal=cpToday.reduce(function(a,p){return a+p.amount;},0);
@@ -1493,20 +1566,12 @@ function buildClosingReport(){
   var exchBalToday=DB.cashflow.filter(function(c){
     return c.isExchange&&c.type==='in'&&dateInRange(c.date,closingDate,closingDate);
   });
-  // Deposit applications today (informational — cash was received earlier)
-  var depAppliedToday=DB.cashflow.filter(function(c){
-    return c.isDepositApplied&&c.type==='in'&&dateInRange(c.date,closingDate,closingDate);
-  });
-  var depAppliedTotal=depAppliedToday.reduce(function(a,c){return a+c.amount;},0);
   var exchBalCash=0,exchBalPos=0,exchBalTransfer=0;
   exchBalToday.forEach(function(c){
     if(c.payMode==='pos'){pos+=c.amount;exchBalPos+=c.amount;}
     else if(c.payMode==='transfer'){transfer+=c.amount;exchBalTransfer+=c.amount;}
     else{cash+=c.amount;exchBalCash+=c.amount;}
   });
-  // Remove deposit-applied amounts from cash totals (cash was received in a previous period)
-  // Deposit applied is informational only — actual cash came in when deposit was made
-  cash=Math.max(0,cash-depAppliedTotal);
   var exchBalTotal=exchBalCash+exchBalPos+exchBalTransfer;
   // Balance after expenses
   var balCash=cash-expCash;
@@ -1519,7 +1584,8 @@ function buildClosingReport(){
   var staffRows=Object.keys(byStaff).map(function(s){var st=byStaff[s];return '<tr><td>'+s+'</td><td style="text-align:center">'+st.count+'</td><td style="text-align:right">'+fmt(st.total)+'</td><td style="text-align:right;color:#15803d">'+fmt(st.profit)+'</td></tr>';}).join('');
   // Invoice rows
   var invRows=invList.map(function(g,i){
-    var payBadge=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':g.payment==='part'?'<span class="badge low">Part</span>':g.payment==='split'?'<span class="badge" style="background:#6f42c1;color:#fff">Split</span>':g.payMode==='pos'?'<span class="badge" style="background:#0891b2;color:#fff">POS</span>':g.payMode==='transfer'?'<span class="badge" style="background:#0d6efd;color:#fff">Transfer</span>':'<span class="badge ok">Cash</span>';
+    var _cb=(g.payment==='deposit'&&g.depositTopupMode)?'Dep+'+g.depositTopupMode.charAt(0).toUpperCase()+g.depositTopupMode.slice(1):'Deposit';
+    var payBadge=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='deposit'?'<span class="badge info">'+_cb+'</span>':g.payment==='part'?'<span class="badge low">Part</span>':g.payment==='split'?'<span class="badge" style="background:#6f42c1;color:#fff">Split</span>':g.payMode==='pos'?'<span class="badge" style="background:#0891b2;color:#fff">POS</span>':g.payMode==='transfer'?'<span class="badge" style="background:#0d6efd;color:#fff">Transfer</span>':'<span class="badge ok">Cash</span>';
     return '<tr><td>'+(i+1)+'</td><td style="font-weight:700">'+g.invoiceNum+'</td><td>'+g.custName+'</td><td>'+payBadge+'</td><td style="text-align:right">'+fmt(g.total)+'</td><td style="text-align:right;color:#15803d">'+fmt(g.profit)+'</td><td style="font-size:11px">'+payModeLabel(g)+'</td><td>'+g.seller+'</td></tr>';
   }).join('');
 
@@ -1591,7 +1657,6 @@ function buildClosingReport(){
         (transfer>0||expTransfer>0?'<tr><td style="font-weight:600">🏦 Transfer</td><td style="text-align:right;color:#15803d">'+fmt(transfer)+'</td><td style="text-align:right;color:#c0392b">'+(expTransfer>0?'- '+fmt(expTransfer):'-')+'</td><td style="text-align:right;font-weight:700;color:'+(balTransfer>=0?'#15803d':'#c0392b')+'">'+fmt(balTransfer)+'</td></tr>':'')+
         (cpTotal>0?'<tr><td style="font-weight:600">✅ Credit Payments</td><td style="text-align:right;color:#15803d">'+fmt(cpTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#15803d">'+fmt(cpTotal)+'</td></tr>':'')+
         (exchBalTotal>0?'<tr><td style="font-weight:600">🔄 Exchange Balance</td><td style="text-align:right;color:#0891b2">'+fmt(exchBalTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0891b2">'+fmt(exchBalTotal)+'</td></tr>':'')+
-        (depAppliedTotal>0?'<tr style="background:#f0f9ff"><td style="font-weight:600;color:#0369a1">📥 Deposit Applied</td><td style="text-align:right;color:#0369a1">'+fmt(depAppliedTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;color:#6b7280;font-size:11px">Previously received</td></tr>':'')+
         (depTotal>0?'<tr><td style="font-weight:600">📥 Deposits</td><td style="text-align:right;color:#0369a1">'+fmt(depTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0369a1">'+fmt(depTotal)+'</td></tr>':'')+
         (suppPayTotal>0?'<tr style="background:#fff8f0"><td style="font-weight:600;color:#92400e">🚛 Supplier Payments</td><td style="text-align:right">-</td><td style="text-align:right;color:#92400e">- '+fmt(suppPayTotal)+'</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(suppPayTotal)+'</td></tr>':'')+
         (retTotal>0?'<tr style="background:#fff5f5"><td style="font-weight:600;color:#c0392b">↩ Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">- '+fmt(retTotal)+'</td><td style="text-align:right;font-weight:700;color:#c0392b">- '+fmt(retTotal)+'</td></tr>':'')+
@@ -1840,7 +1905,17 @@ function initials(name){return name.split(' ').map(function(w){return w[0];}).sl
 function getBankName(id){var b=DB.banks.find(function(b){return b.id==id;});return b?b.name:' - ';}
 function getPosName(id){var p=DB.posTerminals.find(function(p){return p.id==id;});return p?p.name:' - ';}
 function payModeLabel(s){
-  if(s.payment==='deposit'||s.payMode==='deposit') return 'Deposit';
+  if(s.payment==='deposit'||s.payMode==='deposit'){
+    // Use stored values directly — depositApplied and depositTopupAmt are on the item/group
+    var tuMode=s.depositTopupMode||null;
+    var tuAmt=parseFloat(s.depositTopupAmt)||0;
+    var depAmt=parseFloat(s.depositApplied)||0;
+    if(tuMode&&tuAmt>0){
+      var tuLabel=tuMode==='pos'?'POS':tuMode==='transfer'?'Transfer':'Cash';
+      return 'Deposit ('+fmt(depAmt)+') + '+tuLabel+' ('+fmt(tuAmt)+')';
+    }
+    return 'Deposit';
+  }
   if(s.payment==='credit') return '—'; // credit sales have no payment mode
   if(s.payMode==='split'&&s.splitPayment){
     var sp=s.splitPayment;
@@ -2272,12 +2347,27 @@ function renderApp(){
   var _todayInvMap={};
   todaySales.forEach(function(s){
     var k=s.invoiceNum||s.id;
-    if(!_todayInvMap[k])_todayInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,total:0};
+    if(!_todayInvMap[k])_todayInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,total:0,depositTopupMode:s.depositTopupMode||null,depositTopupAmt:s.depositTopupAmt||0,depositApplied:s.depositApplied||0};
     _todayInvMap[k].total+=s.total;
+    if(s.depositTopupMode)_todayInvMap[k].depositTopupMode=s.depositTopupMode;
+    if(s.depositTopupAmt)_todayInvMap[k].depositTopupAmt=(parseFloat(_todayInvMap[k].depositTopupAmt)||0)+(parseFloat(s.depositTopupAmt)||0);
   });
   Object.values(_todayInvMap).forEach(function(g){
     if(g.payment==='credit'){todayCredit+=g.total;return;}
-    if(g.payment==='deposit'||g.payMode==='deposit'){todayDeposit+=g.total;return;}
+    if(g.payment==='deposit'||g.payMode==='deposit'){
+      // Split: deposit portion stays as deposit, topup portion goes to its real mode
+      if(g.depositTopupMode&&g.depositTopupAmt>0){
+        var topupAmt=Math.min(g.depositTopupAmt,g.total);
+        var depositPortion=Math.max(0,g.total-topupAmt);
+        if(depositPortion>0)todayDeposit+=depositPortion;
+        if(g.depositTopupMode==='pos')todayPos+=topupAmt;
+        else if(g.depositTopupMode==='transfer')todayTransfer+=topupAmt;
+        else todayCash+=topupAmt;
+      } else {
+        todayDeposit+=g.total;
+      }
+      return;
+    }
     if(g.payMode==='split'&&g.splitPayment){
       var sp=g.splitPayment;
       if(sp.mode1==='pos')todayPos+=sp.amt1;else if(sp.mode1==='transfer')todayTransfer+=sp.amt1;else todayCash+=sp.amt1;
@@ -4546,7 +4636,7 @@ function buildInvoiceHTML(inv){
       '<div class="pay-row">'+
         '<div class="pay-cell">'+
           '<div class="pay-label">Payment type</div>'+
-          '<div class="pay-val">'+(inv.payment==='credit'?'\u26a0 CREDIT (amount owed)':inv.payment==='part'?'PART PAYMENT':inv.payMode==='split'?'SPLIT PAYMENT':'CASH SALE')+'</div>'+
+          '<div class="pay-val">'+(inv.payment==='credit'?'\u26a0 CREDIT (amount owed)':inv.payment==='part'?'PART PAYMENT':inv.payMode==='split'?'SPLIT PAYMENT':inv.payment==='deposit'?(inv.depositTopup?'DEPOSIT + '+inv.depositTopup.mode.toUpperCase():'DEPOSIT'):'CASH SALE')+'</div>'+
         '</div>'+
         '<div class="pay-cell">'+
           '<div class="pay-label">Payment mode</div>'+
@@ -4554,6 +4644,7 @@ function buildInvoiceHTML(inv){
             inv.payMode==='pos'?'POS terminal':
             inv.payMode==='transfer'?'Bank transfer'+(inv.bankId?' ('+getBankName(inv.bankId)+')':''):
             inv.payMode==='split'?'Split payment':
+            inv.payment==='deposit'?(inv.depositTopup?'Deposit (\u20a6'+Math.round(inv.depositApplied||0).toLocaleString()+') + '+inv.depositTopup.mode.charAt(0).toUpperCase()+inv.depositTopup.mode.slice(1)+' (\u20a6'+Math.round(inv.depositTopup.amt||0).toLocaleString()+')':'Deposit'):
             'Cash')+'</div>'+
         '</div>'+
       '</div>'+
@@ -4927,11 +5018,13 @@ function selectPurchaseItem(id,name){
 function onSaleCustChange(custId){
   var el=document.getElementById('sale-deposit-notice');
   if(!el)return;
-  if(!custId){el.innerHTML='';return;}
+  if(!custId){el.innerHTML='';setTimeout(onPaymentTypeChange,10);return;}
   var depBal=(DB.deposits||[]).filter(function(d){return String(d.custId)==String(custId);}).reduce(function(a,d){return a+d.amount;},0);
-  if(depBal<=0){el.innerHTML='';return;}
+  if(depBal<=0){el.innerHTML='';setTimeout(onPaymentTypeChange,10);return;}
   el.innerHTML='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;margin-top:6px;font-size:13px;color:#15803d;font-weight:600">'+
     '💰 Deposit balance: '+fmt(depBal)+' — will be auto-applied to this invoice</div>';
+  setTimeout(onPaymentTypeChange,10);
+  setTimeout(calcInvoiceDiscount,20);
 }
 
 function setSaleCustType(t){saleCustomerType=t;if(t==='walkin')window._saleRegCustId='';renderApp();}
@@ -5062,7 +5155,40 @@ function calcInvoiceDiscount(){
     (discAmt>0?'<div class="sale-summary-row"><span style="color:var(--text2)">Subtotal</span><span>'+fmt(subtotal)+'</span></div>'+
                '<div class="sale-summary-row"><span style="color:var(--danger)">Invoice discount</span><span style="color:var(--danger)">− '+fmt(discAmt)+'</span></div>':'')+
     '<div class="sale-summary-row total"><span>Grand total</span><span>'+fmt(finalTotal)+'</span></div>'+
-    '<div class="sale-summary-row"><span style="color:var(--text2)">Total profit</span><span style="color:'+(totalProfit>=0?'var(--success)':'var(--danger)')+'">'+fmt(totalProfit)+'</span></div>';
+    '<div class="sale-summary-row"><span style="color:var(--text2)">Total profit</span><span style="color:'+(totalProfit>=0?'var(--success)':'var(--danger)')+'">'+fmt(totalProfit)+'</span></div>'+
+    (function(){
+      var payEl=document.getElementById('s-payment');
+      if(!payEl||payEl.value!=='deposit')return '';
+      var cid=(document.getElementById('s-reg-customer')?document.getElementById('s-reg-customer').value:'')|| (window._saleRegCustId||'');
+      if(!cid)return '';
+      var depB=(DB.deposits||[]).filter(function(d){return String(d.custId)==String(cid);}).reduce(function(a,d){return a+d.amount;},0);
+      var shortfallAmt=finalTotal-depB;
+      var enough=depB>=finalTotal;
+      var custRec2=DB.customers.find(function(c){return String(c.id)===String(cid);});
+      var creditLim2=custRec2?custRec2.creditLimit||0:0;
+      var creditOwed2=custRec2?custRec2.creditBalance||0:0;
+      var availCredit2=creditLim2>0?Math.max(0,creditLim2-creditOwed2):0;
+      var creditCovers=!enough&&shortfallAmt<=availCredit2&&creditLim2>0;
+      var bgColor=enough?'#f0fdf4':creditCovers?'#fffbeb':'#fef2f2';
+      var borderColor=enough?'#86efac':creditCovers?'#fcd34d':'#fca5a5';
+      var balAfter=depB-finalTotal;
+      return '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:'+bgColor+';border:1.5px solid '+borderColor+';font-size:12px">'+
+        '<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:#6c757d">Deposit balance</span><span style="color:#15803d;font-weight:700">'+fmt(depB)+'</span></div>'+
+        '<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="color:#6c757d">This invoice</span><span style="font-weight:700">'+fmt(finalTotal)+'</span></div>'+
+        (enough?
+          '<div style="display:flex;justify-content:space-between;border-top:1px solid '+borderColor+';padding-top:5px;margin-top:4px"><span style="font-weight:700">✅ Deposit balance after sale</span><span style="color:#15803d;font-weight:700">'+fmt(balAfter)+'</span></div>'
+        :creditCovers?
+          '<div style="display:flex;justify-content:space-between;border-top:1px solid '+borderColor+';padding-top:5px;margin-top:4px"><span style="font-weight:700">Deposit used (full)</span><span style="color:#15803d;font-weight:700">'+fmt(depB)+'</span></div>'+
+          '<div style="display:flex;justify-content:space-between;margin-top:3px"><span style="font-weight:700">Shortfall → credit account</span><span style="color:#b45309;font-weight:700">'+fmt(shortfallAmt)+'</span></div>'+
+          '<div style="display:flex;justify-content:space-between;margin-top:2px"><span style="color:#6c757d;font-size:11px">Available credit</span><span style="color:#6c757d;font-size:11px">'+fmt(availCredit2)+'</span></div>'+
+          '<div style="color:#b45309;font-size:11px;margin-top:5px;font-weight:600;padding:4px 6px;background:#fef3c7;border-radius:4px">⚠️ Sale allowed — shortfall of '+fmt(shortfallAmt)+' will be added to customer credit balance</div>'
+        :
+          '<div style="display:flex;justify-content:space-between;border-top:1px solid '+borderColor+';padding-top:5px;margin-top:4px"><span style="font-weight:700">Shortfall</span><span style="color:#dc3545;font-weight:700">'+fmt(shortfallAmt)+'</span></div>'+
+          (creditLim2>0?'<div style="display:flex;justify-content:space-between;margin-top:3px"><span style="color:#6c757d;font-size:11px">Available credit</span><span style="color:#dc3545;font-size:11px">'+fmt(availCredit2)+' (not enough)</span></div>':'')+
+          '<div style="color:#dc3545;font-size:11px;margin-top:5px;font-weight:600;padding:4px 6px;background:#fef2f2;border-radius:4px">💳 Shortfall of '+fmt(shortfallAmt)+' must be collected — a payment panel will appear on submit</div>'
+        )+
+      '</div>';
+    }());
 }
 
 function updateInvoiceTotals(){
@@ -5100,68 +5226,6 @@ function updateInvoiceTotals(){
     '</div>'+
     '</div></div>';
 }
-
-function showDepositTopupDialog(cust,depBal,invoiceTotal,shortfall,creditLimit,currentOwed){
-  var availableCredit=creditLimit>0?Math.max(0,creditLimit-currentOwed):0;
-  var old=document.getElementById('dep-topup-overlay');if(old)old.remove();
-  var overlay=document.createElement('div');
-  overlay.id='dep-topup-overlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
-  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('');
-  var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
-  var creditOpt=creditLimit>0&&availableCredit>=shortfall?'<option value="credit">Add to credit balance</option>':'';
-  overlay.innerHTML=
-    '<div style="background:#fff;border-radius:14px;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden">'+
-      '<div style="background:#f59e0b;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
-        '<div>'+
-          '<div style="font-size:15px;font-weight:800;color:#fff">Deposit Shortfall</div>'+
-          '<div style="font-size:11px;color:rgba(255,255,255,.9);margin-top:2px">'+cust.name+' - deposit not enough to cover invoice</div>'+
-        '</div>'+
-        '<button onclick="document.getElementById(\'dep-topup-overlay\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
-      '</div>'+
-      '<div style="padding:16px 18px">'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">'+
-          '<div style="background:#f0f9ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Invoice Total</div><div style="font-size:15px;font-weight:800;color:#111">'+fmt(invoiceTotal)+'</div></div>'+
-          '<div style="background:#f0fdf4;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Deposit Available</div><div style="font-size:15px;font-weight:800;color:#15803d">'+fmt(depBal)+'</div></div>'+
-          '<div style="background:#fef2f2;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Balance Needed</div><div style="font-size:15px;font-weight:800;color:#dc2626">'+fmt(shortfall)+'</div></div>'+
-        '</div>'+
-        '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px">How will the customer pay the balance of '+fmt(shortfall)+'?</div>'+
-        '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">'+
-          '<select id="dep-topup-mode" onchange="depTopupModeChange()" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:600">'+
-            '<option value="cash">Cash</option>'+
-            '<option value="pos">POS</option>'+
-            '<option value="transfer">Bank Transfer</option>'+
-            creditOpt+
-          '</select>'+
-          '<div id="dep-topup-bank-row" style="display:none"><select id="dep-topup-bank" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px"><option value="">-- Select bank --</option>'+bankOpts+'</select></div>'+
-          '<div id="dep-topup-pos-row" style="display:none"><select id="dep-topup-pos" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px"><option value="">-- Select POS --</option>'+posOpts+'</select></div>'+
-        '</div>'+
-        '<div style="display:flex;gap:8px">'+
-          '<button onclick="confirmDepositTopup()" style="flex:1;padding:11px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#10003; Complete Sale</button>'+
-          '<button onclick="document.getElementById(\'dep-topup-overlay\').remove()" style="padding:11px 16px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
-  document.body.appendChild(overlay);
-}
-
-function depTopupModeChange(){
-  var mode=document.getElementById('dep-topup-mode').value;
-  var bankRow=document.getElementById('dep-topup-bank-row');
-  var posRow=document.getElementById('dep-topup-pos-row');
-  if(bankRow)bankRow.style.display=mode==='transfer'?'block':'none';
-  if(posRow)posRow.style.display=mode==='pos'?'block':'none';
-}
-
-function confirmDepositTopup(){
-  var mode=document.getElementById('dep-topup-mode').value;
-  var bankId=(document.getElementById('dep-topup-bank')||{}).value||'';
-  var posId=(document.getElementById('dep-topup-pos')||{}).value||'';
-  window._depTopup={mode:mode,bankId:bankId,posId:posId};
-  document.getElementById('dep-topup-overlay').remove();
-  submitInvoice();
-}
-
 
 function submitInvoice(){
   if(!invoiceItems.length){alert('Add at least one item to the invoice.');return;}
@@ -5240,44 +5304,59 @@ function submitInvoice(){
       // Read optional print-as name
       var printNameEl=document.getElementById('s-print-name');
       printName=(printNameEl&&printNameEl.value.trim())||'';
+      // ── Calculate invoice total early so validation can use it ──
+      var _earlySubtotal=invoiceItems.reduce(function(a,l){return a+(l.price*l.qty);},0);
+      var _earlyDiscType=document.getElementById('inv-disc-type')?document.getElementById('inv-disc-type').value:'none';
+      var _earlyDiscVal=parseFloat(document.getElementById('inv-disc-val')?document.getElementById('inv-disc-val').value:0)||0;
+      var _earlyDiscAmt=_earlyDiscType==='pct'?(_earlySubtotal*_earlyDiscVal/100):_earlyDiscType==='flat'?Math.min(_earlyDiscVal,_earlySubtotal):0;
+      var _earlyTotal=_earlySubtotal-_earlyDiscAmt;
+
       // Check credit limit
       if(payment==='credit'){
         var currentOwed=rc.creditBalance||0;
         var creditLimit=rc.creditLimit||0;
         var custDepBal=(DB.deposits||[]).filter(function(d){return String(d.custId)===String(custId);}).reduce(function(a,d){return a+d.amount;},0);
         if(custDepBal>0&&creditLimit===0){
-          if(finalGrandTotal>custDepBal){
-            alert('\u26d4 Sale blocked.\n\nCustomer: '+rc.name+'\nDeposit balance: '+fmt(custDepBal)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nShortfall: '+fmt(finalGrandTotal-custDepBal)+'\n\nDeposit does not cover the full amount and there is no credit limit set.');
+          if(_earlyTotal>custDepBal){
+            alert('\u26d4 Sale blocked.\n\nCustomer: '+rc.name+'\nDeposit balance: '+fmt(custDepBal)+'\nThis purchase: '+fmt(_earlyTotal)+'\nShortfall: '+fmt(_earlyTotal-custDepBal)+'\n\nDeposit does not cover the full amount and there is no credit limit set.');
             return;
           }
         } else if(custDepBal>0&&creditLimit>0){
           var effectiveLimit=creditLimit+custDepBal;
-          if((currentOwed+finalGrandTotal)>effectiveLimit){
-            alert('\u26d4 Credit + Deposit limit exceeded.\n\nCustomer: '+rc.name+'\nDeposit: '+fmt(custDepBal)+'\nCredit limit: '+fmt(creditLimit)+'\nEffective limit: '+fmt(effectiveLimit)+'\nCurrently owes: '+fmt(currentOwed)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nOver by: '+fmt((currentOwed+finalGrandTotal)-effectiveLimit));
+          if((currentOwed+_earlyTotal)>effectiveLimit){
+            alert('\u26d4 Credit + Deposit limit exceeded.\n\nCustomer: '+rc.name+'\nDeposit: '+fmt(custDepBal)+'\nCredit limit: '+fmt(creditLimit)+'\nEffective limit: '+fmt(effectiveLimit)+'\nCurrently owes: '+fmt(currentOwed)+'\nThis purchase: '+fmt(_earlyTotal)+'\nOver by: '+fmt((currentOwed+_earlyTotal)-effectiveLimit));
             return;
           }
         } else {
-          if(creditLimit>0&&(currentOwed+finalGrandTotal)>creditLimit){
-            alert('\u26d4 Credit limit exceeded!\nCustomer: '+rc.name+'\nCredit limit: '+fmt(creditLimit)+'\nCurrently owes: '+fmt(currentOwed)+'\nThis purchase: '+fmt(finalGrandTotal)+'\nOver by: '+fmt((currentOwed+finalGrandTotal)-creditLimit)+'\n\nReduce the purchase or increase the credit limit.');
+          if(creditLimit>0&&(currentOwed+_earlyTotal)>creditLimit){
+            alert('\u26d4 Credit limit exceeded!\nCustomer: '+rc.name+'\nCredit limit: '+fmt(creditLimit)+'\nCurrently owes: '+fmt(currentOwed)+'\nThis purchase: '+fmt(_earlyTotal)+'\nOver by: '+fmt((currentOwed+_earlyTotal)-creditLimit)+'\n\nReduce the purchase or increase the credit limit.');
             return;
           }
           if(creditLimit===0){alert('This customer has no credit limit set. Please set a credit limit in the Customers tab before allowing credit purchases.');return;}
         }
       }
-      // Deposit payment validation
+      // Deposit payment validation — deposit used first, shortfall goes to credit if limit allows
       if(payment==='deposit'){
-        var depBal2=(DB.deposits||[]).filter(function(d){return String(d.custId)===String(custId);}).reduce(function(a,d){return a+d.amount;},0);
-        var creditLimit2=rc.creditLimit||0;
-        var currentOwed2=rc.creditBalance||0;
-        if(depBal2<=0){
-          alert('\u26d4 Cannot process deposit payment.\n\nCustomer: '+rc.name+'\nDeposit balance: \u20a60\n\nThis customer has no deposit balance. Ask them to make a deposit first.');
-          return;
-        }
-        if(depBal2<finalGrandTotal){
-          var shortfall=finalGrandTotal-depBal2;
-          // Show payment completion dialog — let user choose how to pay balance
-          showDepositTopupDialog(rc,depBal2,finalGrandTotal,shortfall,creditLimit2,currentOwed2);
-          return; // submitInvoice called again from confirmDepositTopup
+        // If called from submitWithDepositTopup, topup is already collected — skip re-validation
+        if(!window._depTopup){
+          var depBal2=(DB.deposits||[]).filter(function(d){return String(d.custId)===String(custId);}).reduce(function(a,d){return a+d.amount;},0);
+          if(depBal2<=0){
+            alert('\u26d4 Sale Blocked — No Deposit Available\n\nCustomer: '+rc.name+'\nDeposit Balance: \u20a60.00\nInvoice Total: '+fmt(_earlyTotal)+'\nShortfall: '+fmt(_earlyTotal)+'\n\nThis customer has no deposit balance.\nAsk them to make a deposit first.');
+            return;
+          }
+          if(depBal2<_earlyTotal){
+            var shortfall2=_earlyTotal-depBal2;
+            var creditLimit2=rc.creditLimit||0;
+            var currentOwed2=rc.creditBalance||0;
+            var availableCredit2=creditLimit2>0?Math.max(0,creditLimit2-currentOwed2):0;
+            if(creditLimit2===0||shortfall2>availableCredit2){
+              // Show inline top-up payment panel — collect shortfall physically
+              showDepositTopupPanel(rc.name, depBal2, _earlyTotal, shortfall2, availableCredit2, creditLimit2);
+              return;
+            }
+            // Deposit + credit covers it — confirm with user before proceeding
+            if(!confirm('\u26a0\ufe0f Deposit covers part of this invoice\n\nCustomer: '+rc.name+'\nDeposit Balance: '+fmt(depBal2)+'\nInvoice Total: '+fmt(_earlyTotal)+'\nShortfall: '+fmt(shortfall2)+'\n\nThe shortfall of '+fmt(shortfall2)+' will be added to this customer\'s credit account.\n\nProceed?')){return;}
+          }
         }
       }
     }
@@ -5322,6 +5401,7 @@ function submitInvoice(){
   }
   var invoiceId=uid();
   var grandTotal=finalGrandTotal,grandProfit=0;
+  var originalGrandTotal=finalGrandTotal; // preserve for invoice print — grandTotal gets modified by deposit logic
 
   // ── Partial supply check ──
   // For each item, check how many can be supplied now vs pending
@@ -5392,7 +5472,8 @@ function submitInvoice(){
     if(splitPayment){
       DB.cashflow.push({id:uid(),desc:'Invoice #'+invNum+' [split 1/2] - '+custName,amount:splitPayment.amt1,type:'in',cat:'Sales',payMode:splitPayment.mode1,bankId:splitPayment.bankId,posId:splitPayment.posId,date:date,month:month});
       DB.cashflow.push({id:uid(),desc:'Invoice #'+invNum+' [split 2/2] - '+custName,amount:splitPayment.amt2,type:'in',cat:'Sales',payMode:splitPayment.mode2,bankId:splitPayment.bankId,posId:splitPayment.posId,date:date,month:month});
-    } else {
+    } else if(payment!=='deposit'){
+      // Deposit cashflow entries are handled inside the deposit block below (deposit + topup separately)
       DB.cashflow.push({id:uid(),desc:'Invoice #'+invNum+(invoiceDiscAmt>0?' [disc: '+fmt(invoiceDiscAmt)+']':'')+'  - '+custName,amount:cashReceived,type:'in',cat:'Sales',payMode:payMode==='credit'?'cash':payMode,bankId:bankId,posId:posId,date:date,month:month});
     }
   }
@@ -5408,37 +5489,56 @@ function submitInvoice(){
       var depBal=(DB.deposits||[]).filter(function(d){return String(d.custId)==String(custId);}).reduce(function(a,d){return a+d.amount;},0);
       var depositApplied=0;
       if(depBal>0&&grandTotal>0){
+        var invOrigTotal2=grandTotal; // save original total for proportion calc
         depositApplied=Math.min(depBal,grandTotal);
         if(!DB.deposits)DB.deposits=[];
-        DB.deposits.push({id:uid(),custId:custId,custName:regC.name,amount:-depositApplied,payMode:'deposit',note:'Auto-applied to Invoice #'+invNum,date:date,month:month,by:'System'});
-        DB.cashflow.push({id:uid(),desc:'Deposit applied — '+regC.name+' Invoice #'+invNum,amount:depositApplied,type:'in',cat:'Sales',payMode:'deposit',date:date,month:month,isDepositApplied:true});
-        // Reduce grandTotal by deposit used
-        grandTotal=Math.max(0,grandTotal-depositApplied);
-        cashReceived=Math.max(0,cashReceived-depositApplied);
-        creditAmount=Math.max(0,creditAmount-depositApplied);
-        // If user selected a topup payment mode to cover the shortfall
-        if(window._depTopup&&grandTotal>0){
-          var tu=window._depTopup;
-          if(tu.mode==='credit'){
-            regC.creditBalance=(regC.creditBalance||0)+grandTotal;
-            creditAmount=0;grandTotal=0;cashReceived=0;
-          } else {
-            DB.cashflow.push({id:uid(),desc:'Deposit shortfall paid ('+tu.mode+') — '+regC.name+' Invoice #'+invNum,
-              amount:grandTotal,type:'in',cat:'Sales',payMode:tu.mode,bankId:tu.bankId||null,posId:tu.posId||null,date:date,month:month});
-            cashReceived=0;creditAmount=0;grandTotal=0;
-          }
-          window._depTopup=null;
-        }
-        // Stamp depositApplied on all saved sale items for this invoice
-        var invOrigTotal=DB.sales.filter(function(s){return s.invoiceNum===invNum;}).reduce(function(a,s){return a+s.total;},0);
+        // Record deposit deduction in deposit ledger
+        DB.deposits.push({id:uid(),custId:custId,custName:regC.name,amount:-depositApplied,payMode:'deposit',note:'Applied to Invoice #'+invNum,date:date,month:month,by:'System'});
+        // Record deposit portion as cashflow income
+        DB.cashflow.push({id:uid(),desc:'Deposit used — '+regC.name+' Invoice #'+invNum,amount:depositApplied,type:'in',cat:'Sales',payMode:'deposit',date:date,month:month});
+        // Remaining balance after deposit
+        var remainingAfterDeposit=Math.max(0,grandTotal-depositApplied);
+        grandTotal=remainingAfterDeposit;
+        cashReceived=depositApplied; // deposit portion is what was "received" from deposit
+        creditAmount=0;
+
+        // Stamp depositApplied on all saved sale items
         DB.sales.filter(function(s){return s.invoiceNum===invNum;}).forEach(function(s){
-          s.depositApplied=invOrigTotal>0?Math.round((s.total/invOrigTotal)*depositApplied*100)/100:0;
-          // If deposit fully settles the invoice, update payment type so it's never counted as credit owed
-          if(creditAmount===0){
-            s.payment='deposit';
-            s.payMode='deposit';
-          }
+          s.depositApplied=invOrigTotal2>0?Math.round((s.total/invOrigTotal2)*depositApplied*100)/100:0;
+          s.payment='deposit';
+          s.payMode='deposit';
         });
+
+        // ── Handle the remaining balance (shortfall) ──
+        if(remainingAfterDeposit>0){
+          if(window._depTopup&&window._depTopup.amt>=remainingAfterDeposit){
+            // Cashier collected the shortfall physically (Cash / POS / Transfer)
+            var tu=window._depTopup;
+            DB.cashflow.push({id:uid(),desc:'Cash top-up for deposit shortfall — '+regC.name+' Invoice #'+invNum,amount:tu.amt,type:'in',cat:'Sales',payMode:tu.mode,bankId:tu.bankId||null,posId:tu.posId||null,date:date,month:month});
+            // If cashier collected more than shortfall, give change as store credit
+            var topupChange=tu.amt-remainingAfterDeposit;
+            if(topupChange>0){
+              regC.creditBalance=(regC.creditBalance||0)-topupChange;
+            }
+            // Stamp proportional share of topup on each item (so summing across items = correct total)
+            var _invTotalForTopup=DB.sales.filter(function(s){return s.invoiceNum===invNum;}).reduce(function(a,s){return a+s.total;},0);
+            DB.sales.filter(function(s){return s.invoiceNum===invNum;}).forEach(function(s){
+              s.depositTopupMode=tu.mode;
+              s.depositTopupAmt=_invTotalForTopup>0?Math.round((s.total/_invTotalForTopup)*tu.amt*100)/100:0;
+            });
+            window._depTopupUsed={mode:tu.mode,amt:tu.amt,shortfall:remainingAfterDeposit};
+            window._depTopup=null;
+          } else {
+            // Shortfall goes to credit account (credit limit covered it — confirmed earlier)
+            regC.creditBalance=(regC.creditBalance||0)+remainingAfterDeposit;
+            DB.cashflow.push({id:uid(),desc:'Credit shortfall (deposit+credit) — '+regC.name+' Invoice #'+invNum,amount:remainingAfterDeposit,type:'in',cat:'Sales',payMode:'credit',date:date,month:month});
+            DB.sales.filter(function(s){return s.invoiceNum===invNum;}).forEach(function(s){
+              s.depositShortfall=remainingAfterDeposit;
+            });
+          }
+          grandTotal=0;
+          creditAmount=0;
+        }
       }
 
 
@@ -5473,7 +5573,8 @@ function submitInvoice(){
     var saved=DB.sales.find(function(s){return s.invoiceId===invoiceId&&s.itemId===li.itemId;});
     if(saved){li.suppliedQty=saved.suppliedQty;li.pendingQty=saved.pendingQty;li.supplyStatus=saved.supplyStatus;}
   });
-  DB._lastInvoice={invoiceId:invoiceId,invoiceNum:invNum,custName:custName,custAddr:custAddr,printName:printName,date:date,items:lastInvItems,invoiceDiscAmt:invoiceDiscAmt,invoiceDiscType:invDiscType,invoiceDiscVal:invDiscVal,payment:payment,payMode:payMode,bankId:bankId,posId:posId,seller:DB.currentUser.name,grandTotal:grandTotal,grandProfit:grandProfit,subtotalAll:subtotalAll,partPayment:partPayment,pendingSupply:pendingSupply};
+  var _savedTopup=window._depTopupUsed||null;
+  DB._lastInvoice={invoiceId:invoiceId,invoiceNum:invNum,custName:custName,custAddr:custAddr,printName:printName,date:date,items:lastInvItems,invoiceDiscAmt:invoiceDiscAmt,invoiceDiscType:invDiscType,invoiceDiscVal:invDiscVal,payment:payment,payMode:payMode,bankId:bankId,posId:posId,seller:DB.currentUser.name,grandTotal:originalGrandTotal,grandProfit:grandProfit,subtotalAll:subtotalAll,partPayment:partPayment,pendingSupply:pendingSupply,depositTopup:_savedTopup,depositApplied:depositApplied||0};
   invoiceItems=[];
   logActivity('Invoice saved','Invoice #'+invNum+' — '+custName+' — '+fmt(grandTotal),payment);
   // Gap protection: re-check for duplicates right before incrementing
@@ -5731,6 +5832,132 @@ function printSaleLedger(){
   var w=window.open('','_blank');w.document.write(html);w.document.close();setTimeout(function(){w.print();},400);
 }
 
+// ── Deposit Top-up Panel ─────────────────────────────────────
+// Called when deposit is short and credit cannot cover the gap.
+// Renders an inline panel below the payment section so the
+// cashier can collect the shortfall in Cash / POS / Transfer
+// before the invoice is finalised.
+function showDepositTopupPanel(custName, depBal, invoiceTotal, shortfall, availCredit, creditLimit){
+  // Remove any existing panel first
+  var old=document.getElementById('dep-topup-panel');
+  if(old)old.remove();
+
+  var bankOptHtml=DB.banks.length?'<option value="">Select bank...</option>'+bankOpts():'<option value="">No banks set up</option>';
+  var posOptHtml=DB.posTerminals.length?'<option value="">Select terminal...</option>'+posOpts():'<option value="">No terminals set up</option>';
+  var creditNote=creditLimit>0&&availCredit>0
+    ?'<div style="margin-bottom:8px;font-size:12px;color:#6c757d">ℹ️ '+custName+' has <b>'+fmt(availCredit)+'</b> available credit — but this shortfall exceeds it. Collect the balance physically below.</div>'
+    :'';
+
+  var panel=document.createElement('div');
+  panel.id='dep-topup-panel';
+  panel.style.cssText='margin-top:14px;padding:16px;background:#fff8e1;border:2px solid #f59e0b;border-radius:10px;animation:fadeIn .2s ease';
+  panel.innerHTML=
+    '<div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">'+
+      '<span style="font-size:20px">💳</span>'+
+      '<div>'+
+        '<div style="font-size:14px;font-weight:700;color:#92400e">Additional Payment Required</div>'+
+        '<div style="font-size:12px;color:#78350f">Deposit is not enough — collect the shortfall to complete this sale</div>'+
+      '</div>'+
+    '</div>'+
+    creditNote+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px;margin-bottom:12px;font-size:13px">'+
+      '<div><span style="color:#6c757d">Deposit used</span><br><b style="color:#15803d">'+fmt(depBal)+'</b></div>'+
+      '<div><span style="color:#6c757d">Invoice total</span><br><b>'+fmt(invoiceTotal)+'</b></div>'+
+      '<div><span style="color:#6c757d">Amount to collect now</span><br><b style="color:#dc3545;font-size:15px">'+fmt(shortfall)+'</b></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+      '<div class="form-group">'+
+        '<label>Payment mode for shortfall <span style="color:var(--danger)">*</span></label>'+
+        '<select id="dep-topup-mode" onchange="onDepTopupModeChange()" style="margin-top:4px">'+
+          '<option value="">— Select mode —</option>'+
+          '<option value="cash">Cash</option>'+
+          '<option value="pos">POS</option>'+
+          '<option value="transfer">Bank transfer</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="form-group">'+
+        '<label>Amount collected (₦) <span style="color:var(--danger)">*</span></label>'+
+        '<input type="number" id="dep-topup-amount" min="'+shortfall+'" value="'+shortfall+'" style="margin-top:4px;border:1.5px solid #f59e0b;font-weight:700;font-size:14px;color:#92400e" oninput="onDepTopupAmtChange('+shortfall+')">'+
+        '<div id="dep-topup-amt-note" style="font-size:11px;color:#6c757d;margin-top:3px">Enter at least '+fmt(shortfall)+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div id="dep-topup-bank-wrap" style="display:none" class="form-group" style="margin-bottom:10px">'+
+      '<label>Which bank? <span style="color:var(--danger)">*</span></label>'+
+      '<select id="dep-topup-bankid" style="margin-top:4px"><option value="">Select bank...</option>'+bankOptHtml+'</select>'+
+    '</div>'+
+    '<div id="dep-topup-pos-wrap" style="display:none" class="form-group" style="margin-bottom:10px">'+
+      '<label>Which POS terminal? <span style="color:var(--danger)">*</span></label>'+
+      '<select id="dep-topup-posid" style="margin-top:4px"><option value="">Select terminal...</option>'+posOptHtml+'</select>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-top:4px">'+
+      '<button class="btn success" style="flex:1;font-size:13px;padding:9px" onclick="submitWithDepositTopup()">✅ Collect payment & complete sale</button>'+
+      '<button class="btn" onclick="document.getElementById(\'dep-topup-panel\').remove()" style="font-size:13px;padding:9px">✕ Cancel</button>'+
+    '</div>';
+
+  // Insert panel after the payment section
+  var paySection=document.getElementById('s-paymode-wrap')||document.getElementById('s-payment');
+  if(paySection){
+    // walk up to find the containing fg div
+    var container=paySection.parentElement;
+    while(container&&!container.classList.contains('fg'))container=container.parentElement;
+    if(container&&container.parentElement){
+      container.parentElement.insertBefore(panel,container.nextSibling);
+    } else {
+      // fallback: append after the payment type select parent
+      var pg=document.getElementById('s-payment');
+      if(pg&&pg.parentElement&&pg.parentElement.parentElement){
+        pg.parentElement.parentElement.appendChild(panel);
+      }
+    }
+  }
+  panel.scrollIntoView({behavior:'smooth',block:'center'});
+}
+
+function onDepTopupModeChange(){
+  var mode=document.getElementById('dep-topup-mode')?document.getElementById('dep-topup-mode').value:'';
+  var bankWrap=document.getElementById('dep-topup-bank-wrap');
+  var posWrap=document.getElementById('dep-topup-pos-wrap');
+  if(bankWrap)bankWrap.style.display=mode==='transfer'?'block':'none';
+  if(posWrap)posWrap.style.display=mode==='pos'?'block':'none';
+}
+
+function onDepTopupAmtChange(minAmt){
+  var el=document.getElementById('dep-topup-amount');
+  var note=document.getElementById('dep-topup-amt-note');
+  if(!el||!note)return;
+  var val=parseFloat(el.value)||0;
+  if(val<minAmt){
+    note.style.color='#dc3545';
+    note.textContent='⚠️ Minimum required: '+fmt(minAmt);
+  } else {
+    note.style.color='#15803d';
+    note.textContent='✅ Amount OK'+(val>minAmt?' (change: '+fmt(val-minAmt)+')':'');
+  }
+}
+
+function submitWithDepositTopup(){
+  var modeEl=document.getElementById('dep-topup-mode');
+  var amtEl=document.getElementById('dep-topup-amount');
+  var bankEl=document.getElementById('dep-topup-bankid');
+  var posEl=document.getElementById('dep-topup-posid');
+  if(!modeEl||!amtEl)return;
+  var mode=modeEl.value;
+  var amt=parseFloat(amtEl.value)||0;
+  if(!mode){alert('Please select a payment mode for the shortfall.');modeEl.focus();return;}
+  // Get shortfall from the amount field's min attribute
+  var minAmt=parseFloat(amtEl.min)||0;
+  if(amt<minAmt){alert('Amount collected must be at least '+fmt(minAmt)+'.');amtEl.focus();return;}
+  if(mode==='transfer'&&DB.banks.length&&bankEl&&!bankEl.value){alert('Please select the bank for the transfer.');bankEl.focus();return;}
+  if(mode==='pos'&&DB.posTerminals.length&&posEl&&!posEl.value){alert('Please select the POS terminal.');posEl.focus();return;}
+  // Store topup details on window so submitInvoice() can read them
+  window._depTopup={mode:mode,amt:amt,bankId:bankEl?bankEl.value:null,posId:posEl?posEl.value:null};
+  // Remove the panel then submit
+  var panel=document.getElementById('dep-topup-panel');
+  if(panel)panel.remove();
+  submitInvoice();
+}
+
+
 function onPaymentTypeChange(){
   // For walk-in customers, hide credit and part payment options
   var paySelEl=document.getElementById('s-payment');
@@ -5744,11 +5971,10 @@ function onPaymentTypeChange(){
     // Hide deposit option if customer has no deposit balance
     var depOptEl=Array.from(paySelEl.options).find(function(o){return o.value==='deposit';});
     if(depOptEl){
-      var custId=saleCustomerType==='walkin'?'':(document.getElementById('s-reg-customer')?document.getElementById('s-reg-customer').value:'');
+      var custId=(document.getElementById('s-reg-customer')?document.getElementById('s-reg-customer').value:'')||(window._saleRegCustId||'');
       var depBal=custId?(DB.deposits||[]).filter(function(d){return String(d.custId)==String(custId);}).reduce(function(a,d){return a+d.amount;},0):0;
       depOptEl.disabled=depBal<=0;
-      depOptEl.style.color=depBal>0?'':'#aaa';
-      depOptEl.text='Deposit (use customer deposit balance'+(depBal>0?' — ₦'+Math.round(depBal).toLocaleString()+' available':'— no balance available')+')';
+      depOptEl.text='Deposit (use customer deposit balance'+(depBal>0?' — available: '+fmt(depBal):'— no deposit available')+')';
     }
   }
   var payType=document.getElementById('s-payment');
@@ -5768,6 +5994,7 @@ function onPaymentTypeChange(){
     if(partWrap)partWrap.style.display='none';
     if(splitWrap)splitWrap.style.display='none';
     if(payModeWrap)payModeWrap.style.display='none';
+    setTimeout(calcInvoiceDiscount,10);
   } else if(payType.value==='part'){
     payMode.value='cash';payMode.disabled=false;
     if(partWrap)partWrap.style.display='block';
@@ -6377,12 +6604,23 @@ function buildSales(){
   DB.sales.forEach(function(s){
     totalRev+=s.total;totalProfit+=s.profit;
     var k=s.invoiceNum||s.id;
-    if(!_salesInvMap[k])_salesInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,total:0};
+    if(!_salesInvMap[k])_salesInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,total:0,depositTopupMode:s.depositTopupMode||null,depositTopupAmt:s.depositTopupAmt||0};
     _salesInvMap[k].total+=s.total;
+    if(s.depositTopupMode)_salesInvMap[k].depositTopupMode=s.depositTopupMode;
+    if(s.depositTopupAmt)_salesInvMap[k].depositTopupAmt=(parseFloat(_salesInvMap[k].depositTopupAmt)||0)+(parseFloat(s.depositTopupAmt)||0);
   });
   Object.values(_salesInvMap).forEach(function(g){
     if(g.payment==='credit'){creditTotal+=g.total;return;}
-    if(g.payment==='deposit'||g.payMode==='deposit')return;
+    if(g.payment==='deposit'||g.payMode==='deposit'){
+      // If deposit+topup, split the topup portion into its real payment mode
+      if(g.depositTopupMode&&g.depositTopupAmt>0){
+        var _topupAmt=Math.min(g.depositTopupAmt,g.total);
+        if(g.depositTopupMode==='pos')posS+=_topupAmt;
+        else if(g.depositTopupMode==='transfer')transS+=_topupAmt;
+        else cashS+=_topupAmt;
+      }
+      return;
+    }
     if(g.payMode==='split'&&g.splitPayment){
       var _sp=g.splitPayment;
       if(_sp.mode1==='pos')posS+=_sp.amt1;else if(_sp.mode1==='transfer')transS+=_sp.amt1;else cashS+=_sp.amt1;
@@ -6443,7 +6681,7 @@ function buildSales(){
     if(sel&&window._saleRegCustId){sel.value=window._saleRegCustId;onSaleCustChange(window._saleRegCustId);}
   },70);
   var invoiceGroups={};
-  DB.sales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invoiceGroups[k])invoiceGroups[k]={invoiceNum:s.invoiceNum||' - ',date:s.date,custName:s.custName,custId:s.custId,items:[],total:0,profit:0,payMode:s.payMode,bankId:s.bankId,posId:s.posId,payment:s.payment,seller:s.seller,_s:s};invoiceGroups[k].items.push(s);invoiceGroups[k].total+=s.total;invoiceGroups[k].profit+=s.profit;});
+  DB.sales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invoiceGroups[k])invoiceGroups[k]={invoiceNum:s.invoiceNum||' - ',date:s.date,custName:s.custName,custId:s.custId,items:[],total:0,profit:0,payMode:s.payMode,bankId:s.bankId,posId:s.posId,payment:s.payment,seller:s.seller,_s:s,depositTopupMode:s.depositTopupMode||null,depositTopupAmt:s.depositTopupAmt||0,depositApplied:s.depositApplied||0};invoiceGroups[k].items.push(s);invoiceGroups[k].total+=s.total;invoiceGroups[k].profit+=s.profit;if(s.depositTopupMode)invoiceGroups[k].depositTopupMode=s.depositTopupMode;if(s.depositTopupAmt)invoiceGroups[k].depositTopupAmt=(parseFloat(invoiceGroups[k].depositTopupAmt)||0)+(parseFloat(s.depositTopupAmt)||0);if(s.depositApplied)invoiceGroups[k].depositApplied=(parseFloat(invoiceGroups[k].depositApplied)||0)+(parseFloat(s.depositApplied)||0);});
   var today=new Date().toLocaleDateString();
   var salesLedgerFilter=window._salesLedgerFilter||'today';
   var salesLedgerDate=window._salesLedgerDate||'';
@@ -6511,7 +6749,8 @@ function buildSales(){
       '<div style="margin-top:3px"><span style="background:#fff3cd;color:#664d03;border:1px solid #ffe69c;border-radius:10px;font-size:10px;font-weight:700;padding:2px 7px">⏳ Goods not yet supplied</span></div>':
       (g.items[0]&&g.items[0].supplyDate&&g.items[0].supplyDate!==g.date?
         '<div style="margin-top:3px"><span style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;border-radius:10px;font-size:10px;font-weight:700;padding:2px 7px">✅ Supplied: '+g.items[0].supplyDate+'</span></div>':'');
-    var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='part'?'<span class="badge low">Part pay</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':g.payment==='split'?'<span class="badge" style="background:#6f42c1;color:#fff">Split</span>':g.payMode==='pos'?'<span class="badge" style="background:#0891b2;color:#fff">POS</span>':g.payMode==='transfer'?'<span class="badge" style="background:#0d6efd;color:#fff">Transfer</span>':'<span class="badge ok">Cash</span>';
+    var _depTopupBadge=(g.payment==='deposit'&&g.depositTopupMode)?'Dep+'+g.depositTopupMode.charAt(0).toUpperCase()+g.depositTopupMode.slice(1):'Deposit';
+    var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='part'?'<span class="badge low">Part pay</span>':g.payment==='deposit'?'<span class="badge info">'+_depTopupBadge+'</span>':g.payment==='split'?'<span class="badge" style="background:#6f42c1;color:#fff">Split</span>':g.payMode==='pos'?'<span class="badge" style="background:#0891b2;color:#fff">POS</span>':g.payMode==='transfer'?'<span class="badge" style="background:#0d6efd;color:#fff">Transfer</span>':'<span class="badge ok">Cash</span>';
     return '<tr'+(isPending?' style="background:#fffbeb"':'')+
       ' data-inv="'+(g.invoiceNum||'').toLowerCase()+'"'+
       ' data-cust="'+(g.custName||'').toLowerCase()+'"'+
@@ -6530,6 +6769,18 @@ function buildSales(){
         var db=(DB.deposits||[]).filter(function(d){return String(d.custId)===String(g.custId);}).reduce(function(a,d){return a+d.amount;},0);
         if(db<=0)return '<span style="color:#ccc">—</span>';
         return '<span style="color:#15803d;font-weight:700">'+fmt(db)+'</span>';
+      }())+'</td>'+
+      '<td style="text-align:right">'+(function(){
+        if(!g.custId)return '<span style="color:#ccc">—</span>';
+        // Current deposit balance minus what this invoice used (depositApplied on items)
+        var currentBal=(DB.deposits||[]).filter(function(d){return String(d.custId)===String(g.custId);}).reduce(function(a,d){return a+d.amount;},0);
+        var applied=g.items.reduce(function(a,s){return a+(s.depositApplied||0);},0);
+        // balAfter = currentBal already reflects deduction after sale; if no applied we can't show
+        if(applied<=0&&g.payment!=='deposit')return '<span style="color:#ccc">—</span>';
+        // The currentBal already has the deduction applied (deposit entry was negative)
+        var balAfter=currentBal;
+        var color=balAfter>0?'#15803d':balAfter===0?'#6c757d':'#dc3545';
+        return '<span style="color:'+color+';font-weight:700">'+fmt(balAfter)+'</span>';
       }())+'</td>'+
       '<td>'+g.seller+'</td>'+
       '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+
@@ -6644,7 +6895,7 @@ function buildSales(){
     '</div>'+
     pendingAlert+
     summaryBar+
-    (invoiceKeys.length?'<div class="tbl-wrap"><table id="sales-ledger-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Customer</th><th>Pay type</th><th>Items</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Mode</th><th style="text-align:right;color:#15803d">Deposit bal.</th><th>Seller</th><th></th></tr></thead><tbody>'+ledger+'</tbody></table></div>':'<div class="empty">'+(salesLedgerFilter==='today'?'No invoices recorded today yet.':salesLedgerFilter==='date'&&salesLedgerDate?'No invoices found for that date.':'No invoices yet.')+'</div>')+
+    (invoiceKeys.length?'<div class="tbl-wrap"><table id="sales-ledger-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Customer</th><th>Pay type</th><th>Items</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Mode</th><th style="text-align:right;color:#15803d">Dep. Balance</th><th style="text-align:right;color:#c0392b">Bal. After Sale</th><th>Seller</th><th></th></tr></thead><tbody>'+ledger+'</tbody></table></div>':'<div class="empty">'+(salesLedgerFilter==='today'?'No invoices recorded today yet.':salesLedgerFilter==='date'&&salesLedgerDate?'No invoices found for that date.':'No invoices yet.')+'</div>')+
     // Returns history — filtered by the same date as the sales ledger
     (function(){
       if(!DB.salesReturns||!DB.salesReturns.length) return '';
@@ -9447,5 +9698,6 @@ window.onload=function(){
 };
 
 </script>
-</body>
-</html>
+
+
+</body></html>
