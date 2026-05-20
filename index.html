@@ -4087,7 +4087,7 @@ function buildCustomers(){
         '</div>'+
         '<div class="metrics" style="margin-bottom:8px">'+
         mc('Purchases',invKeys.length,'Invoices','')+
-        mc('Total spent',fmt(cust.totalSpent),'Lifetime','')+
+        mc('Total spent',fmt(custSales.reduce(function(a,s){return a+s.total;},0)),'Lifetime','')+
         mc('Credit owed',weOweThem?fmt(Math.abs(creditBalance)):fmt(creditBalance),weOweThem?'We owe customer':theyOweUs?'Outstanding':'Clear',weOweThem?'blue':theyOweUs?'red':'green')+
         mc('Credit limit',creditLimit>0?fmt(creditLimit):'No limit','','')+
         (cust.openingBalance>0?mc('Opening balance',fmt(cust.openingBalance),'Set at setup','amber'):'')+
@@ -7062,6 +7062,16 @@ function saveInvoiceEdit(invNum){
   }
   var newTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   saveData();
+  // Recalculate totalSpent on affected customer(s)
+  var _affIds=[s0.custId, newCustId].filter(Boolean);
+  _affIds.forEach(function(aid){
+    var affCust=DB.customers.find(function(c){return String(c.id)===String(aid);});
+    if(affCust){
+      var affSales=DB.sales.filter(function(s){return String(s.custId)===String(aid);});
+      affCust.totalSpent=affSales.reduce(function(a,s){return a+s.total;},0);
+      affCust.totalPurchases=[...new Set(affSales.map(function(s){return s.invoiceNum||s.id;}))].length;
+    }
+  });
   logActivity('Invoice edited','Invoice #'+invNum+' — total: '+fmt(oldTotal)+' → '+fmt(newTotal)+'. Reason: '+reason,'Admin: '+DB.currentUser.name);
   document.getElementById('inv-edit-modal').remove();
   var stockMsg=stockChanges.length?'\n\n📦 Stock adjusted:\n'+stockChanges.map(function(c){return c.name+': '+c.before+' → '+c.after+(c.diff>0?' (+'+c.diff+' added back)':' ('+Math.abs(c.diff)+' deducted)');}).join('\n'):'';
