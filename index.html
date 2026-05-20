@@ -5744,7 +5744,7 @@ function onPaymentTypeChange(){
     // Hide deposit option if customer has no deposit balance
     var depOptEl=Array.from(paySelEl.options).find(function(o){return o.value==='deposit';});
     if(depOptEl){
-      var custId=document.getElementById('s-cust-id')?document.getElementById('s-cust-id').value:'';
+      var custId=saleCustomerType==='walkin'?'':(document.getElementById('s-reg-customer')?document.getElementById('s-reg-customer').value:'');
       var depBal=custId?(DB.deposits||[]).filter(function(d){return String(d.custId)==String(custId);}).reduce(function(a,d){return a+d.amount;},0):0;
       depOptEl.disabled=depBal<=0;
       depOptEl.style.color=depBal>0?'':'#aaa';
