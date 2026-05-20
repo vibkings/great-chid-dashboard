@@ -6835,6 +6835,27 @@ function printReturnRecord(gKey){
 }
 
 // ── Real Invoice Editing ─────────────────────────────────────
+function eiCustSearch(val, showAll){
+  var dd=document.getElementById('ei-cust-dd');
+  if(!dd)return;
+  var q=(val||'').toLowerCase().trim();
+  var matches=(DB.customers||[]).filter(function(c){
+    return showAll||!q||c.name.toLowerCase().indexOf(q)>=0||(c.phone&&c.phone.indexOf(q)>=0);
+  }).slice(0,20);
+  // Always show Walk-in option
+  var walkIn='<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\'Walk-in customer\';document.getElementById(\'ei-custid\').value=\'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:12px;color:#6b7280;font-style:italic" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'\'">Walk-in customer (no account)</div>';
+  if(!matches.length&&!showAll){dd.style.display='none';return;}
+  dd.style.display='block';
+  dd.innerHTML=walkIn+matches.map(function(c){
+    var safeName=c.name.replace(/'/g,"\'").replace(/"/g,'&quot;');
+    var bal=c.creditBalance>0?'<span style="color:#dc2626;font-size:10px"> ₦'+Math.round(c.creditBalance).toLocaleString()+' owed</span>':'';
+    return '<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\''+safeName+'\';document.getElementById(\'ei-custid\').value=\''+c.id+'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:12px" onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'\'">'+
+      '<div style="font-weight:600">'+c.name+bal+'</div>'+
+      '<div style="font-size:10px;color:#6b7280">'+(c.phone||'No phone')+'</div>'+
+    '</div>';
+  }).join('');
+}
+
 function eiPaymentChange(){
   var val=document.getElementById('ei-payment').value;
   var bankWrap=document.getElementById('ei-bank-wrap');
@@ -6879,8 +6900,16 @@ function editInvoice(invNum){
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'+
         '<div>'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Customer name (print name)</label>'+
-          '<input type="text" id="ei-custname" value="'+(s0.printName||s0.custName)+'" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Customer</label>'+
+          '<div style="position:relative">'+
+            '<input type="text" id="ei-custname" value="'+(s0.printName||s0.custName)+'" autocomplete="off" placeholder="Type to search or enter name..."'+
+              ' oninput="eiCustSearch(this.value)"'+
+              ' onfocus="eiCustSearch(this.value,true)"'+
+              ' onblur="setTimeout(function(){var d=document.getElementById(\'ei-cust-dd\');if(d)d.style.display=\'none\';},200)"'+
+              ' style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;box-sizing:border-box">'+
+            '<div id="ei-cust-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:99999;max-height:200px;overflow-y:auto;margin-top:2px"></div>'+
+          '</div>'+
+          '<input type="hidden" id="ei-custid" value="'+(s0.custId||'')+'">'+ 
         '</div>'+
         '<div>'+
           '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Sale date</label>'+
@@ -6949,6 +6978,7 @@ function saveInvoiceEdit(invNum){
   if(!reason){alert('Please enter a reason for this edit.');return;}
   var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum;});
   var custName=document.getElementById('ei-custname').value.trim();
+  var newCustId=document.getElementById('ei-custid')?document.getElementById('ei-custid').value:'';
   var oldTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var stockChanges=[];
   // Read invoice-level discount
@@ -7003,6 +7033,7 @@ function saveInvoiceEdit(invNum){
     s.qty=qty;s.salePrice=price;s.discAmt=disc;s.total=newTotal;
     s.profit=Math.round((newTotal-(s.cost*qty))*100)/100;
     if(custName){s.printName=custName;s.custName=custName;}
+    if(newCustId!==undefined){s.custId=newCustId||null;}
     // Apply payment changes to all line items
     s.payment=newPayment;s.payMode=newPayMode;
     if(newBankId!==null)s.bankId=newBankId;
