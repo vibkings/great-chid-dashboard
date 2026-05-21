@@ -2037,14 +2037,16 @@ var TABS=[
   {id:'creditcust',label:'Credit',perm:'creditcust'},
   {id:'reports',label:'Reports',perm:'reports'},
   {id:'closing',label:'📋 Closing',perm:'reports'},
+  {id:'supplieroverview',label:'Supplier Overview',perm:'suppliers'},
+  {id:'customeroverview',label:'Customer Overview',perm:'customers'},
   {id:'activitylog',label:'🔍 Activity',perm:'admin'},
   {id:'recyclebin',label:'Recycle Bin',perm:'admin'},
   {id:'settings',label:'Settings',perm:'settings'},
   {id:'users',label:'Users',perm:'users'}
 ];
 
-var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋'};
-var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing'};
+var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋',supplieroverview:'📋',customeroverview:'👤'};
+var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing',supplieroverview:'Supplier Overview',customeroverview:'Customer Overview'};
 var VERSION_NOTES=[
   {ver:'v27',date:'May 2026',title:'Confirmation popups & Recycle Bin',notes:[
     'Confirmation popups — every delete now shows a styled modal instead of plain browser confirm()',
@@ -2339,7 +2341,7 @@ function renderApp(){
   var navHtml='';
   var sections=[
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases']},
-    {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing']},
+    {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing','supplieroverview','customeroverview']},
     {label:'Management',tabs:['suppliers','customers','settings','users','activitylog','recyclebin']},
   ];
   // Auto-purge bin items older than 30 days
@@ -2731,7 +2733,7 @@ function filterWhTable(){
 function renderPanel(){
   var scrollY=window.scrollY||window.pageYOffset;
   var p=document.getElementById('panel-root');if(!p)return;
-  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers};
+  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview};
   var content=(map[activeTab]||function(){return '';})();
   // Show version notes only on inventory (home) or when explicitly navigating to it
   var vnHtml='';
@@ -8484,6 +8486,469 @@ var supPaySearch='';
 var supPayDateFrom='';
 var supPayDateTo='';
 var supPayFilterSup='';
+
+/* ── SUPPLIER OVERVIEW ─────────────────────────────────────── */
+var supOvSearch='';
+var supOvFilter='all'; // all | balance | cleared | active
+
+function buildSupplierOverview(){
+  if(!canDo('suppliers'))return '<div class="empty">Access denied.</div>';
+
+  var suppliers=DB.suppliers||[];
+  var purchases=DB.purchases||[];
+  var payments=DB.supplierPayments||[];
+  var pending=(DB.pendingDeliveries||[]).filter(function(d){return d.status!=='complete';});
+
+  // ── Per-supplier aggregates ──────────────────────────────────
+  var supMap={};
+  suppliers.forEach(function(s){
+    supMap[s.id]={
+      id:s.id,name:s.name,phone:s.phone||s.contact||'—',
+      owedToSupplier:s.owedToSupplier||0,
+      totalPurchased:0,totalPaid:0,invoiceCount:0,lastPurchase:null,
+      pendingCount:0
+    };
+  });
+  purchases.forEach(function(p){
+    if(!supMap[p.supId])return;
+    supMap[p.supId].totalPurchased+=(p.grandTotal||0);
+    supMap[p.supId].invoiceCount++;
+    var d=parseDate(p.date);
+    if(!supMap[p.supId].lastPurchase||d>supMap[p.supId].lastPurchase)supMap[p.supId].lastPurchase=d;
+  });
+  payments.forEach(function(p){
+    if(!supMap[p.supId])return;
+    supMap[p.supId].totalPaid+=(p.amount||0);
+  });
+  pending.forEach(function(d){
+    if(!supMap[d.supId])return;
+    supMap[d.supId].pendingCount++;
+  });
+
+  var rows=Object.values(supMap);
+
+  // totals KPIs
+  var totalOwed=rows.reduce(function(a,r){return a+r.owedToSupplier;},0);
+  var totalPaidEver=rows.reduce(function(a,r){return a+r.totalPaid;},0);
+  var totalPurchaseVal=rows.reduce(function(a,r){return a+r.totalPurchased;},0);
+  var activeCount=rows.filter(function(r){return r.invoiceCount>0;}).length;
+
+  // ── Filter & search ──────────────────────────────────────────
+  var filtered=rows.filter(function(r){
+    if(supOvSearch){
+      var t=supOvSearch.toLowerCase();
+      if(r.name.toLowerCase().indexOf(t)<0&&r.phone.toLowerCase().indexOf(t)<0)return false;
+    }
+    if(supOvFilter==='balance')return r.owedToSupplier>0;
+    if(supOvFilter==='cleared')return r.owedToSupplier<=0;
+    if(supOvFilter==='active')return r.invoiceCount>0;
+    return true;
+  });
+
+  // ── Table rows ───────────────────────────────────────────────
+  var tableRows=filtered.map(function(r){
+    var status=r.owedToSupplier>0
+      ?'<span style="background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">HAS BALANCE</span>'
+      :'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">CLEARED</span>';
+    var lastP=r.lastPurchase?r.lastPurchase.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    var payBtn=r.owedToSupplier>0
+      ?'<button class="btn sm" style="color:#15803d;border-color:#86efac;font-size:11px" onclick="paySupplier('+r.id+')">💳 Pay</button> '
+      :'';
+    return '<tr>'+
+      '<td><b>'+r.name+'</b></td>'+
+      '<td>'+r.phone+'</td>'+
+      '<td style="text-align:right">'+fmt(r.totalPurchased)+'</td>'+
+      '<td style="text-align:right;color:#15803d">'+fmt(r.totalPaid)+'</td>'+
+      '<td style="text-align:right;color:'+(r.owedToSupplier>0?'#dc2626':'#374151')+'"><b>'+fmt(r.owedToSupplier)+'</b></td>'+
+      '<td>'+lastP+'</td>'+
+      '<td style="text-align:center">'+r.invoiceCount+'</td>'+
+      '<td style="text-align:center">'+r.pendingCount+'</td>'+
+      '<td>'+status+'</td>'+
+      '<td>'+payBtn+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Top 5 suppliers bar chart ────────────────────────────────
+  var top5=[].concat(rows).sort(function(a,b){return b.totalPurchased-a.totalPurchased;}).slice(0,5);
+  var maxVal=top5[0]?top5[0].totalPurchased:1;
+  var barChart=top5.map(function(r,i){
+    var pct=maxVal>0?Math.round(r.totalPurchased/maxVal*100):0;
+    var colors=['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b'];
+    return '<div style="margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
+        '<span style="font-weight:600;color:#374151">'+r.name+'</span>'+
+        '<span style="color:#6b7280">'+fmt(r.totalPurchased)+'</span>'+
+      '</div>'+
+      '<div style="background:#f3f4f6;border-radius:6px;height:10px;overflow:hidden">'+
+        '<div style="width:'+pct+'%;height:100%;background:'+colors[i]+';border-radius:6px;transition:width .4s"></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Monthly spend last 6 months ──────────────────────────────
+  var now=new Date();
+  var months=[];
+  for(var m=5;m>=0;m--){
+    var d=new Date(now.getFullYear(),now.getMonth()-m,1);
+    months.push({label:d.toLocaleDateString('en-GB',{month:'short',year:'2-digit'}),year:d.getFullYear(),month:d.getMonth(),total:0});
+  }
+  payments.forEach(function(p){
+    var d=parseDate(p.date);
+    if(!d)return;
+    months.forEach(function(mb){if(d.getFullYear()===mb.year&&d.getMonth()===mb.month)mb.total+=p.amount;});
+  });
+  var maxMonth=Math.max.apply(null,months.map(function(mb){return mb.total;}));
+  if(maxMonth===0)maxMonth=1;
+  var monthBars=months.map(function(mb){
+    var pct=Math.round(mb.total/maxMonth*100);
+    return '<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:4px">'+
+      '<div style="font-size:10px;color:#6b7280;font-weight:600">'+fmt(mb.total)+'</div>'+
+      '<div style="width:100%;display:flex;align-items:flex-end;height:60px">'+
+        '<div style="width:100%;height:'+(pct||2)+'%;min-height:3px;background:#6366f1;border-radius:4px 4px 0 0"></div>'+
+      '</div>'+
+      '<div style="font-size:10px;color:#9ca3af">'+mb.label+'</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Pending deliveries summary ───────────────────────────────
+  var pendingBySupplier={};
+  pending.forEach(function(d){
+    if(!pendingBySupplier[d.supId])pendingBySupplier[d.supId]={name:d.supName,items:[],totalCost:0};
+    pendingBySupplier[d.supId].items.push(d);
+    pendingBySupplier[d.supId].totalCost+=(d.cost*d.qtyPending||0);
+  });
+  var pendingRows=Object.values(pendingBySupplier).map(function(ps){
+    return '<tr>'+
+      '<td><b>'+ps.name+'</b></td>'+
+      '<td style="text-align:center">'+ps.items.length+'</td>'+
+      '<td>'+ps.items.slice(0,3).map(function(i){return i.itemName;}).join(', ')+(ps.items.length>3?' …':'')+'</td>'+
+      '<td style="text-align:right;color:#dc2626">'+fmt(ps.totalCost)+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Recent 10 supplier payments ──────────────────────────────
+  var recentPays=[].concat(payments).sort(function(a,b){
+    return (parseDate(b.date)||0)-(parseDate(a.date)||0);
+  }).slice(0,10);
+  var recentRows=recentPays.map(function(p){
+    var modeIcons={cash:'💵',transfer:'🏦',pos:'💳',cheque:'📝'};
+    var icon=modeIcons[p.payMode]||'💰';
+    return '<tr>'+
+      '<td>'+(parseDate(p.date)?parseDate(p.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—')+'</td>'+
+      '<td><b>'+p.supName+'</b></td>'+
+      '<td>'+icon+' '+(p.payMode||'—')+'</td>'+
+      '<td style="text-align:right;color:#15803d;font-weight:700">'+fmt(p.amount)+'</td>'+
+      '<td style="color:#9ca3af;font-size:12px">'+(p.note||'—')+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Build HTML ───────────────────────────────────────────────
+  var filterBtns=['all','balance','cleared','active'].map(function(f){
+    var labels={all:'All',balance:'Has Balance',cleared:'Cleared',active:'Active'};
+    var active=supOvFilter===f;
+    return '<button onclick="supOvFilter=\''+f+'\';renderPanel()" style="padding:6px 14px;border-radius:20px;border:1px solid '+(active?'var(--primary)':'var(--border)')+';background:'+(active?'var(--primary)':'var(--white)')+';color:'+(active?'#fff':'var(--text2)')+';font-size:12px;font-weight:600;cursor:pointer">'+labels[f]+'</button>';
+  }).join('');
+
+  return (
+    // ── KPI Cards ──────────────────────────────────────────────
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px">'+
+      kpiCard('🏭','Total Suppliers',suppliers.length,'','#6366f1')+
+      kpiCard('💰','Total Purchase Value',fmt(totalPurchaseVal),'','#0ea5e9')+
+      kpiCard('✅','Total Paid',fmt(totalPaidEver),'','#10b981')+
+      kpiCard('⏳','Total Outstanding',fmt(totalOwed),totalOwed>0?'⚠️':'','#f59e0b')+
+      kpiCard('🔥','Active Suppliers',activeCount,'','#8b5cf6')+
+      kpiCard('📦','Pending Deliveries',pending.length,'','#dc2626')+
+    '</div>'+
+
+    // ── Charts Row ─────────────────────────────────────────────
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 14px">🏆 Top 5 Suppliers by Purchase Value</p>'+
+        (top5.length?barChart:'<div class="empty">No data yet.</div>')+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 14px">📅 Monthly Supplier Payments (Last 6 Months)</p>'+
+        '<div style="display:flex;gap:6px;align-items:flex-end;height:100px;padding-bottom:4px">'+monthBars+'</div>'+
+      '</div>'+
+    '</div>'+
+
+    // ── Supplier Table ─────────────────────────────────────────
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:22px">'+
+      '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+        '<p class="sec-title" style="margin:0">📋 Supplier Performance</p>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+          filterBtns+
+          '<div style="position:relative"><span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3)">🔍</span>'+
+          '<input type="text" placeholder="Search suppliers..." value="'+supOvSearch+'" oninput="supOvSearch=this.value;renderPanel()" style="padding:7px 10px 7px 30px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:180px"></div>'+
+        '</div>'+
+      '</div>'+
+      (filtered.length
+        ?'<div class="tbl-wrap"><table><thead><tr>'+
+            '<th>Supplier</th><th>Phone</th><th style="text-align:right">Total Purchases</th>'+
+            '<th style="text-align:right">Total Paid</th><th style="text-align:right">Outstanding</th>'+
+            '<th>Last Purchase</th><th style="text-align:center">Invoices</th><th style="text-align:center">Pending</th>'+
+            '<th>Status</th><th>Action</th>'+
+          '</tr></thead><tbody>'+tableRows+'</tbody></table></div>'
+        :'<div class="empty">No suppliers match.</div>')+
+    '</div>'+
+
+    // ── Bottom Row: Pending Deliveries + Recent Payments ──────
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">📦 Pending Deliveries by Supplier</p>'+
+        (pendingRows
+          ?'<div class="tbl-wrap"><table><thead><tr><th>Supplier</th><th style="text-align:center">Items</th><th>Products</th><th style="text-align:right">Est. Cost</th></tr></thead><tbody>'+pendingRows+'</tbody></table></div>'
+          :'<div class="empty">No pending deliveries.</div>')+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">🕐 Recent 10 Supplier Payments</p>'+
+        (recentRows
+          ?'<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Supplier</th><th>Mode</th><th style="text-align:right">Amount</th><th>Note</th></tr></thead><tbody>'+recentRows+'</tbody></table></div>'
+          :'<div class="empty">No payments recorded.</div>')+
+      '</div>'+
+    '</div>'
+  );
+}
+
+function kpiCard(icon,label,value,badge,color){
+  return '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;border-left:4px solid '+color+'">'+
+    '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">'+icon+' '+label+(badge?' '+badge:'')+'</div>'+
+    '<div style="font-size:20px;font-weight:800;color:#1e293b">'+value+'</div>'+
+  '</div>';
+}
+/* ── END SUPPLIER OVERVIEW ─────────────────────────────────── */
+
+/* ── CUSTOMER OVERVIEW ─────────────────────────────────────── */
+var custOvSearch='';
+var custOvFilter='all'; // all | balance | cleared | active
+
+function buildCustomerOverview(){
+  if(!canDo('customers'))return '<div class="empty">Access denied.</div>';
+
+  var customers=DB.customers||[];
+  var sales=DB.sales||[];
+  var creditPayments=DB.creditPayments||[];
+
+  // ── Per-customer aggregates ──────────────────────────────────
+  var custMap={};
+  customers.forEach(function(c){
+    custMap[c.id]={
+      id:c.id,name:c.name,phone:c.phone||'—',type:c.type||'retail',
+      creditBalance:c.creditBalance||0,
+      totalSpent:0,totalCreditCollected:0,invoiceCount:0,lastPurchase:null
+    };
+  });
+
+  // Group sales by invoiceNum to count invoices properly
+  var invSeen={};
+  sales.forEach(function(s){
+    if(!s.custId||!custMap[s.custId])return;
+    var inv=s.invoiceNum||s.id;
+    custMap[s.custId].totalSpent+=(s.grandTotal||0);
+    if(!invSeen[s.custId+'-'+inv]){
+      custMap[s.custId].invoiceCount++;
+      invSeen[s.custId+'-'+inv]=true;
+    }
+    var d=parseDate(s.date);
+    if(d&&(!custMap[s.custId].lastPurchase||d>custMap[s.custId].lastPurchase))
+      custMap[s.custId].lastPurchase=d;
+  });
+
+  creditPayments.forEach(function(p){
+    if(!p.custId||!custMap[p.custId])return;
+    if(p.payMode!=='writeoff')custMap[p.custId].totalCreditCollected+=(p.amount||0);
+  });
+
+  var rows=Object.values(custMap);
+
+  // ── KPI totals ───────────────────────────────────────────────
+  var totalRevenue=rows.reduce(function(a,r){return a+r.totalSpent;},0);
+  var totalCreditOwed=rows.filter(function(r){return r.creditBalance>0;}).reduce(function(a,r){return a+r.creditBalance;},0);
+  var totalCreditCollected=rows.reduce(function(a,r){return a+r.totalCreditCollected;},0);
+  var activeCount=rows.filter(function(r){return r.invoiceCount>0;}).length;
+  var withBalanceCount=rows.filter(function(r){return r.creditBalance>0;}).length;
+
+  // ── Filter & search ──────────────────────────────────────────
+  var filtered=rows.filter(function(r){
+    if(custOvSearch){
+      var t=custOvSearch.toLowerCase();
+      if(r.name.toLowerCase().indexOf(t)<0&&r.phone.toLowerCase().indexOf(t)<0)return false;
+    }
+    if(custOvFilter==='balance')return r.creditBalance>0;
+    if(custOvFilter==='cleared')return r.creditBalance<=0;
+    if(custOvFilter==='active')return r.invoiceCount>0;
+    return true;
+  });
+
+  // ── Table rows ───────────────────────────────────────────────
+  var tableRows=filtered.map(function(r){
+    var status=r.creditBalance>0
+      ?'<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">HAS BALANCE</span>'
+      :'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">CLEARED</span>';
+    var typeLabel=r.type==='wholesale'?'🏭 Wholesale':r.type==='vip'?'⭐ VIP':'🛒 Retail';
+    var lastP=r.lastPurchase?r.lastPurchase.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    var collectBtn=r.creditBalance>0
+      ?'<button class="btn sm" style="color:#dc2626;border-color:#fca5a5;font-size:11px" onclick="switchTab(\'creditcust\')">💳 Collect</button>'
+      :'';
+    return '<tr>'+
+      '<td><b>'+r.name+'</b></td>'+
+      '<td>'+r.phone+'</td>'+
+      '<td style="font-size:11px;color:#6b7280">'+typeLabel+'</td>'+
+      '<td style="text-align:right">'+fmt(r.totalSpent)+'</td>'+
+      '<td style="text-align:right;color:#15803d">'+fmt(r.totalCreditCollected)+'</td>'+
+      '<td style="text-align:right;color:'+(r.creditBalance>0?'#dc2626':'#374151')+'"><b>'+fmt(r.creditBalance)+'</b></td>'+
+      '<td>'+lastP+'</td>'+
+      '<td style="text-align:center">'+r.invoiceCount+'</td>'+
+      '<td>'+status+'</td>'+
+      '<td>'+collectBtn+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Top 5 customers by spend ─────────────────────────────────
+  var top5=[].concat(rows).sort(function(a,b){return b.totalSpent-a.totalSpent;}).slice(0,5);
+  var maxVal=top5[0]?top5[0].totalSpent:1;
+  var custColors=['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b'];
+  var barChart=top5.map(function(r,i){
+    var pct=maxVal>0?Math.round(r.totalSpent/maxVal*100):0;
+    return '<div style="margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
+        '<span style="font-weight:600;color:#374151">'+r.name+'</span>'+
+        '<span style="color:#6b7280">'+fmt(r.totalSpent)+'</span>'+
+      '</div>'+
+      '<div style="background:#f3f4f6;border-radius:6px;height:10px;overflow:hidden">'+
+        '<div style="width:'+pct+'%;height:100%;background:'+custColors[i]+';border-radius:6px;transition:width .4s"></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Monthly revenue last 6 months ────────────────────────────
+  var now=new Date();
+  var months=[];
+  for(var m=5;m>=0;m--){
+    var d=new Date(now.getFullYear(),now.getMonth()-m,1);
+    months.push({label:d.toLocaleDateString('en-GB',{month:'short',year:'2-digit'}),year:d.getFullYear(),month:d.getMonth(),total:0});
+  }
+  sales.forEach(function(s){
+    var d=parseDate(s.date);
+    if(!d)return;
+    months.forEach(function(mb){if(d.getFullYear()===mb.year&&d.getMonth()===mb.month)mb.total+=(s.grandTotal||0);});
+  });
+  var maxMonth=Math.max.apply(null,months.map(function(mb){return mb.total;}));
+  if(maxMonth===0)maxMonth=1;
+  var monthBars=months.map(function(mb){
+    var pct=Math.round(mb.total/maxMonth*100);
+    return '<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:4px">'+
+      '<div style="font-size:10px;color:#6b7280;font-weight:600">'+fmt(mb.total)+'</div>'+
+      '<div style="width:100%;display:flex;align-items:flex-end;height:60px">'+
+        '<div style="width:100%;height:'+(pct||2)+'%;min-height:3px;background:#6366f1;border-radius:4px 4px 0 0"></div>'+
+      '</div>'+
+      '<div style="font-size:10px;color:#9ca3af">'+mb.label+'</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Customers with outstanding balance ───────────────────────
+  var debtors=[].concat(rows).filter(function(r){return r.creditBalance>0;})
+    .sort(function(a,b){return b.creditBalance-a.creditBalance;});
+  var debtorRows=debtors.map(function(r){
+    var lastP=r.lastPurchase?r.lastPurchase.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    var pct=r.totalSpent>0?Math.round(r.creditBalance/r.totalSpent*100):0;
+    return '<tr>'+
+      '<td><b>'+r.name+'</b></td>'+
+      '<td>'+r.phone+'</td>'+
+      '<td style="text-align:right">'+fmt(r.totalSpent)+'</td>'+
+      '<td style="text-align:right;color:#dc2626;font-weight:700">'+fmt(r.creditBalance)+'</td>'+
+      '<td style="text-align:center"><span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">'+pct+'%</span></td>'+
+      '<td>'+lastP+'</td>'+
+      '<td><button class="btn sm" style="color:#dc2626;border-color:#fca5a5;font-size:11px" onclick="switchTab(\'creditcust\')">💳 Collect</button></td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Recent 10 credit payments ────────────────────────────────
+  var recentPays=[].concat(creditPayments)
+    .filter(function(p){return p.payMode!=='writeoff';})
+    .sort(function(a,b){return (parseDate(b.date)||0)-(parseDate(a.date)||0);})
+    .slice(0,10);
+  var modeIcons={cash:'💵',transfer:'🏦',pos:'💳',cheque:'📝'};
+  var recentRows=recentPays.map(function(p){
+    var icon=modeIcons[p.payMode]||'💰';
+    return '<tr>'+
+      '<td>'+(parseDate(p.date)?parseDate(p.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—')+'</td>'+
+      '<td><b>'+p.custName+'</b></td>'+
+      '<td>'+icon+' '+(p.payMode||'—')+'</td>'+
+      '<td style="text-align:right;color:#15803d;font-weight:700">'+fmt(p.amount)+'</td>'+
+      '<td style="color:#9ca3af;font-size:12px">'+(p.by||'—')+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Filter buttons ───────────────────────────────────────────
+  var filterBtns=['all','balance','cleared','active'].map(function(f){
+    var labels={all:'All',balance:'Has Balance',cleared:'Cleared',active:'Active'};
+    var isActive=custOvFilter===f;
+    return '<button onclick="custOvFilter=\''+f+'\';renderPanel()" style="padding:6px 14px;border-radius:20px;border:1px solid '+(isActive?'var(--primary)':'var(--border)')+';background:'+(isActive?'var(--primary)':'var(--white)')+';color:'+(isActive?'#fff':'var(--text2)')+';font-size:12px;font-weight:600;cursor:pointer">'+labels[f]+'</button>';
+  }).join('');
+
+  // ── Build HTML ───────────────────────────────────────────────
+  return (
+    // ── KPI Cards ──────────────────────────────────────────────
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px">'+
+      kpiCard('👥','Total Customers',customers.length,'','#6366f1')+
+      kpiCard('💰','Total Revenue',fmt(totalRevenue),'','#0ea5e9')+
+      kpiCard('⚠️','Credit Owed to Shop',fmt(totalCreditOwed),totalCreditOwed>0?'🔴':'','#dc2626')+
+      kpiCard('✅','Credit Collected',fmt(totalCreditCollected),'','#10b981')+
+      kpiCard('🔥','Active Customers',activeCount,'','#8b5cf6')+
+      kpiCard('🔴','With Balance',withBalanceCount,'','#f59e0b')+
+    '</div>'+
+
+    // ── Charts Row ─────────────────────────────────────────────
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 14px">🏆 Top 5 Customers by Purchase Value</p>'+
+        (top5.length?barChart:'<div class="empty">No sales data yet.</div>')+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 14px">📅 Monthly Revenue (Last 6 Months)</p>'+
+        '<div style="display:flex;gap:6px;align-items:flex-end;height:100px;padding-bottom:4px">'+monthBars+'</div>'+
+      '</div>'+
+    '</div>'+
+
+    // ── Performance Table ───────────────────────────────────────
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:22px">'+
+      '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+        '<p class="sec-title" style="margin:0">📋 Customer Performance</p>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+          filterBtns+
+          '<div style="position:relative"><span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3)">🔍</span>'+
+          '<input type="text" placeholder="Search customers..." value="'+custOvSearch+'" oninput="custOvSearch=this.value;renderPanel()" style="padding:7px 10px 7px 30px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:180px"></div>'+
+        '</div>'+
+      '</div>'+
+      (filtered.length
+        ?'<div class="tbl-wrap"><table><thead><tr>'+
+            '<th>Customer</th><th>Phone</th><th>Type</th>'+
+            '<th style="text-align:right">Total Spent</th><th style="text-align:right">Credit Paid</th>'+
+            '<th style="text-align:right">Credit Balance</th><th>Last Purchase</th>'+
+            '<th style="text-align:center">Invoices</th><th>Status</th><th>Action</th>'+
+          '</tr></thead><tbody>'+tableRows+'</tbody></table></div>'
+        :'<div class="empty">No customers match.</div>')+
+    '</div>'+
+
+    // ── Bottom Row ─────────────────────────────────────────────
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">🔴 Outstanding Credit Balances</p>'+
+        (debtorRows
+          ?'<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th style="text-align:right">Total Spent</th><th style="text-align:right">Owes</th><th style="text-align:center">% of Sales</th><th>Last Purchase</th><th></th></tr></thead><tbody>'+debtorRows+'</tbody></table></div>'
+          :'<div class="empty">🎉 No outstanding balances!</div>')+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">🕐 Recent 10 Credit Payments</p>'+
+        (recentRows
+          ?'<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Customer</th><th>Mode</th><th style="text-align:right">Amount</th><th>Recorded by</th></tr></thead><tbody>'+recentRows+'</tbody></table></div>'
+          :'<div class="empty">No credit payments yet.</div>')+
+      '</div>'+
+    '</div>'
+  );
+}
+/* ── END CUSTOMER OVERVIEW ─────────────────────────────────── */
 
 function buildSupplierPayments(){
   if(!canDo('suppliers'))return '<div class="empty">Access denied.</div>';
