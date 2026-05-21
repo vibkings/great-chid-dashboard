@@ -8739,19 +8739,20 @@ function buildCustomerOverview(){
     };
   });
 
-  // Group sales by invoiceNum to count invoices properly
-  var invSeen={};
+  // Sales are stored per line item — group by invoiceNum first, then attribute to customer
+  var invGroups={};
   sales.forEach(function(s){
-    if(!s.custId||!custMap[s.custId])return;
-    var inv=s.invoiceNum||s.id;
-    custMap[s.custId].totalSpent+=(s.grandTotal||0);
-    if(!invSeen[s.custId+'-'+inv]){
-      custMap[s.custId].invoiceCount++;
-      invSeen[s.custId+'-'+inv]=true;
-    }
-    var d=parseDate(s.date);
-    if(d&&(!custMap[s.custId].lastPurchase||d>custMap[s.custId].lastPurchase))
-      custMap[s.custId].lastPurchase=d;
+    var k=s.invoiceNum||s.id;
+    if(!invGroups[k])invGroups[k]={custId:s.custId,date:s.date,total:0};
+    invGroups[k].total+=(s.total||0);
+  });
+  Object.values(invGroups).forEach(function(inv){
+    if(!inv.custId||!custMap[inv.custId])return;
+    custMap[inv.custId].totalSpent+=inv.total;
+    custMap[inv.custId].invoiceCount++;
+    var d=parseDate(inv.date);
+    if(d&&(!custMap[inv.custId].lastPurchase||d>custMap[inv.custId].lastPurchase))
+      custMap[inv.custId].lastPurchase=d;
   });
 
   creditPayments.forEach(function(p){
@@ -8831,7 +8832,7 @@ function buildCustomerOverview(){
   sales.forEach(function(s){
     var d=parseDate(s.date);
     if(!d)return;
-    months.forEach(function(mb){if(d.getFullYear()===mb.year&&d.getMonth()===mb.month)mb.total+=(s.grandTotal||0);});
+    months.forEach(function(mb){if(d.getFullYear()===mb.year&&d.getMonth()===mb.month)mb.total+=(s.total||0);});
   });
   var maxMonth=Math.max.apply(null,months.map(function(mb){return mb.total;}));
   if(maxMonth===0)maxMonth=1;
