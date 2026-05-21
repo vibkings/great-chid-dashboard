@@ -5614,7 +5614,8 @@ function printInvoice(inv){
   var liveOutstanding = invCust ? Math.max(0, invCust.creditBalance||0) : 0;
   // For deposit invoices use subtotalAll-invoiceDiscAmt as the true invoice total
   var _invPrintTotal=inv.payment==='deposit'?(inv.subtotalAll||(inv.grandTotal||0))-(inv.invoiceDiscAmt||0):inv.grandTotal;
-  var _invDepApplied=inv.depositApplied||invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
+  var _invSales=DB.sales.filter(function(s){return s.invoiceNum===inv.invoiceNum;});
+  var _invDepApplied=inv.depositApplied||_invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
   var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:inv.pendingSupply,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:liveOutstanding,prevInvTotal:0});
   // Show print mode dialog
   showPrintDialog(inv, html);
