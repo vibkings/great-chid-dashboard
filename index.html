@@ -7701,7 +7701,7 @@ function deletePurchase(id){
 }
 function printPurchaseRecord(id){
   var pu=DB.purchases.find(function(p){return p.id==id;});if(!pu)return;
-  var rows=pu.items.map(function(l,i){return '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+l.name+'</td><td style="text-align:center">'+l.qty+'</td><td style="text-align:right">'+fmt(l.cost)+'</td><td style="text-align:right"><b>'+fmt(l.total)+'</b></td></tr>';}).join('');
+  var rows=pu.items.map(function(l,i){return '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+l.name+'</td><td style="text-align:center">'+(l.qtyOrdered||l.qty||0)+'</td><td style="text-align:right">'+fmt(l.cost)+'</td><td style="text-align:right"><b>'+fmt(l.total)+'</b></td></tr>';}).join('');
   var payModeStr=pu.payMode==='pos'?'POS terminal':pu.payMode==='transfer'?'Bank transfer'+(pu.bankId?' ('+getBankName(pu.bankId)+')':''):'Cash';
   var payTypeStr=pu.payType==='credit'?'Credit (full amount owed to supplier)':pu.payType==='part'?'Part payment (cash now + credit later)':'Cash (fully paid)';
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Purchase Record</title>'+
