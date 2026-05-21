@@ -5488,6 +5488,7 @@ function submitInvoice(){
       if(depBal>0&&grandTotal>0){
         depositApplied=Math.min(depBal,grandTotal);
         if(!DB.deposits)DB.deposits=[];
+  if(!DB.purchaseReturns)DB.purchaseReturns=[];
         DB.deposits.push({id:uid(),custId:custId,custName:regC.name,amount:-depositApplied,payMode:'deposit',note:'Auto-applied to Invoice #'+invNum,date:date,month:month,by:'System'});
         DB.cashflow.push({id:uid(),desc:'Deposit applied — '+regC.name+' Invoice #'+invNum,amount:depositApplied,type:'in',cat:'Sales',payMode:'deposit',date:date,month:month,isDepositApplied:true});
         // Reduce grandTotal by deposit used
@@ -7837,6 +7838,96 @@ function receiveDelivery(deliveryId){
 
 function buildPurchases(){
   if(!canDo('purchases'))return '<div class="empty">Access denied.</div>';
+
+  // ── Purchase KPI date filter ──────────────────────────────────
+  var puFilter=window._puKpiFilter||'month';
+  var today=new Date();
+  var todayStr=today.toLocaleDateString();
+  function puInRange(dateStr){
+    if(!dateStr)return false;
+    var d=parseDate(dateStr);
+    if(!d)return false;
+    if(puFilter==='today'){
+      return d.toDateString()===today.toDateString();
+    } else if(puFilter==='week'){
+      var wStart=new Date(today);wStart.setDate(today.getDate()-today.getDay());wStart.setHours(0,0,0,0);
+      return d>=wStart&&d<=today;
+    } else if(puFilter==='month'){
+      return d.getMonth()===today.getMonth()&&d.getFullYear()===today.getFullYear();
+    } else if(puFilter==='custom'){
+      var cf=window._puKpiFrom?parseDate(window._puKpiFrom):null;
+      var ct=window._puKpiTo?parseDate(window._puKpiTo):null;
+      if(cf)cf.setHours(0,0,0,0);
+      if(ct)ct.setHours(23,59,59,999);
+      return (!cf||d>=cf)&&(!ct||d<=ct);
+    }
+    return true;
+  }
+
+  // ── Calculate KPIs ───────────────────────────────────────────
+  var filtPurch=DB.purchases.filter(function(p){return puInRange(p.date);});
+  var totalPurchAmt=filtPurch.reduce(function(a,p){return a+(p.grandTotal||0);},0);
+  // Total paid = purchases minus credit owed to suppliers
+  var totalCreditOwed=filtPurch.filter(function(p){return p.payType==='credit';}).reduce(function(a,p){return a+(p.grandTotal||0);},0);
+  var totalPartPaid=filtPurch.filter(function(p){return p.payType==='part';}).reduce(function(a,p){return a+(p.amtPaid||0);},0);
+  var totalPaid=totalPurchAmt-totalCreditOwed+(totalPartPaid-(filtPurch.filter(function(p){return p.payType==='part';}).reduce(function(a,p){return a+(p.grandTotal||0);},0)-totalPartPaid>0?0:0));
+  // Simpler: paid = non-credit total + part-paid amounts
+  var fullyPaidPurch=filtPurch.filter(function(p){return p.payType==='cash';});
+  var creditPurch=filtPurch.filter(function(p){return p.payType==='credit';});
+  var partPurch=filtPurch.filter(function(p){return p.payType==='part';});
+  var paidAmt=fullyPaidPurch.reduce(function(a,p){return a+(p.grandTotal||0);},0)
+    +partPurch.reduce(function(a,p){return a+(p.amtPaid||p.grandTotal||0);},0);
+  var outstandingAmt=totalPurchAmt-paidAmt;
+  // Pending goods value
+  var pendingGoodsVal=(DB.pendingDeliveries||[]).filter(function(d){
+    return d.status!=='complete';
+  }).reduce(function(a,d){return a+(d.qtyPending||0)*(d.unitCost||0);},0);
+  var pendingCount=(DB.pendingDeliveries||[]).filter(function(d){return d.status!=='complete';}).length;
+  var supplierCount=new Set(filtPurch.map(function(p){return p.supId;})).size;
+
+  // ── KPI HTML ─────────────────────────────────────────────────
+  var filterLabel=puFilter==='today'?'Today':puFilter==='week'?'This Week':puFilter==='month'?'This Month':'Custom Range';
+  var kpiHtml=
+    '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
+        '<div style="font-size:13px;font-weight:700;color:var(--text1)">&#128722; Purchase Overview</div>'+
+        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+          ['today','week','month','custom'].map(function(f){
+            return '<button onclick="window._puKpiFilter=\''+f+'\';renderPanel()" style="padding:4px 10px;font-size:11px;font-weight:600;border-radius:6px;cursor:pointer;border:1px solid '+(puFilter===f?'#1a237e':'#cbd5e1')+';background:'+(puFilter===f?'#1a237e':'transparent')+';color:'+(puFilter===f?'#fff':'var(--text2)')+'">'+
+              (f==='today'?'Today':f==='week'?'This Week':f==='month'?'This Month':'Custom')+
+            '</button>';
+          }).join('')+
+        '</div>'+
+      '</div>'+
+      // Custom date range row
+      (puFilter==='custom'?
+        '<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">'+
+          '<span style="font-size:11px;color:var(--text2)">From:</span>'+
+          '<input type="date" value="'+(window._puKpiFrom||'')+'" onchange="window._puKpiFrom=this.value;renderPanel()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px">'+
+          '<span style="font-size:11px;color:var(--text2)">To:</span>'+
+          '<input type="date" value="'+(window._puKpiTo||'')+'" onchange="window._puKpiTo=this.value;renderPanel()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px">'+
+        '</div>'
+      :'')+
+      // KPI grid
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">'+
+        // Row 1: Financial KPIs
+        kpiCard('Total Purchases','₦'+Math.round(totalPurchAmt).toLocaleString(),filtPurch.length+' invoices','#1a237e')+
+        kpiCard('Total Paid','₦'+Math.round(paidAmt).toLocaleString(),fullyPaidPurch.length+' fully paid','#15803d')+
+        kpiCard('Outstanding','₦'+Math.round(outstandingAmt).toLocaleString(),creditPurch.length+' credit + '+partPurch.length+' part','#dc2626')+
+        kpiCard('Pending Goods','₦'+Math.round(pendingGoodsVal).toLocaleString(),pendingCount+' pending items','#f59e0b')+
+        kpiCard('Suppliers',''+supplierCount,'Active this period','#0891b2')+
+        kpiCard('Credit Purchases','₦'+Math.round(totalCreditOwed).toLocaleString(),creditPurch.length+' invoices','#7c3aed')+
+      '</div>'+
+    '</div>';
+
+  function kpiCard(label,value,sub,color){
+    return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">'+
+      '<div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">'+label+'</div>'+
+      '<div style="font-size:18px;font-weight:800;color:'+color+';margin-bottom:2px">'+value+'</div>'+
+      '<div style="font-size:10px;color:var(--text3)">'+sub+'</div>'+
+    '</div>';
+  }
+
   var supOpts=DB.suppliers.map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('');
   var bankSubField=DB.banks.length?'<div class="form-group" id="pu-bank-wrap" style="display:none"><label>Which bank? <span style="color:var(--danger)">*</span></label><select id="pu-bankid"><option value="">Select bank...</option>'+bankOpts()+'</select></div>':'';
   var posSubField=DB.posTerminals.length?'<div class="form-group" id="pu-pos-wrap" style="display:none"><label>Which POS terminal? <span style="color:var(--danger)">*</span></label><select id="pu-posid"><option value="">Select terminal...</option>'+posOpts()+'</select></div>':'';
@@ -7863,6 +7954,7 @@ function buildPurchases(){
       '<td>'+p.by+'</td>'+
       '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+
         '<button class="btn sm" onclick="printPurchaseRecord('+p.id+')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">&#128438; Print</button>'+
+        '<button class="btn sm" onclick="openPurchaseReturnModal('+p.id+')" style="color:#dc2626;border-color:#fca5a5;font-size:11px">&#8617; Return</button>'+
         (isAdmin()?'<button class="btn danger sm" onclick="deletePurchase('+p.id+')" title="Move to bin">🗑️</button>':'')+
       '</div></td>'+
     '</tr>';
@@ -7892,7 +7984,7 @@ function buildPurchases(){
     }
   }
 
-  return '<p class="sec-title">Record new purchase</p>'+
+  return kpiHtml+'<p class="sec-title">Record new purchase</p>'+
     '<div class="fg" style="grid-template-columns:1fr 1fr 1fr"><div class="form-group"><label>Supplier <span style="color:var(--danger)">*</span></label><select id="pu-supplier"><option value="">Select supplier...</option>'+supOpts+'</select></div>'+
     '<div class="form-group"><label>Supplier invoice # <span style="color:var(--danger)">*</span></label><input type="text" id="pu-invnum" placeholder="e.g. SUP-2024-001"></div>'+
     '<div class="form-group"><label>Purchase date <span style="font-size:10px;color:var(--text3);font-weight:400">(blank = today)</span></label><input type="date" id="pu-date" style="font-size:13px"></div></div>'+
@@ -7933,7 +8025,228 @@ function buildPurchases(){
       '</div>'+
     '</div>'+
     (puRows?'<div class="tbl-wrap"><table id="purchases-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Supplier</th><th>Items</th><th style="text-align:center">Units</th><th style="text-align:right">Total</th><th>Payment</th><th>By</th><th></th></tr></thead><tbody>'+puRows+'</tbody></table></div>':'<div class="empty">No purchases recorded yet.</div>')+
-    pendingRows;
+    pendingRows+
+    buildPurchaseReturnsSection();
+}
+
+function openPurchaseReturnModal(purchId){
+  var pu=DB.purchases.find(function(p){return p.id==purchId;});
+  if(!pu){alert('Purchase not found.');return;}
+  var old=document.getElementById('pu-ret-modal');if(old)old.remove();
+  var modal=document.createElement('div');
+  modal.id='pu-ret-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  modal.onclick=function(e){if(e.target===modal)modal.remove();};
+
+  var itemRows=pu.items.map(function(l,i){
+    var maxQty=l.qtyReceived||l.qtyOrdered||l.qty||0;
+    return '<tr>'+
+      '<td style="padding:6px 8px;font-size:12px">'+l.name+'</td>'+
+      '<td style="padding:6px 8px;text-align:center;font-size:11px;color:#6b7280">'+maxQty+'</td>'+
+      '<td style="padding:6px 8px;text-align:center">'+
+        '<input type="number" id="pur-qty-'+i+'" min="0" max="'+maxQty+'" value="0" '+
+        'style="width:60px;padding:4px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px;text-align:center" '+
+        'data-cost="'+(l.cost||0)+'" data-name="'+l.name.replace(/"/g,'&quot;')+'" data-idx="'+i+'">'+
+      '</td>'+
+      '<td style="padding:6px 8px;text-align:right;font-size:11px;color:#6b7280">'+fmt(l.cost||0)+'</td>'+
+    '</tr>';
+  }).join('');
+
+  modal.innerHTML=
+    '<div style="background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
+      '<div style="background:#dc3545;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center">'+
+        '<div>'+
+          '<div style="font-size:15px;font-weight:800;color:#fff">&#8617; Return to Supplier</div>'+
+          '<div style="font-size:11px;color:rgba(255,255,255,.85);margin-top:2px">Invoice #'+(pu.invoiceNum||'-')+' &nbsp;&middot;&nbsp; '+pu.supName+'</div>'+
+        '</div>'+
+        '<button onclick="document.getElementById(\'pu-ret-modal\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
+      '</div>'+
+      '<div style="padding:16px 18px">'+
+        '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">Select items to return:</div>'+
+        '<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:14px">'+
+          '<table style="width:100%;border-collapse:collapse">'+
+            '<thead><tr style="background:#fef2f2">'+
+              '<th style="padding:7px 8px;text-align:left;font-size:11px;color:#6b7280">Item</th>'+
+              '<th style="padding:7px 8px;text-align:center;font-size:11px;color:#6b7280">Available</th>'+
+              '<th style="padding:7px 8px;text-align:center;font-size:11px;color:#6b7280">Return Qty</th>'+
+              '<th style="padding:7px 8px;text-align:right;font-size:11px;color:#6b7280">Unit Cost</th>'+
+            '</tr></thead>'+
+            '<tbody>'+itemRows+'</tbody>'+
+          '</table>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'+
+          '<div>'+
+            '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Return Type *</label>'+
+            '<select id="pur-type" onchange="purTypeChange()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;font-weight:600">'+
+              '<option value="credit">Supplier Credit (reduce owed)</option>'+
+              '<option value="refund">Cash/Transfer Refund</option>'+
+              '<option value="exchange">Exchange for other goods</option>'+
+            '</select>'+
+          '</div>'+
+          '<div>'+
+            '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Date</label>'+
+            '<input type="date" id="pur-date" value="'+new Date().toISOString().slice(0,10)+'" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px">'+
+          '</div>'+
+        '</div>'+
+        '<div id="pur-exchange-section" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;margin-bottom:12px">'+
+          '<div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:6px">&#128260; Exchange Status</div>'+
+          '<div style="display:flex;gap:10px">'+
+            '<label style="font-size:12px;cursor:pointer"><input type="radio" name="pur-exch-status" value="pending" checked> &#9203; Pending (goods not yet received)</label>'+
+            '<label style="font-size:12px;cursor:pointer"><input type="radio" name="pur-exch-status" value="received"> &#10003; Already received</label>'+
+          '</div>'+
+          '<div style="margin-top:8px;font-size:11px;color:#166534">Describe what goods you expect in exchange:</div>'+
+          '<input type="text" id="pur-exch-desc" placeholder="e.g. 5 pcs of Knife Switch 100A..." style="width:100%;margin-top:4px;padding:7px;border:1px solid #86efac;border-radius:6px;font-size:12px;box-sizing:border-box">'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reason *</label>'+
+          '<input type="text" id="pur-reason" placeholder="e.g. Wrong item, damaged goods, defective..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box;margin-bottom:12px">'+
+        '</div>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button onclick="processPurchaseReturn('+purchId+')" style="flex:1;padding:11px;background:#dc3545;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#8617; Process Return</button>'+
+          '<button onclick="document.getElementById(\'pu-ret-modal\').remove()" style="padding:11px 16px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+
+  document.body.appendChild(modal);
+}
+
+function purTypeChange(){
+  var type=document.getElementById('pur-type').value;
+  var exchSec=document.getElementById('pur-exchange-section');
+  if(exchSec)exchSec.style.display=type==='exchange'?'block':'none';
+}
+
+function processPurchaseReturn(purchId){
+  var pu=DB.purchases.find(function(p){return p.id==purchId;});
+  if(!pu){alert('Purchase not found.');return;}
+  var reason=(document.getElementById('pur-reason')||{}).value||'';
+  if(!reason.trim()){alert('Please enter a reason for the return.');return;}
+  var returnType=document.getElementById('pur-type').value;
+  var dateVal=document.getElementById('pur-date').value;
+  var date=dateVal?new Date(dateVal).toLocaleDateString():new Date().toLocaleDateString();
+  var month=dateVal?dateVal.slice(0,7):new Date().toISOString().slice(0,7);
+
+  // Collect returned items
+  var returnedItems=[];
+  var totalValue=0;
+  pu.items.forEach(function(l,i){
+    var qtyInp=document.getElementById('pur-qty-'+i);
+    if(!qtyInp)return;
+    var qty=parseInt(qtyInp.value)||0;
+    if(qty<=0)return;
+    var cost=l.cost||0;
+    returnedItems.push({name:l.name,qty:qty,cost:cost,total:qty*cost,itemId:l.itemId||null});
+    totalValue+=qty*cost;
+  });
+
+  if(!returnedItems.length){alert('Select at least one item to return.');return;}
+
+  // Exchange details
+  var exchStatus='';
+  var exchDesc='';
+  if(returnType==='exchange'){
+    var exchRadio=document.querySelector('input[name="pur-exch-status"]:checked');
+    exchStatus=exchRadio?exchRadio.value:'pending';
+    exchDesc=(document.getElementById('pur-exch-desc')||{}).value||'';
+  }
+
+  // Deduct returned stock from inventory
+  returnedItems.forEach(function(ri){
+    var invItem=ri.itemId?DB.inventory.find(function(i){return i.id==ri.itemId;}):
+      DB.inventory.find(function(i){return i.name===ri.name;});
+    if(invItem){
+      var before=invItem.qty;
+      invItem.qty=Math.max(0,invItem.qty-ri.qty);
+      DB.adjLog.push({id:uid(),itemId:invItem.id,itemName:invItem.name,type:'remove',
+        reason:'Purchase return to '+pu.supName+' — '+reason,
+        before:before,change:-ri.qty,after:invItem.qty,date:date,by:DB.currentUser.name});
+    }
+  });
+
+  // Handle supplier account
+  var sup=DB.suppliers.find(function(s){return s.id==pu.supId;});
+  if(sup){
+    if(returnType==='credit'){
+      // Reduce what we owe the supplier
+      sup.owedToSupplier=Math.max(0,(sup.owedToSupplier||0)-totalValue);
+      DB.cashflow.push({id:uid(),desc:'Purchase return credit — '+sup.name+' Invoice #'+(pu.invoiceNum||'-'),
+        amount:totalValue,type:'in',cat:'Purchase Return',payMode:'credit',date:date,month:month});
+    } else if(returnType==='refund'){
+      // Supplier refunds us
+      sup.owedToSupplier=Math.max(0,(sup.owedToSupplier||0)-totalValue);
+      DB.cashflow.push({id:uid(),desc:'Purchase return refund — '+sup.name+' Invoice #'+(pu.invoiceNum||'-'),
+        amount:totalValue,type:'in',cat:'Purchase Return',payMode:'cash',date:date,month:month});
+    }
+    // Exchange: no immediate credit — goods to be received
+  }
+
+  // Save return record
+  if(!DB.purchaseReturns)DB.purchaseReturns=[];
+  DB.purchaseReturns.push({
+    id:uid(),purchaseId:purchId,purchaseInvoice:pu.invoiceNum,
+    supId:pu.supId,supName:pu.supName,
+    items:returnedItems,totalValue:totalValue,
+    returnType:returnType,reason:reason,
+    exchangeStatus:returnType==='exchange'?exchStatus:null,
+    exchangeDesc:returnType==='exchange'?exchDesc:null,
+    date:date,month:month,by:DB.currentUser.name
+  });
+
+  logActivity('Purchase return',
+    'Returned '+returnedItems.map(function(r){return r.name+' x'+r.qty;}).join(', ')+
+    ' to '+pu.supName+' ('+returnType+'). Value: '+fmt(totalValue),returnType);
+
+  document.getElementById('pu-ret-modal').remove();
+  saveData();renderApp();
+  var typeLabel=returnType==='credit'?'Supplier credit applied':
+    returnType==='refund'?'Refund recorded':
+    exchStatus==='received'?'Exchange received':'Exchange pending';
+  showToast('Return processed — '+typeLabel+'. Value: '+fmt(totalValue));
+}
+
+function markPurchReturnReceived(retId){
+  var r=(DB.purchaseReturns||[]).find(function(x){return x.id===retId;});
+  if(!r){alert('Return record not found.');return;}
+  if(!confirm('Mark exchange goods as RECEIVED from '+r.supName+'?\n\nExpected: '+r.exchangeDesc))return;
+  r.exchangeStatus='received';
+  r.receivedDate=new Date().toLocaleDateString();
+  logActivity('Exchange received','Replacement goods received from '+r.supName+' — Return of Invoice #'+r.purchaseInvoice,'exchange');
+  saveData();renderApp();
+  showToast('Exchange marked as received from '+r.supName);
+}
+
+function buildPurchaseReturnsSection(){
+  if(!DB.purchaseReturns||!DB.purchaseReturns.length)return '';
+  var rows=DB.purchaseReturns.slice().reverse().map(function(r){
+    var typeBadge=r.returnType==='refund'?
+      '<span class="badge ok">Refund</span>':
+      r.returnType==='credit'?
+      '<span class="badge" style="background:#7c3aed;color:#fff">Supplier Credit</span>':
+      '<span class="badge info">Exchange</span>';
+    var exchStatus='';
+    if(r.returnType==='exchange'){
+      exchStatus=r.exchangeStatus==='received'?
+        '<span class="badge ok" style="font-size:10px">&#10003; Received</span>':
+        '<span class="badge low" style="font-size:10px;cursor:pointer" onclick="markPurchReturnReceived(\''+r.id+'\')" title="Click to mark as received">Pending &#128466;</span>';
+    }
+    return '<tr style="background:#fff5f5">'+
+      '<td>'+r.date+'</td>'+
+      '<td><b>'+(r.purchaseInvoice||'-')+'</b></td>'+
+      '<td>'+(r.supName||'-')+'</td>'+
+      '<td style="font-size:11px">'+r.items.map(function(i){return i.name+' ×'+i.qty;}).join(', ')+'</td>'+
+      '<td>'+typeBadge+'</td>'+
+      '<td style="text-align:right;font-weight:700;color:#dc2626">'+fmt(r.totalValue)+'</td>'+
+      '<td>'+(r.reason||'-')+'</td>'+
+      '<td>'+exchStatus+'</td>'+
+      '<td>'+r.by+'</td>'+
+    '</tr>';
+  }).join('');
+  return '<p class="sec-title" style="margin-top:1.5rem;color:#dc2626">&#8617; Purchase Returns ('+DB.purchaseReturns.length+')</p>'+
+    '<div class="tbl-wrap"><table><thead><tr>'+
+      '<th>Date</th><th>Invoice #</th><th>Supplier</th><th>Items</th><th>Type</th>'+
+      '<th style="text-align:right">Value</th><th>Reason</th><th>Exchange Status</th><th>By</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 
 // ============================================================
