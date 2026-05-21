@@ -8281,7 +8281,7 @@ function paySupplier(supId){
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
 
-  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('');
+  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
   var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
 
   overlay.innerHTML=
@@ -8361,7 +8361,7 @@ function saveSupplierPayment(supId){
 
   var bank=bankId?(DB.banks||[]).find(function(b){return b.id==bankId;}):null;
   var pos=posId?(DB.posTerminals||[]).find(function(p){return p.id==posId;}):null;
-  var modeLabel=mode==='transfer'?'Transfer'+(bank?' ('+bank.bankName+')':''):mode==='pos'?'POS'+(pos?' ('+pos.name+')':''):mode==='cheque'?'Cheque':'Cash';
+  var modeLabel=mode==='transfer'?'Transfer'+(bank?' ('+(bank.name||bank.bankName)+')':''):mode==='pos'?'POS'+(pos?' ('+pos.name+')':''):mode==='cheque'?'Cheque':'Cash';
 
   if(!DB.supplierPayments)DB.supplierPayments=[];
   DB.supplierPayments.push({id:uid(),supId:supId,supName:sup.name,amount:amt,
