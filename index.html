@@ -8275,20 +8275,109 @@ function buildSuppliers(){
 function paySupplier(supId){
   var sup=DB.suppliers.find(function(s){return s.id==supId;});
   if(!sup){alert('Supplier not found.');return;}
-  var amt=parseFloat(prompt('Pay '+sup.name+'\nAmount owed: '+fmt(sup.owedToSupplier||0)+'\n\nEnter payment amount:'));
-  if(isNaN(amt)||amt<=0){alert('Enter a valid amount.');return;}
-  var mode=prompt('Payment mode (cash/transfer/pos):','cash');
-  if(!mode)return;
-  var note=prompt('Reference/note (optional):','');
-  var date=new Date().toLocaleDateString();
-  var month=new Date().toLocaleString('default',{month:'short',year:'numeric'});
+  var old=document.getElementById('sup-pay-form-overlay');if(old)old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='sup-pay-form-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
+
+  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('');
+  var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
+
+  overlay.innerHTML=
+    '<div style="background:var(--white);border-radius:14px;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden">'+
+      '<div style="background:#15803d;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
+        '<div>'+
+          '<div style="font-size:15px;font-weight:800;color:#fff">&#128179; Pay Supplier</div>'+
+          '<div style="font-size:11px;color:rgba(255,255,255,.85);margin-top:2px">'+sup.name+' &nbsp;&middot;&nbsp; Owed: '+fmt(sup.owedToSupplier||0)+'</div>'+
+        '</div>'+
+        '<button onclick="document.getElementById(\'sup-pay-form-overlay\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
+      '</div>'+
+      '<div style="padding:16px 18px">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">'+
+          '<div>'+
+            '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Amount (&#8358;) *</label>'+
+            '<input type="number" id="sp-amount" min="0" step="any" value="'+(sup.owedToSupplier||'')+'" placeholder="Enter amount" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;font-weight:700;box-sizing:border-box">'+
+          '</div>'+
+          '<div>'+
+            '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Date</label>'+
+            '<input type="date" id="sp-date" value="'+new Date().toISOString().slice(0,10)+'" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box">'+
+          '</div>'+
+        '</div>'+
+        '<div style="margin-bottom:12px">'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Payment mode *</label>'+
+          '<select id="sp-mode" onchange="spModeChange()" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:600">'+
+            '<option value="cash">&#128181; Cash</option>'+
+            '<option value="transfer">&#127974; Bank Transfer</option>'+
+            '<option value="pos">&#128179; POS</option>'+
+            '<option value="cheque">&#128200; Cheque</option>'+
+          '</select>'+
+        '</div>'+
+        '<div id="sp-bank-row" style="margin-bottom:12px;display:none">'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Bank account</label>'+
+          '<select id="sp-bank" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">'+
+            '<option value="">-- Select bank --</option>'+bankOpts+
+          '</select>'+
+        '</div>'+
+        '<div id="sp-pos-row" style="margin-bottom:12px;display:none">'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">POS terminal</label>'+
+          '<select id="sp-pos" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">'+
+            '<option value="">-- Select POS --</option>'+posOpts+
+          '</select>'+
+        '</div>'+
+        '<div style="margin-bottom:16px">'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reference / Note</label>'+
+          '<input type="text" id="sp-note" placeholder="e.g. Invoice ref, cheque number..." style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box">'+
+        '</div>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button onclick="saveSupplierPayment('+supId+')" style="flex:1;padding:11px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#10003; Record Payment</button>'+
+          '<button onclick="document.getElementById(\'sup-pay-form-overlay\').remove()" style="padding:11px 16px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function spModeChange(){
+  var mode=document.getElementById('sp-mode').value;
+  var bankRow=document.getElementById('sp-bank-row');
+  var posRow=document.getElementById('sp-pos-row');
+  if(bankRow)bankRow.style.display=mode==='transfer'?'block':'none';
+  if(posRow)posRow.style.display=mode==='pos'?'block':'none';
+}
+
+function saveSupplierPayment(supId){
+  var sup=DB.suppliers.find(function(s){return s.id==supId;});
+  if(!sup){alert('Supplier not found.');return;}
+  var amt=parseFloat(document.getElementById('sp-amount').value)||0;
+  if(amt<=0){alert('Enter a valid amount.');return;}
+  var mode=document.getElementById('sp-mode').value;
+  var bankId=(document.getElementById('sp-bank')||{}).value||null;
+  var posId=(document.getElementById('sp-pos')||{}).value||null;
+  var note=(document.getElementById('sp-note')||{}).value||'';
+  var dateEl=document.getElementById('sp-date');
+  var dateVal=dateEl&&dateEl.value?new Date(dateEl.value).toLocaleDateString():new Date().toLocaleDateString();
+  var month=dateEl&&dateEl.value?dateEl.value.slice(0,7):new Date().toISOString().slice(0,7);
+
+  var bank=bankId?(DB.banks||[]).find(function(b){return b.id==bankId;}):null;
+  var pos=posId?(DB.posTerminals||[]).find(function(p){return p.id==posId;}):null;
+  var modeLabel=mode==='transfer'?'Transfer'+(bank?' ('+bank.bankName+')':''):mode==='pos'?'POS'+(pos?' ('+pos.name+')':''):mode==='cheque'?'Cheque':'Cash';
+
   if(!DB.supplierPayments)DB.supplierPayments=[];
-  DB.supplierPayments.push({id:uid(),supId:supId,supName:sup.name,amount:amt,mode:mode,note:note||'',date:date,month:month,by:DB.currentUser.name});
+  DB.supplierPayments.push({id:uid(),supId:supId,supName:sup.name,amount:amt,
+    mode:modeLabel,payMode:mode,bankId:bankId||null,posId:posId||null,
+    note:note,date:dateVal,month:month,by:DB.currentUser.name});
+
+  // Record in cashflow as supplier payment outflow
+  DB.cashflow.push({id:uid(),desc:'Supplier payment — '+sup.name+(note?' ('+note+')':''),
+    amount:amt,type:'out',cat:'Restock',payMode:mode,bankId:bankId||null,posId:posId||null,
+    date:dateVal,month:month});
+
   sup.owedToSupplier=Math.max(0,(sup.owedToSupplier||0)-amt);
-  // NOT added to cashflow/expenses — supplier payment is a liability settlement, not an expense
-  logActivity('Supplier payment','Paid '+fmt(amt)+' to '+sup.name+'. Remaining: '+fmt(sup.owedToSupplier),mode);
+  logActivity('Supplier payment','Paid '+fmt(amt)+' to '+sup.name+' via '+modeLabel+'. Remaining: '+fmt(sup.owedToSupplier),mode);
+  document.getElementById('sup-pay-form-overlay').remove();
   saveData();renderApp();
-  alert('Payment of '+fmt(amt)+' recorded for '+sup.name+'.\nRemaining balance: '+fmt(sup.owedToSupplier));
+  showToast('Payment of '+fmt(amt)+' recorded for '+sup.name+'. Remaining: '+fmt(sup.owedToSupplier));
 }
 
 function viewSupplierPayments(supId){
