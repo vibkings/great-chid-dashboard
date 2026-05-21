@@ -7881,7 +7881,7 @@ function buildPurchases(){
   // Pending goods value
   var pendingGoodsVal=(DB.pendingDeliveries||[]).filter(function(d){
     return d.status!=='complete';
-  }).reduce(function(a,d){return a+(d.qtyPending||0)*(d.unitCost||0);},0);
+  }).reduce(function(a,d){return a+(d.qtyPending||0)*(d.cost||d.unitCost||0);},0);
   var pendingCount=(DB.pendingDeliveries||[]).filter(function(d){return d.status!=='complete';}).length;
   var supplierCount=new Set(filtPurch.map(function(p){return p.supId;})).size;
 
@@ -7936,7 +7936,7 @@ function buildPurchases(){
     var t=purchaseSearch.toLowerCase();
     return (p.invoiceNum||'').toLowerCase().indexOf(t)>-1||(p.supName||'').toLowerCase().indexOf(t)>-1||(p.items||[]).some(function(l){return l.name.toLowerCase().indexOf(t)>-1;});
   }).map(function(p,i){
-    var totalItems=p.items.reduce(function(a,l){return a+l.qty;},0);
+    var totalItems=p.items.reduce(function(a,l){return a+(l.qtyOrdered||l.qty||0);},0);
     var puModeLabel=p.payMode==='transfer'?'Transfer'+(p.bankId?' → '+getBankName(p.bankId):''):p.payMode==='pos'?'POS'+(p.posId?' ('+getPosName(p.posId)+')':''):'Cash';
     var payBadge=p.payType==='credit'?'<span class="badge owing">Credit</span>':
       p.payType==='part'?'<span class="badge low">Part pay</span>':
