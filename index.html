@@ -1525,7 +1525,7 @@ function buildClosingReport(){
   var balCash=cash-expCash;
   var balTransfer=transfer-expTransfer;
   var balPos=pos-expPos;
-  var balTotal=(cash+pos+transfer+cpTotal+depTotal)-(expTotal+suppPayTotal+retTotal);
+  var balTotal=(cash+pos+transfer+cpTotal+depTotal+exchBalTotal)-(expTotal+retTotal);
   // By staff
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
@@ -1605,9 +1605,9 @@ function buildClosingReport(){
         (cpTotal>0?'<tr><td style="font-weight:600">✅ Credit Payments</td><td style="text-align:right;color:#15803d">'+fmt(cpTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#15803d">'+fmt(cpTotal)+'</td></tr>':'')+
         (exchBalTotal>0?'<tr><td style="font-weight:600">🔄 Exchange Balance</td><td style="text-align:right;color:#0891b2">'+fmt(exchBalTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0891b2">'+fmt(exchBalTotal)+'</td></tr>':'')+
         (depTotal>0?'<tr><td style="font-weight:600">📥 Deposits</td><td style="text-align:right;color:#0369a1">'+fmt(depTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0369a1">'+fmt(depTotal)+'</td></tr>':'')+
-        (suppPayTotal>0?'<tr style="background:#fff8f0"><td style="font-weight:600;color:#92400e">🚛 Supplier Payments</td><td style="text-align:right">-</td><td style="text-align:right;color:#92400e">- '+fmt(suppPayTotal)+'</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(suppPayTotal)+'</td></tr>':'')+
+        (suppPayTotal>0?'<tr style="background:#fff8f0"><td style="font-weight:600;color:#92400e">🚛 Supplier Payments</td><td style="text-align:right;color:#92400e;font-size:11px;font-style:italic">see detail below</td><td style="text-align:right;color:#9ca3af;font-size:11px">—</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(suppPayTotal)+'</td></tr>':'')+
         (retTotal>0?'<tr style="background:#fff5f5"><td style="font-weight:600;color:#c0392b">↩ Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">- '+fmt(retTotal)+'</td><td style="text-align:right;font-weight:700;color:#c0392b">- '+fmt(retTotal)+'</td></tr>':'')+
-        '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(cash+pos+transfer+cpTotal+depTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+suppPayTotal+retTotal>0?'- '+fmt(expTotal+suppPayTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal)+'</td></tr>'+
+        '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(cash+pos+transfer+cpTotal+depTotal+exchBalTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+retTotal>0?'- '+fmt(expTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal)+'</td></tr>'+
         '</tbody></table>'+
       '</div>'+
       // Expense detail + Supplier payment detail
@@ -1684,7 +1684,7 @@ function printClosingReport(){
     return c.isReturn&&c.type==='out'&&dateInRange(c.date,closingDate,closingDate);
   }).reduce(function(a,c){return a+c.amount;},0);
   var balCash2=cash-expCash2; var balPos2=pos-expPos2; var balTransfer2=transfer-expTransfer2;
-  var balTotal2=(cash+pos+transfer+cpTotal+depTotal)-(expTotal+suppPayTotal2+retTotal2);
+  var balTotal2=(cash+pos+transfer+cpTotal+depTotal+exchBalTotal)-(expTotal+retTotal2);
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
   var staffRows=Object.keys(byStaff).map(function(s){var st=byStaff[s];return '<tr><td>'+s+'</td><td>'+st.count+'</td><td>'+fmt(st.total)+'</td><td>'+fmt(st.profit)+'</td></tr>';}).join('');
@@ -1722,9 +1722,8 @@ function printClosingReport(){
         (cpTotal>0?'<tr><td>Credit Payments</td><td style="text-align:right">'+fmt(cpTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right">'+fmt(cpTotal)+'</td></tr>':'')+
     (depTotal>0?'<tr><td>Deposits</td><td style="text-align:right">'+fmt(depTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right">'+fmt(depTotal)+'</td></tr>':'')+
     (retTotal2>0?'<tr><td>Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">-'+fmt(retTotal2)+'</td><td style="text-align:right;color:#c0392b">-'+fmt(retTotal2)+'</td></tr>':'')+
-    (suppPayTotal2>0?'<tr style="background:#fff8f0"><td>Supplier Payments</td><td style="text-align:right">-</td><td style="text-align:right;color:#92400e">-'+fmt(suppPayTotal2)+'</td><td style="text-align:right;color:#92400e">-'+fmt(suppPayTotal2)+'</td></tr>':'')+
-    (retTotal2>0?'<tr><td>Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">-'+fmt(retTotal2)+'</td><td style="text-align:right;color:#c0392b">-'+fmt(retTotal2)+'</td></tr>':'')+
-    '<tr style="background:#1a237e;color:#fff;font-weight:700"><td>TOTAL</td><td style="text-align:right">'+fmt(cash+pos+transfer+cpTotal+depTotal)+'</td><td style="text-align:right;color:#fca5a5">-'+fmt(expTotal+suppPayTotal2+retTotal2)+'</td><td style="text-align:right;font-size:12px">'+fmt(balTotal2)+'</td></tr>'+
+    (suppPayTotal2>0?'<tr style="background:#fff8f0"><td>Supplier Payments</td><td style="text-align:right;color:#92400e;font-size:11px;font-style:italic">see detail below</td><td style="text-align:right;color:#9ca3af">—</td><td style="text-align:right;color:#92400e">-'+fmt(suppPayTotal2)+'</td></tr>':'')+
+    '<tr style="background:#1a237e;color:#fff;font-weight:700"><td>TOTAL</td><td style="text-align:right">'+fmt(cash+pos+transfer+cpTotal+depTotal+exchBalTotal)+'</td><td style="text-align:right;color:#fca5a5">-'+fmt(expTotal+retTotal2)+'</td><td style="text-align:right;font-size:12px">'+fmt(balTotal2)+'</td></tr>'+
     '</tbody></table>'+
     (expToday2.length?'<div class="sec">Expense Detail</div><table><thead><tr><th>Description</th><th>Mode</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+expToday2.map(function(e){return '<tr><td>'+e.desc+'</td><td>'+(e.payMode==='transfer'?'Transfer':e.payMode==='pos'?'POS':'Cash')+'</td><td style="text-align:right;color:#c0392b">'+fmt(e.amount)+'</td></tr>';}).join('')+'</tbody></table>':'')+
     (suppPayToday2.length?'<div class="sec">Supplier Payment Detail</div><table><thead><tr><th>Description</th><th>Mode</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+suppPayToday2.map(function(e){return '<tr><td>'+e.desc+'</td><td>'+(e.payMode==='transfer'?'Transfer':e.payMode==='pos'?'POS':'Cash')+'</td><td style="text-align:right;color:#92400e">'+fmt(e.amount)+'</td></tr>';}).join('')+'</tbody></table>':'')+
@@ -8411,7 +8410,9 @@ function buildFinance(){
   var profit        = salesF.reduce(function(a,s){return a+s.profit;},0);
   var creditOwed    = salesF.filter(function(s){return s.payment==='credit';}).reduce(function(a,s){return a+s.total;},0);
   var pendingSupplyTotal = salesF.filter(function(s){return s.pendingSupply;}).reduce(function(a,s){return a+s.total;},0);
-  var cashIn        = rev-creditOwed;
+  // Use actual cashflow income (captures part-payment overpayments correctly)
+  var cashflowInF   = DB.cashflow.filter(function(c){return c.type==='in'&&c.cat==='Sales'&&!c.isDepositApplied&&!c.isExchange&&inRange(c.date,c.month);});
+  var cashIn        = cashflowInF.reduce(function(a,c){return a+c.amount;},0);
   var expTotal      = expF.reduce(function(a,c){return a+c.amount;},0);
   var purchTotal    = purchF.reduce(function(a,c){return a+c.amount;},0);
   var netCash       = cashIn-expTotal-purchTotal;
@@ -9183,16 +9184,21 @@ function buildPandL(){
   var range=getPandLRange();
   var from=range.from,to=range.to;
 
-  // ── Revenue: sum invoice totals in range ─────────────────────
+  // ── Revenue: use actual cashflow 'in' for accurate cash received (captures overpayments) ──
   var invGroups={};
   (DB.sales||[]).forEach(function(s){
     if(!dateInRange(s.date,from,to))return;
     var k=s.invoiceNum||s.id;
-    if(!invGroups[k])invGroups[k]={total:0,cost:0};
+    if(!invGroups[k])invGroups[k]={total:0,cost:0,payment:s.payment,partPayment:s.partPayment||0};
     invGroups[k].total+=(s.total||0);
     invGroups[k].cost+=((s.cost||0)*(s.qty||1));
   });
-  var grossRevenue=Object.values(invGroups).reduce(function(a,g){return a+g.total;},0);
+  // For part-payment invoices use partPayment (actual cash received), not sale total
+  var grossRevenue=Object.values(invGroups).reduce(function(a,g){
+    if(g.payment==='credit')return a; // credit not received yet
+    if(g.payment==='part')return a+(g.partPayment||0);
+    return a+g.total;
+  },0);
   var cogs=Object.values(invGroups).reduce(function(a,g){return a+g.cost;},0);
   var grossProfit=grossRevenue-cogs;
   var grossMargin=grossRevenue>0?Math.round(grossProfit/grossRevenue*100):0;
