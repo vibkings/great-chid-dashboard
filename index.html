@@ -5217,7 +5217,7 @@ function showDepositTopupDialog(cust,depBal,invoiceTotal,shortfall,creditLimit,c
   var overlay=document.createElement('div');
   overlay.id='dep-topup-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
-  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('');
+  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
   var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
   var creditOpt=creditLimit>0&&availableCredit>=shortfall?'<option value="credit">Add to credit balance</option>':'';
   overlay.innerHTML=
@@ -6115,7 +6115,7 @@ function showReturnModal(invoiceId){
         '<select id="ret-bank-id">'+
           '<option value="">-- Select bank account --</option>'+
           (DB.banks||[]).map(function(b){
-            var label=(b.bankName||'')+(b.acctName?' - '+b.acctName:'');
+            var label=(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'');
             return '<option value="'+b.id+'">'+label+'</option>';
           }).join('')+
         '</select>'+
@@ -7178,7 +7178,7 @@ function editInvoice(invNum){
           '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Bank account</label>'+
           '<select id="ei-bankid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select bank --</option>'+
-            (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(String(b.id)===String(s0.bankId)?' selected':'')+'>'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('')+
+            (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(String(b.id)===String(s0.bankId)?' selected':'')+'>'+( b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
         '<div id="ei-pos-wrap" style="display:'+(s0.payMode==='pos'&&s0.payment!=='split'?'block':'none')+'">'+
