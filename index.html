@@ -9363,8 +9363,8 @@ function buildReturnsTracker(){
          (r.custName||'').toLowerCase().indexOf(t)<0&&
          (r.invoiceNum||'').toLowerCase().indexOf(t)<0)return false;
     }
-    if(retDateFrom&&r.date<retDateFrom)return false;
-    if(retDateTo&&r.date>retDateTo)return false;
+    if(retDateFrom&&!(parseDate(r.date)>=parseDate(retDateFrom)||(r.month&&r.month>=retDateFrom.slice(0,7))))return false;
+    if(retDateTo&&!(parseDate(r.date)<=parseDate(retDateTo)||(r.month&&r.month<=retDateTo.slice(0,7))))return false;
     return true;
   }).slice().sort(function(a,b){return (parseDate(b.date)||0)-(parseDate(a.date)||0);});
 
@@ -9372,7 +9372,7 @@ function buildReturnsTracker(){
   var now=new Date();
   var thisMonthStr=now.getFullYear()+'-'+(String(now.getMonth()+1).padStart(2,'0'));
   var totalRefundVal=returns.reduce(function(a,r){return a+(r.refundAmt||0);},0);
-  var thisMonthReturns=returns.filter(function(r){return (r.date||'').indexOf(thisMonthStr)===0;});
+  var thisMonthReturns=returns.filter(function(r){return (r.month||'')===thisMonthStr||(r.date||'').indexOf(thisMonthStr)===0;});
   var thisMonthVal=thisMonthReturns.reduce(function(a,r){return a+(r.refundAmt||0);},0);
 
   // Most returned item
