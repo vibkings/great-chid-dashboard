@@ -4119,7 +4119,7 @@ function buildCustomers(){
         mc('Total spent',fmt(custSales.reduce(function(a,s){return a+s.total;},0)),'Lifetime','')+
         mc('Credit owed',weOweThem?fmt(Math.abs(creditBalance)):fmt(creditBalance),weOweThem?'We owe customer':theyOweUs?'Outstanding':'Clear',weOweThem?'blue':theyOweUs?'red':'green')+
         mc('Credit limit',creditLimit>0?fmt(creditLimit):'No limit','','')+
-        (cust.openingBalance>0?mc('Opening balance',fmt(cust.openingBalance),'Set at setup','amber'):'')+
+        (cust.openingBalance>0&&creditBalance>0?mc('Opening balance',fmt(cust.openingBalance),'Set at setup','amber'):cust.openingBalance>0&&creditBalance<=0?mc('Opening balance',fmt(cust.openingBalance),'✅ Cleared','green'):'')+
         (function(){var depBal=(DB.deposits||[]).filter(function(d){return d.custId==cust.id;}).reduce(function(a,d){return a+d.amount;},0);return mc('Deposit balance',fmt(depBal),'Available',depBal>0?'green':'');}())+
         '</div>'+
         creditBar+
@@ -5512,6 +5512,12 @@ function submitInvoice(){
     });
   });
   var cashReceived = (payment==='cash'||payment==='split'||payment==='deposit') ? grandTotal : (payment==='part' ? partPayment : 0);
+  // Check if staff entered an "amount received" (for cash/transfer/pos with outstanding balance)
+  var amtReceivedEl=document.getElementById('s-amt-received');
+  var amtReceived=amtReceivedEl?parseFloat(amtReceivedEl.value)||0:0;
+  if(amtReceived>grandTotal&&payment!=='part'&&payment!=='credit'&&payment!=='deposit'&&payment!=='split'){
+    cashReceived=amtReceived; // record actual cash received
+  }
   // creditAmount = how much the customer still owes us after this payment
   // If partPayment > grandTotal → negative = we owe them (overpayment / store credit)
   var creditAmount = payment==='credit' ? grandTotal : (payment==='part' ? (grandTotal - partPayment) : 0); // split/deposit/cash=0 credit
@@ -5580,10 +5586,23 @@ function submitInvoice(){
 
 
       if(overpayment > 0){
-        // Customer paid MORE than the invoice — excess becomes store credit (we owe them)
-        // Invoice is fully settled; full partPayment already recorded as cash-in above
-        // No cashflow entry needed — this is a liability (store credit), not an expense
-        regC.creditBalance = (regC.creditBalance||0) - overpayment; // negative = we owe them
+        // Customer paid MORE than the invoice — reduce their outstanding credit balance first
+        // (openingBalance debt + any unpaid invoices). If fully cleared, remainder = store credit we owe them
+        var currentDebt = Math.max(0, regC.creditBalance||0);
+        if(overpayment >= currentDebt){
+          // Overpayment clears ALL debt; any remainder is store credit (we owe them)
+          var storeCredit = overpayment - currentDebt;
+          regC.creditBalance = storeCredit > 0 ? -storeCredit : 0;
+          // Log the debt clearance as a credit payment so it shows in the statement
+          if(currentDebt > 0){
+            DB.creditPayments.push({id:uid(),custId:regC.id,custName:regC.name,amount:currentDebt,payMode:payMode,bankId:bankId,posId:posId,date:date,month:month,by:DB.currentUser.name,note:'Cleared via overpayment on Invoice #'+invNum});
+          }
+        } else {
+          // Partial overpayment — reduces debt but doesn't clear it
+          regC.creditBalance = (regC.creditBalance||0) - overpayment;
+          // Log partial debt clearance
+          DB.creditPayments.push({id:uid(),custId:regC.id,custName:regC.name,amount:overpayment,payMode:payMode,bankId:bankId,posId:posId,date:date,month:month,by:DB.currentUser.name,note:'Partial clearance via overpayment on Invoice #'+invNum});
+        }
       } else if(creditAmount > 0){
         // Customer still owes us the remaining amount
         var existingCredit=Math.abs(Math.min(0,regC.creditBalance||0)); // store credit we already owe them
@@ -5601,6 +5620,22 @@ function submitInvoice(){
         }
       }
       // creditAmount === 0 and no overpayment = exact payment, balance unchanged
+      // BUT if staff entered a higher "amount received", apply extra to clear outstanding debt
+      if(overpayment===0&&amtReceived>grandTotal&&payment!=='part'&&payment!=='credit'&&payment!=='deposit'&&payment!=='split'){
+        var extraReceived=amtReceived-grandTotal;
+        var currentDebt2=Math.max(0,regC.creditBalance||0);
+        if(extraReceived>0&&currentDebt2>0){
+          var clears2=Math.min(extraReceived,currentDebt2);
+          regC.creditBalance=regC.creditBalance-clears2;
+          DB.cashflow.push({id:uid(),desc:'Opening/credit balance cleared — '+custName+' Invoice #'+invNum,amount:clears2,type:'in',cat:'Sales',payMode:payMode,bankId:bankId,posId:posId,date:date,month:month});
+          DB.creditPayments.push({id:uid(),custId:regC.id,custName:regC.name,amount:clears2,payMode:payMode,bankId:bankId,posId:posId,date:date,month:month,by:DB.currentUser.name,note:'Balance cleared via extra payment on Invoice #'+invNum});
+          var remaining2=extraReceived-clears2;
+          if(remaining2>0){
+            // Still more than the debt — store as credit we owe them
+            regC.creditBalance=(regC.creditBalance||0)-remaining2;
+          }
+        }
+      }
       invoiceItems.forEach(function(l){regC.salesHistory.push({date:date,item:l.name,qty:l.qty,total:l.price*l.qty,payMode:payMode});});
     }
   }
@@ -5936,6 +5971,54 @@ function onPaymentTypeChange(){
     if(splitWrap)splitWrap.style.display='none';
     if(payModeWrap)payModeWrap.style.display='block';
     togglePaySubFields('cash','s');
+  }
+  // Show "Amount received" field when customer has outstanding credit balance and payment is cash/pos/transfer
+  var amtRecWrap=document.getElementById('s-amt-received-wrap');
+  if(amtRecWrap){
+    var ptv=payType?payType.value:'';
+    var custId2=saleCustomerType==='walkin'?'':(document.getElementById('s-reg-customer')?document.getElementById('s-reg-customer').value:'');
+    var cust2=custId2?(DB.customers||[]).find(function(c){return c.id==custId2;}):null;
+    var custDebt=cust2?Math.max(0,cust2.creditBalance||0):0;
+    var showAmtRec=(ptv==='cash'||ptv==='split'||(!ptv&&true))&&custDebt>0&&ptv!=='credit'&&ptv!=='part'&&ptv!=='deposit'&&ptv!=='split';
+    amtRecWrap.style.display=showAmtRec?'block':'none';
+    if(showAmtRec){
+      var lbl=amtRecWrap.querySelector('label');
+      if(lbl)lbl.innerHTML='Amount received (₦) <span style="font-size:11px;color:#e67e22;font-weight:600">— customer owes '+fmt(custDebt)+' opening/credit balance</span>';
+    }
+  }
+} // end onPaymentTypeChange
+function onAmtReceivedChange(){
+  var el=document.getElementById('s-amt-received');
+  var val=parseFloat(el?el.value:0)||0;
+  var hint=document.getElementById('s-amt-received-hint');
+  if(!hint){
+    hint=document.createElement('div');
+    hint.id='s-amt-received-hint';
+    hint.style.cssText='font-size:11px;margin-top:4px;color:#15803d;font-weight:600';
+    if(el&&el.parentNode)el.parentNode.appendChild(hint);
+  }
+  if(val>0){
+    var custId2=saleCustomerType==='walkin'?'':(document.getElementById('s-reg-customer')?document.getElementById('s-reg-customer').value:'');
+    var cust2=custId2?(DB.customers||[]).find(function(c){return c.id==custId2;}):null;
+    var custDebt=cust2?Math.max(0,cust2.creditBalance||0):0;
+    // Get current grand total from invoice items
+    var sub=invoiceItems.reduce(function(a,l){return a+(l.price*l.qty-(l.discAmt||0));},0);
+    var extra=val-sub;
+    if(extra>0&&custDebt>0){
+      var clears=Math.min(extra,custDebt);
+      hint.textContent='✅ ₦'+Math.round(clears).toLocaleString()+' will be applied to clear outstanding balance';
+      hint.style.color='#15803d';
+    } else if(extra>0){
+      hint.textContent='₦'+Math.round(extra).toLocaleString()+' overpayment will be stored as customer credit';
+      hint.style.color='#0369a1';
+    } else if(extra<0){
+      hint.textContent='⚠️ Amount is less than invoice total';
+      hint.style.color='#dc2626';
+    } else {
+      hint.textContent='';
+    }
+  } else {
+    hint.textContent='';
   }
 }
 function onSplitModeChange(){
@@ -6734,6 +6817,7 @@ function buildSales(){
       '<div class="form-group"><label>Payment type <span style="color:var(--danger)">*</span></label><select id="s-payment" onchange="onPaymentTypeChange()"><option value="cash">Cash (fully paid)</option><option value="deposit">Deposit (use customer deposit balance)</option><option value="credit">Credit (full amount owed)</option><option value="part">Part payment</option><option value="split">Split payment (2 modes)</option></select></div>'+
       '<div class="form-group" id="s-paymode-wrap"><label>Payment mode</label><select id="s-paymode" onchange="togglePaySubFields(this.value,\'s\')"><option value="cash">Cash</option><option value="pos">POS</option><option value="transfer">Bank transfer</option><option value="credit">Credit</option></select></div>'+
       '<div class="form-group" id="s-part-wrap" style="display:none"><label>Amount paid now (₦)</label><input type="number" id="s-part-payment" placeholder="0" min="0"></div>'+
+      '<div class="form-group" id="s-amt-received-wrap" style="display:none"><label>Amount received (₦) <span style="font-size:11px;color:#6b7280;font-weight:400">— optional, if customer paid more</span></label><input type="number" id="s-amt-received" placeholder="Leave blank if exact" min="0" oninput="onAmtReceivedChange()"></div>'+
     '</div>'+
     '<div id="s-split-wrap" style="display:none;background:#f0f7ff;border:1px solid #b6d4fe;border-radius:8px;padding:12px;margin-bottom:10px">'+
       '<div style="font-size:12px;font-weight:700;color:#0d6efd;margin-bottom:10px">&#128260; Split payment &#8212; enter amount for each mode</div>'+
@@ -10926,9 +11010,73 @@ function supplyAllNow(invoiceNum){
 // ============================================================
 // STARTUP
 // ============================================================
+/* ── One-time repair: record opening balance clearances missing from cashflow ── */
+function repairOpeningBalanceClearances(){
+  if(!DB.currentUser)return; // not logged in yet
+  var repaired=false;
+  (DB.customers||[]).forEach(function(cust){
+    var openingBal=cust.openingBalance||0;
+    if(openingBal<=0)return; // no opening balance
+
+    // Calculate total credit payments already recorded for this customer
+    var totalCreditPaid=(DB.creditPayments||[]).filter(function(p){
+      return String(p.custId)==String(cust.id)&&p.payMode!=='writeoff';
+    }).reduce(function(a,p){return a+(p.amount||0);},0);
+
+    // Calculate total part-payment overpayments already recorded as credit payments
+    // (these would have note containing 'overpayment')
+    var overpaymentsPaid=(DB.creditPayments||[]).filter(function(p){
+      return String(p.custId)==String(cust.id)&&(p.note||'').indexOf('overpayment')>=0;
+    }).reduce(function(a,p){return a+(p.amount||0);},0);
+
+    // If creditBalance is 0 or negative but no credit payment exists covering the opening balance
+    var currentBalance=cust.creditBalance||0;
+    if(currentBalance<=0 && totalCreditPaid<openingBal){
+      // Opening balance was cleared but not recorded — find what cleared it
+      // Look for part-payment invoices where partPayment > invoice total
+      var covered=totalCreditPaid;
+      var invoicesForCust=(DB.sales||[]).filter(function(s){
+        return String(s.custId)==String(cust.id)&&s.payment==='part'&&(s.partPayment||0)>0;
+      });
+      // Group by invoice
+      var invMap={};
+      invoicesForCust.forEach(function(s){
+        var k=s.invoiceNum||s.id;
+        if(!invMap[k])invMap[k]={total:0,partPayment:s.partPayment||0,date:s.date,month:s.month,payMode:s.payMode,bankId:s.bankId,posId:s.posId,invoiceNum:k};
+        invMap[k].total+=s.total;
+      });
+      Object.values(invMap).forEach(function(inv){
+        var overpay=inv.partPayment-inv.total;
+        if(overpay>0&&covered<openingBal){
+          var toRecord=Math.min(overpay,openingBal-covered);
+          // Check if already recorded
+          var alreadyRecorded=(DB.creditPayments||[]).some(function(p){
+            return String(p.custId)==String(cust.id)&&(p.note||'').indexOf(inv.invoiceNum)>=0&&(p.note||'').indexOf('overpayment')>=0;
+          });
+          if(!alreadyRecorded&&toRecord>0){
+            // Record the missing cashflow entry
+            DB.cashflow.push({id:uid(),desc:'Opening balance cleared — '+cust.name+' via overpayment on Invoice #'+inv.invoiceNum,amount:toRecord,type:'in',cat:'Sales',payMode:inv.payMode||'transfer',bankId:inv.bankId||null,posId:inv.posId||null,date:inv.date,month:inv.month});
+            // Record the missing credit payment entry
+            DB.creditPayments.push({id:uid(),custId:cust.id,custName:cust.name,amount:toRecord,payMode:inv.payMode||'transfer',bankId:inv.bankId||null,posId:inv.posId||null,date:inv.date,month:inv.month,by:'System repair',note:'Opening balance cleared via overpayment on Invoice #'+inv.invoiceNum});
+            covered+=toRecord;
+            repaired=true;
+          }
+        }
+      });
+    }
+  });
+  if(repaired){
+    saveData();
+    console.log('✅ Opening balance clearances repaired and saved.');
+  }
+}
+/* ── End repair ─────────────────────────────────────────────── */
+
 window.onload=function(){
   applyDarkMode();
   loadData();
+  // Run data repair for opening balance clearances not recorded in cashflow
+  setTimeout(repairOpeningBalanceClearances, 2000);
   // Check backup reminder every minute
   setInterval(function(){
     if(DB.currentUser)checkBackupReminder();
