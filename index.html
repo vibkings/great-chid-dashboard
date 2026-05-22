@@ -792,8 +792,6 @@ function startFirebaseListener() {
     fbLastSync = new Date();
     fbLastSavedAt = new Date().toISOString();
     updateSyncStatus('synced');
-    // Check for missing invoices after data loads
-    setTimeout(checkInvoiceRecovery, 3000);
     // Flush any pending offline saves
     var pending = localStorage.getItem(STORAGE_KEY+'_pending');
     if (pending) {
@@ -813,17 +811,6 @@ function startFirebaseListener() {
   fbSetCollection('meta', claimMeta, function() {
     fbLastSavedAt = claimMeta._savedAt;
   }, null);
-
-  // ── Auto-backup reminder every 4 hours ──────────────────────
-  var _lastBackupRem=parseInt(localStorage.getItem('gce_last_bk_rem')||'0');
-  setInterval(function(){
-    var now=Date.now();var hr=new Date().getHours();
-    if(hr>=8&&hr<=20&&now-_lastBackupRem>4*60*60*1000){
-      _lastBackupRem=now;
-      localStorage.setItem('gce_last_bk_rem',String(now));
-      showToast('💾 Backup reminder — click the Backup button to download your data now!',8000);
-    }
-  },30*60*1000);
 
   // Poll every 20 seconds — check meta doc for changes from other devices
   var fbLastSeenRemoteSavedAt = null;
@@ -860,12 +847,7 @@ function startFirebaseListener() {
         }
         // Store the remote savedAt so acceptFbSync knows what to pull
         fbPendingSnapshot = { _savedAt: payload._savedAt, _deviceId: payload._deviceId, _pendingPull: true };
-        // Fetch remote inventory count for sync popup
-        fbGetCollection('inventory', function(invErr2, invPayload2) {
-          var _remInv = (!invErr2 && invPayload2 && Array.isArray(invPayload2.data)) ? invPayload2.data.length : 0;
-          fbPendingSnapshot._remoteInvCount = _remInv;
-          showSyncPopup(remoteTime, remoteSalesCount);
-        });
+        showSyncPopup(remoteTime, remoteSalesCount);
       });
     });
   }, 20000);
@@ -876,12 +858,12 @@ function initFirebase() {
   return true;
 }
 
-function showSyncPopup(remoteTime, remoteSales, remoteInvCount) {
+function showSyncPopup(remoteTime, remoteSales) {
   var old = document.getElementById('fb-sync-popup');
   if (old) old.remove();
   var localSales = DB.sales.length;
   var localInv = DB.inventory.length;
-  var remoteInv = remoteInvCount || (fbPendingSnapshot && fbPendingSnapshot._remoteInvCount) || (fbPendingSnapshot && fbPendingSnapshot.inventory ? fbPendingSnapshot.inventory.length : '?');
+  var remoteInv = fbPendingSnapshot && fbPendingSnapshot.inventory ? fbPendingSnapshot.inventory.length : '?';
   var sameDevice = false; // already filtered before calling this
   var popup = document.createElement('div');
   popup.id = 'fb-sync-popup';
@@ -1101,8 +1083,6 @@ function saveData() {
   fbLastOwnSaveTime = Date.now();
   updateSyncStatus('saving');
   clearTimeout(fbSaveTimer);
-  // Use shorter delay for critical saves (invoice saves pass urgent=true)
-  var _delay = (typeof arguments[0]==='boolean'&&arguments[0]) ? 0 : 400;
   fbSaveTimer = setTimeout(function() {
     fbSyncDirty(function(ok) {
       if (ok) {
@@ -1111,15 +1091,9 @@ function saveData() {
         localStorage.removeItem(STORAGE_KEY+'_pending');
       } else {
         updateSyncStatus('error');
-        // Retry once after 3 seconds
-        setTimeout(function(){
-          fbSyncDirty(function(ok2){
-            if(ok2){fbLastSync=new Date();updateSyncStatus('synced');}
-          });
-        }, 3000);
       }
     });
-  }, _delay);
+  }, 400);
 }
 
 // ---- loadData: localStorage first, then Firebase per-collection ----
@@ -1218,32 +1192,6 @@ function migrateDepositApplied(){
     console.log('Migration: fixed '+patched+' deposit-covered invoice(s)');
     saveData();
   }
-}
-
-// ── Invoice recovery check ────────────────────────────────────
-function checkInvoiceRecovery(){
-  try{
-    var recovery=JSON.parse(localStorage.getItem('gce_last_invoices')||'[]');
-    if(!recovery.length||!DB.sales||!DB.sales.length)return;
-    var lastSaved=recovery[0];
-    var ageMins=(Date.now()-lastSaved.ts)/(60*1000);
-    if(ageMins>60*24)return; // only check if within last 24 hours
-    var dbHas=DB.sales.some(function(s){return s.invoiceNum===lastSaved.invNum;});
-    if(!dbHas){
-      var missing=recovery.filter(function(r){
-        return !DB.sales.some(function(s){return s.invoiceNum===r.invNum;});
-      });
-      if(!missing.length)return;
-      var msg='WARNING: Possible data loss detected!\n\n'+
-        'These invoices were saved on this device but are NOT in the database:\n\n'+
-        missing.map(function(r){
-          return '  Invoice #'+r.invNum+' — '+r.custName+' — '+fmt(r.total)+' ('+r.date+')';
-        }).join('\n')+
-        '\n\nThis may have happened due to a power cut before Firebase synced.\n'+
-        'Please re-enter these transactions manually.';
-      setTimeout(function(){alert(msg);},2000);
-    }
-  }catch(e){}
 }
 
 function buildSnapshot() {
@@ -1577,7 +1525,7 @@ function buildClosingReport(){
   var balCash=cash-expCash;
   var balTransfer=transfer-expTransfer;
   var balPos=pos-expPos;
-  var balTotal=(cash+pos+transfer+cpTotal+depTotal)-(expTotal+retTotal); // suppPayTotal excluded — shown in detail section separately
+  var balTotal=(cash+pos+transfer+cpTotal+depTotal)-(expTotal+suppPayTotal+retTotal);
   // By staff
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
@@ -1657,9 +1605,9 @@ function buildClosingReport(){
         (cpTotal>0?'<tr><td style="font-weight:600">✅ Credit Payments</td><td style="text-align:right;color:#15803d">'+fmt(cpTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#15803d">'+fmt(cpTotal)+'</td></tr>':'')+
         (exchBalTotal>0?'<tr><td style="font-weight:600">🔄 Exchange Balance</td><td style="text-align:right;color:#0891b2">'+fmt(exchBalTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0891b2">'+fmt(exchBalTotal)+'</td></tr>':'')+
         (depTotal>0?'<tr><td style="font-weight:600">📥 Deposits</td><td style="text-align:right;color:#0369a1">'+fmt(depTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0369a1">'+fmt(depTotal)+'</td></tr>':'')+
-
+        (suppPayTotal>0?'<tr style="background:#fff8f0"><td style="font-weight:600;color:#92400e">🚛 Supplier Payments</td><td style="text-align:right">-</td><td style="text-align:right;color:#92400e">- '+fmt(suppPayTotal)+'</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(suppPayTotal)+'</td></tr>':'')+
         (retTotal>0?'<tr style="background:#fff5f5"><td style="font-weight:600;color:#c0392b">↩ Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">- '+fmt(retTotal)+'</td><td style="text-align:right;font-weight:700;color:#c0392b">- '+fmt(retTotal)+'</td></tr>':'')+
-        '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(cash+pos+transfer+cpTotal+depTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+retTotal>0?'- '+fmt(expTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal)+'</td></tr>'+
+        '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(cash+pos+transfer+cpTotal+depTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+suppPayTotal+retTotal>0?'- '+fmt(expTotal+suppPayTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal)+'</td></tr>'+
         '</tbody></table>'+
       '</div>'+
       // Expense detail + Supplier payment detail
@@ -1736,7 +1684,7 @@ function printClosingReport(){
     return c.isReturn&&c.type==='out'&&dateInRange(c.date,closingDate,closingDate);
   }).reduce(function(a,c){return a+c.amount;},0);
   var balCash2=cash-expCash2; var balPos2=pos-expPos2; var balTransfer2=transfer-expTransfer2;
-  var balTotal2=(cash+pos+transfer+cpTotal+depTotal)-(expTotal+retTotal2); // suppPayTotal2 excluded
+  var balTotal2=(cash+pos+transfer+cpTotal+depTotal)-(expTotal+suppPayTotal2+retTotal2);
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
   var staffRows=Object.keys(byStaff).map(function(s){var st=byStaff[s];return '<tr><td>'+s+'</td><td>'+st.count+'</td><td>'+fmt(st.total)+'</td><td>'+fmt(st.profit)+'</td></tr>';}).join('');
@@ -2089,14 +2037,19 @@ var TABS=[
   {id:'creditcust',label:'Credit',perm:'creditcust'},
   {id:'reports',label:'Reports',perm:'reports'},
   {id:'closing',label:'📋 Closing',perm:'reports'},
+  {id:'supplieroverview',label:'Supplier Overview',perm:'suppliers'},
+  {id:'customeroverview',label:'Customer Overview',perm:'customers'},
+  {id:'inventoryval',label:'Inventory Valuation',perm:'inventory'},
+  {id:'pandl',label:'Profit & Loss',perm:'finance'},
+  {id:'returnstrack',label:'Returns Tracker',perm:'sales'},
   {id:'activitylog',label:'🔍 Activity',perm:'admin'},
   {id:'recyclebin',label:'Recycle Bin',perm:'admin'},
   {id:'settings',label:'Settings',perm:'settings'},
   {id:'users',label:'Users',perm:'users'}
 ];
 
-var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋'};
-var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing'};
+var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋',supplieroverview:'📋',customeroverview:'👤',inventoryval:'🏷️',pandl:'📊',returnstrack:'↩️'};
+var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing',supplieroverview:'Supplier Overview',customeroverview:'Customer Overview',inventoryval:'Inventory Valuation',pandl:'Profit & Loss',returnstrack:'Returns Tracker'};
 var VERSION_NOTES=[
   {ver:'v27',date:'May 2026',title:'Confirmation popups & Recycle Bin',notes:[
     'Confirmation popups — every delete now shows a styled modal instead of plain browser confirm()',
@@ -2391,7 +2344,7 @@ function renderApp(){
   var navHtml='';
   var sections=[
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases']},
-    {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing']},
+    {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing','supplieroverview','customeroverview','inventoryval','pandl','returnstrack']},
     {label:'Management',tabs:['suppliers','customers','settings','users','activitylog','recyclebin']},
   ];
   // Auto-purge bin items older than 30 days
@@ -2783,7 +2736,7 @@ function filterWhTable(){
 function renderPanel(){
   var scrollY=window.scrollY||window.pageYOffset;
   var p=document.getElementById('panel-root');if(!p)return;
-  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers};
+  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker};
   var content=(map[activeTab]||function(){return '';})();
   // Show version notes only on inventory (home) or when explicitly navigating to it
   var vnHtml='';
@@ -4991,6 +4944,55 @@ function selectPurchaseItem(id,name){
   if(typeof onPurchaseItemSelect==='function')onPurchaseItemSelect();
 }
 
+/* ── Searchable supplier dropdown (Purchases form) ─────────── */
+function filterSupDd(val, showAll){
+  var dd=document.getElementById('pu-sup-dd');
+  var hidden=document.getElementById('pu-supplier');
+  if(!dd)return;
+  var suppliers=DB.suppliers||[];
+  var q=(val||'').toLowerCase().trim();
+  var matches=showAll&&!q?suppliers:suppliers.filter(function(s){return s.name.toLowerCase().indexOf(q)>=0||(s.phone||'').indexOf(q)>=0;});
+  if(!matches.length){dd.style.display='none';return;}
+  dd.innerHTML=matches.map(function(s){
+    var badge=s.owedToSupplier>0?'<span style="color:#dc2626;font-size:10px;margin-left:6px">owes '+fmt(s.owedToSupplier)+'</span>':'';
+    return '<div onclick="selectSupDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'"><b>'+s.name+'</b>'+badge+'<div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
+  }).join('');
+  dd.style.display='block';
+}
+function selectSupDd(id, name){
+  var inp=document.getElementById('pu-sup-search');
+  var hidden=document.getElementById('pu-supplier');
+  var dd=document.getElementById('pu-sup-dd');
+  if(inp)inp.value=name;
+  if(hidden)hidden.value=id;
+  if(dd)dd.style.display='none';
+}
+
+/* ── Searchable supplier dropdown (Supplier Payments filter) ── */
+function filterSupPayDd(val, showAll){
+  var dd=document.getElementById('sup-pay-filter-dd');
+  var hidden=document.getElementById('sup-pay-filter-sup');
+  if(!dd)return;
+  var suppliers=DB.suppliers||[];
+  var q=(val||'').toLowerCase().trim();
+  var matches=showAll&&!q?suppliers:suppliers.filter(function(s){return s.name.toLowerCase().indexOf(q)>=0;});
+  var allOpt='<div onclick="selectSupPayDd(\'\',\'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;color:#6b7280" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'">All Suppliers</div>';
+  dd.innerHTML=allOpt+matches.map(function(s){
+    return '<div onclick="selectSupPayDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'"><b>'+s.name+'</b><div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
+  }).join('');
+  dd.style.display='block';
+}
+function selectSupPayDd(id, name){
+  var inp=document.getElementById('sup-pay-filter-search');
+  var hidden=document.getElementById('sup-pay-filter-sup');
+  var dd=document.getElementById('sup-pay-filter-dd');
+  if(inp)inp.value=name;
+  if(hidden)hidden.value=id;
+  if(dd)dd.style.display='none';
+  supPayFilterSup=id;
+  renderPanel();
+}
+
 function saleCustSearch(val, showAll){
   var dd=document.getElementById('s-reg-cust-dd');
   if(!dd)return;
@@ -5222,7 +5224,7 @@ function showDepositTopupDialog(cust,depBal,invoiceTotal,shortfall,creditLimit,c
   var overlay=document.createElement('div');
   overlay.id='dep-topup-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
-  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
+  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('');
   var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
   var creditOpt=creditLimit>0&&availableCredit>=shortfall?'<option value="credit">Add to credit balance</option>':'';
   overlay.innerHTML=
@@ -5632,15 +5634,7 @@ function submitInvoice(){
   // Increment invoice counter for next invoice
   DB.invoiceCounter=(DB.invoiceCounter||0)+1;
   DB.invoiceYear=new Date().getFullYear();
-  // ── CRITICAL: Force immediate Firebase sync to prevent data loss on power cut ──
-  saveData(true); // urgent=true bypasses 400ms delay
-  // Also save a quick-recovery copy of last invoice in localStorage
-  try{
-    var _recovery=JSON.parse(localStorage.getItem('gce_last_invoices')||'[]');
-    _recovery.unshift({invNum:invNum,custName:custName,total:grandTotal,date:new Date().toLocaleDateString(),ts:Date.now()});
-    if(_recovery.length>10)_recovery=_recovery.slice(0,10); // keep last 10
-    localStorage.setItem('gce_last_invoices',JSON.stringify(_recovery));
-  }catch(e){}
+  saveData();
   var saveMsg='Invoice #'+invNum+' saved!';
   if(pendingSupply){
     saveMsg+='\n\n⏳ GOODS NOT YET SUPPLIED\nPayment recorded. Stock will NOT be deducted until you mark the goods as supplied from the sales ledger.';
@@ -6120,7 +6114,7 @@ function showReturnModal(invoiceId){
         '<select id="ret-bank-id">'+
           '<option value="">-- Select bank account --</option>'+
           (DB.banks||[]).map(function(b){
-            var label=(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'');
+            var label=(b.bankName||'')+(b.acctName?' - '+b.acctName:'');
             return '<option value="'+b.id+'">'+label+'</option>';
           }).join('')+
         '</select>'+
@@ -7183,7 +7177,7 @@ function editInvoice(invNum){
           '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Bank account</label>'+
           '<select id="ei-bankid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select bank --</option>'+
-            (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(String(b.id)===String(s0.bankId)?' selected':'')+'>'+( b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('')+
+            (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(String(b.id)===String(s0.bankId)?' selected':'')+'>'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
         '<div id="ei-pos-wrap" style="display:'+(s0.payMode==='pos'&&s0.payment!=='split'?'block':'none')+'">'+
@@ -7839,34 +7833,6 @@ function printPurchaseRecord(id){
 // ============================================================
 // PURCHASES TAB
 // ============================================================
-function receiveAllDeliveries(invoiceNum){
-  var pending=(DB.pendingDeliveries||[]).filter(function(d){
-    return (d.invoiceNum===invoiceNum)&&d.status!=='complete';
-  });
-  if(!pending.length){alert('No pending items for this invoice.');return;}
-  var summary=pending.map(function(d){return d.itemName+' × '+d.qtyPending;}).join('\n');
-  if(!confirm('Receive ALL pending items for Invoice #'+invoiceNum+'?\n\n'+summary+'\n\nThis will add all quantities to stock.'))return;
-  var date=new Date().toLocaleDateString();
-  pending.forEach(function(d){
-    var invItem=DB.inventory.find(function(i){return i.id==d.itemId;});
-    if(invItem){
-      var before=invItem.qty;
-      invItem.qty+=d.qtyPending;
-      DB.adjLog.push({id:uid(),itemId:invItem.id,itemName:invItem.name,type:'add',
-        reason:'Full delivery received — Invoice #'+invoiceNum+' from '+d.supName,
-        before:before,change:d.qtyPending,after:invItem.qty,date:date,by:DB.currentUser.name});
-    }
-    d.qtyReceived=(d.qtyReceived||0)+d.qtyPending;
-    d.qtyPending=0;
-    d.status='complete';
-    d.completedDate=date;
-    d.lastReceivedDate=date;
-  });
-  logActivity('Delivery received','All items received for Invoice #'+invoiceNum,'purchase');
-  saveData();renderApp();
-  showToast('✅ All items for Invoice #'+invoiceNum+' marked as received!');
-}
-
 function receiveDelivery(deliveryId){
   var d=DB.pendingDeliveries.find(function(x){return x.id==deliveryId;});
   if(!d){alert('Delivery record not found.');return;}
@@ -8053,65 +8019,32 @@ function buildPurchases(){
   if(DB.pendingDeliveries&&DB.pendingDeliveries.length){
     var openPending=DB.pendingDeliveries.filter(function(d){return d.status!=='complete';});
     if(openPending.length){
-      // Group by invoice number
-      var pendGroups={};
-      openPending.forEach(function(d){
-        var k=d.invoiceNum||d.id;
-        if(!pendGroups[k])pendGroups[k]={invoiceNum:d.invoiceNum,supName:d.supName,dateOrdered:d.dateOrdered,items:[]};
-        pendGroups[k].items.push(d);
-      });
-
-      var groupCards=Object.values(pendGroups).map(function(g){
-        var itemRows=g.items.map(function(d){
-          var pct=d.qtyOrdered>0?Math.round((d.qtyReceived||0)/d.qtyOrdered*100):0;
-          var barColor=pct===0?'#f59e0b':pct<100?'#3b82f6':'#16a34a';
-          return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid #f3f4f6">'+
-            '<div style="flex:1;min-width:0">'+
-              '<div style="font-size:12px;font-weight:600;color:#111;margin-bottom:4px">'+d.itemName+'</div>'+
-              '<div style="background:#e5e7eb;border-radius:999px;height:6px;overflow:hidden">'+
-                '<div style="background:'+barColor+';width:'+pct+'%;height:100%;border-radius:999px;transition:width .3s"></div>'+
-              '</div>'+
-            '</div>'+
-            '<div style="text-align:center;min-width:50px">'+
-              '<div style="font-size:10px;color:#6b7280">Ordered</div>'+
-              '<div style="font-size:13px;font-weight:700">'+d.qtyOrdered+'</div>'+
-            '</div>'+
-            '<div style="text-align:center;min-width:50px">'+
-              '<div style="font-size:10px;color:#6b7280">Received</div>'+
-              '<div style="font-size:13px;font-weight:700;color:#16a34a">'+(d.qtyReceived||0)+'</div>'+
-            '</div>'+
-            '<div style="text-align:center;min-width:50px">'+
-              '<div style="font-size:10px;color:#6b7280">Pending</div>'+
-              '<div style="font-size:13px;font-weight:700;color:#dc2626">'+d.qtyPending+'</div>'+
-            '</div>'+
-            '<div style="font-size:11px;font-weight:700;color:#92400e;min-width:32px;text-align:right">'+pct+'%</div>'+
-            '<button onclick="receiveDelivery(\''+d.id+'\')" class="btn sm" style="background:#16a34a;color:#fff;border-color:#16a34a;font-size:11px;font-weight:700;white-space:nowrap">&#10003; Receive</button>'+
-          '</div>';
-        }).join('');
-
-        var allPending=g.items.every(function(d){return (d.qtyReceived||0)===0;});
-        return '<div style="border:1px solid #fde68a;border-radius:10px;overflow:hidden;margin-bottom:10px;background:#fff">'+
-          '<div style="background:#fffbeb;padding:10px 14px;display:flex;justify-content:space-between;align-items:center">'+
-            '<div>'+
-              '<div style="font-size:13px;font-weight:800;color:#92400e">Invoice #'+(g.invoiceNum||'-')+'</div>'+
-              '<div style="font-size:11px;color:#6b7280;margin-top:2px">'+g.supName+' &nbsp;&middot;&nbsp; '+g.dateOrdered+'</div>'+
-            '</div>'+
-            '<div style="display:flex;align-items:center;gap:8px">'+
-              '<span style="font-size:11px;font-weight:600;color:#92400e">'+g.items.length+' item'+(g.items.length!==1?'s':'')+' pending</span>'+
-              '<button onclick="receiveAllDeliveries(\''+g.invoiceNum+'\')" style="padding:5px 12px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">&#9723; Receive all</button>'+
-            '</div>'+
-          '</div>'+
-          itemRows+
-        '</div>';
-      }).join('');
-
-      pendingRows='<p class="sec-title" style="margin-top:1.5rem;color:var(--warning-text)">&#128230; Pending Deliveries ('+openPending.length+' item'+(openPending.length!==1?'s':'')+' in '+Object.keys(pendGroups).length+' invoice'+(Object.keys(pendGroups).length!==1?'s':'')+')'+
-        '</p>'+groupCards;
+      pendingRows='<p class="sec-title" style="margin-top:1.5rem;color:var(--warning-text)">&#128230; Pending Deliveries ('+openPending.length+')</p>'+
+        '<div class="tbl-wrap"><table><thead><tr><th>Date ordered</th><th>Invoice #</th><th>Supplier</th><th>Item</th><th style="text-align:center">Ordered</th><th style="text-align:center">Received</th><th style="text-align:center">Pending</th><th>Status</th><th></th></tr></thead><tbody>'+
+        openPending.map(function(d){
+          return '<tr style="background:#fffbeb">'+
+            '<td>'+d.dateOrdered+'</td>'+
+            '<td><b>'+(d.invoiceNum||'-')+'</b></td>'+
+            '<td>'+d.supName+'</td>'+
+            '<td>'+d.itemName+'</td>'+
+            '<td style="text-align:center">'+d.qtyOrdered+'</td>'+
+            '<td style="text-align:center;color:var(--success)">'+d.qtyReceived+'</td>'+
+            '<td style="text-align:center;color:var(--danger);font-weight:700">'+d.qtyPending+'</td>'+
+            '<td><span class="badge low">Pending</span></td>'+
+            '<td><button class="btn sm" onclick="receiveDelivery(\''+d.id+'\')" style="background:#16a34a;color:#fff;border-color:#16a34a;font-size:11px;font-weight:700">&#10003; Receive</button></td>'+
+          '</tr>';
+        }).join('')+
+        '</tbody></table></div>';
     }
   }
 
   return kpiHtml+'<p class="sec-title">Record new purchase</p>'+
-    '<div class="fg" style="grid-template-columns:1fr 1fr 1fr"><div class="form-group"><label>Supplier <span style="color:var(--danger)">*</span></label><select id="pu-supplier"><option value="">Select supplier...</option>'+supOpts+'</select></div>'+
+    '<div class="fg" style="grid-template-columns:1fr 1fr 1fr"><div class="form-group"><label>Supplier <span style="color:var(--danger)">*</span></label>'+
+    '<div style="position:relative">'+
+      '<input type="text" id="pu-sup-search" autocomplete="off" placeholder="Type to search supplier..." oninput="filterSupDd(this.value)" onfocus="filterSupDd(this.value,true)" onblur="setTimeout(function(){var d=document.getElementById(\'pu-sup-dd\');if(d)d.style.display=\'none\';},200)" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;box-sizing:border-box">'+
+      '<input type="hidden" id="pu-supplier" value="">'+
+      '<div id="pu-sup-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:9999;max-height:200px;overflow-y:auto;margin-top:2px"></div>'+
+    '</div></div>'+
     '<div class="form-group"><label>Supplier invoice # <span style="color:var(--danger)">*</span></label><input type="text" id="pu-invnum" placeholder="e.g. SUP-2024-001"></div>'+
     '<div class="form-group"><label>Purchase date <span style="font-size:10px;color:var(--text3);font-weight:400">(blank = today)</span></label><input type="date" id="pu-date" style="font-size:13px"></div></div>'+
     '<p style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Add items received</p>'+
@@ -8611,6 +8544,946 @@ var supPayDateFrom='';
 var supPayDateTo='';
 var supPayFilterSup='';
 
+/* ── SUPPLIER OVERVIEW ─────────────────────────────────────── */
+var supOvSearch='';
+var supOvFilter='all'; // all | balance | cleared | active
+
+function buildSupplierOverview(){
+  if(!canDo('suppliers'))return '<div class="empty">Access denied.</div>';
+
+  var suppliers=DB.suppliers||[];
+  var purchases=DB.purchases||[];
+  var payments=DB.supplierPayments||[];
+  var pending=(DB.pendingDeliveries||[]).filter(function(d){return d.status!=='complete';});
+
+  // ── Per-supplier aggregates ──────────────────────────────────
+  var supMap={};
+  suppliers.forEach(function(s){
+    supMap[s.id]={
+      id:s.id,name:s.name,phone:s.phone||s.contact||'—',
+      owedToSupplier:s.owedToSupplier||0,
+      totalPurchased:0,totalPaid:0,invoiceCount:0,lastPurchase:null,
+      pendingCount:0
+    };
+  });
+  purchases.forEach(function(p){
+    if(!supMap[p.supId])return;
+    supMap[p.supId].totalPurchased+=(p.grandTotal||0);
+    supMap[p.supId].invoiceCount++;
+    var d=parseDate(p.date);
+    if(!supMap[p.supId].lastPurchase||d>supMap[p.supId].lastPurchase)supMap[p.supId].lastPurchase=d;
+  });
+  payments.forEach(function(p){
+    if(!supMap[p.supId])return;
+    supMap[p.supId].totalPaid+=(p.amount||0);
+  });
+  pending.forEach(function(d){
+    if(!supMap[d.supId])return;
+    supMap[d.supId].pendingCount++;
+  });
+
+  var rows=Object.values(supMap);
+
+  // totals KPIs
+  var totalOwed=rows.reduce(function(a,r){return a+r.owedToSupplier;},0);
+  var totalPaidEver=rows.reduce(function(a,r){return a+r.totalPaid;},0);
+  var totalPurchaseVal=rows.reduce(function(a,r){return a+r.totalPurchased;},0);
+  var activeCount=rows.filter(function(r){return r.invoiceCount>0;}).length;
+
+  // ── Filter & search ──────────────────────────────────────────
+  var filtered=rows.filter(function(r){
+    if(supOvSearch){
+      var t=supOvSearch.toLowerCase();
+      if(r.name.toLowerCase().indexOf(t)<0&&r.phone.toLowerCase().indexOf(t)<0)return false;
+    }
+    if(supOvFilter==='balance')return r.owedToSupplier>0;
+    if(supOvFilter==='cleared')return r.owedToSupplier<=0;
+    if(supOvFilter==='active')return r.invoiceCount>0;
+    return true;
+  });
+
+  // ── Table rows ───────────────────────────────────────────────
+  var tableRows=filtered.map(function(r){
+    var status=r.owedToSupplier>0
+      ?'<span style="background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">HAS BALANCE</span>'
+      :'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">CLEARED</span>';
+    var lastP=r.lastPurchase?r.lastPurchase.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    var payBtn=r.owedToSupplier>0
+      ?'<button class="btn sm" style="color:#15803d;border-color:#86efac;font-size:11px" onclick="paySupplier('+r.id+')">💳 Pay</button> '
+      :'';
+    return '<tr>'+
+      '<td><b>'+r.name+'</b></td>'+
+      '<td>'+r.phone+'</td>'+
+      '<td style="text-align:right">'+fmt(r.totalPurchased)+'</td>'+
+      '<td style="text-align:right;color:#15803d">'+fmt(r.totalPaid)+'</td>'+
+      '<td style="text-align:right;color:'+(r.owedToSupplier>0?'#dc2626':'#374151')+'"><b>'+fmt(r.owedToSupplier)+'</b></td>'+
+      '<td>'+lastP+'</td>'+
+      '<td style="text-align:center">'+r.invoiceCount+'</td>'+
+      '<td style="text-align:center">'+r.pendingCount+'</td>'+
+      '<td>'+status+'</td>'+
+      '<td>'+payBtn+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Top 5 suppliers bar chart ────────────────────────────────
+  var top5=[].concat(rows).sort(function(a,b){return b.totalPurchased-a.totalPurchased;}).slice(0,5);
+  var maxVal=top5[0]?top5[0].totalPurchased:1;
+  var barChart=top5.map(function(r,i){
+    var pct=maxVal>0?Math.round(r.totalPurchased/maxVal*100):0;
+    var colors=['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b'];
+    return '<div style="margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
+        '<span style="font-weight:600;color:#374151">'+r.name+'</span>'+
+        '<span style="color:#6b7280">'+fmt(r.totalPurchased)+'</span>'+
+      '</div>'+
+      '<div style="background:#f3f4f6;border-radius:6px;height:10px;overflow:hidden">'+
+        '<div style="width:'+pct+'%;height:100%;background:'+colors[i]+';border-radius:6px;transition:width .4s"></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Monthly spend last 6 months ──────────────────────────────
+  var now=new Date();
+  var months=[];
+  for(var m=5;m>=0;m--){
+    var d=new Date(now.getFullYear(),now.getMonth()-m,1);
+    months.push({label:d.toLocaleDateString('en-GB',{month:'short',year:'2-digit'}),year:d.getFullYear(),month:d.getMonth(),total:0});
+  }
+  payments.forEach(function(p){
+    var d=parseDate(p.date);
+    if(!d)return;
+    months.forEach(function(mb){if(d.getFullYear()===mb.year&&d.getMonth()===mb.month)mb.total+=p.amount;});
+  });
+  var maxMonth=Math.max.apply(null,months.map(function(mb){return mb.total;}));
+  if(maxMonth===0)maxMonth=1;
+  var monthBars=months.map(function(mb){
+    var pct=Math.round(mb.total/maxMonth*100);
+    return '<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:4px">'+
+      '<div style="font-size:10px;color:#6b7280;font-weight:600">'+fmt(mb.total)+'</div>'+
+      '<div style="width:100%;display:flex;align-items:flex-end;height:60px">'+
+        '<div style="width:100%;height:'+(pct||2)+'%;min-height:3px;background:#6366f1;border-radius:4px 4px 0 0"></div>'+
+      '</div>'+
+      '<div style="font-size:10px;color:#9ca3af">'+mb.label+'</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Pending deliveries summary ───────────────────────────────
+  var pendingBySupplier={};
+  pending.forEach(function(d){
+    if(!pendingBySupplier[d.supId])pendingBySupplier[d.supId]={name:d.supName,items:[],totalCost:0};
+    pendingBySupplier[d.supId].items.push(d);
+    pendingBySupplier[d.supId].totalCost+=(d.cost*d.qtyPending||0);
+  });
+  var pendingRows=Object.values(pendingBySupplier).map(function(ps){
+    return '<tr>'+
+      '<td><b>'+ps.name+'</b></td>'+
+      '<td style="text-align:center">'+ps.items.length+'</td>'+
+      '<td>'+ps.items.slice(0,3).map(function(i){return i.itemName;}).join(', ')+(ps.items.length>3?' …':'')+'</td>'+
+      '<td style="text-align:right;color:#dc2626">'+fmt(ps.totalCost)+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Recent 10 supplier payments ──────────────────────────────
+  var recentPays=[].concat(payments).sort(function(a,b){
+    return (parseDate(b.date)||0)-(parseDate(a.date)||0);
+  }).slice(0,10);
+  var recentRows=recentPays.map(function(p){
+    var modeIcons={cash:'💵',transfer:'🏦',pos:'💳',cheque:'📝'};
+    var icon=modeIcons[p.payMode]||'💰';
+    return '<tr>'+
+      '<td>'+(parseDate(p.date)?parseDate(p.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—')+'</td>'+
+      '<td><b>'+p.supName+'</b></td>'+
+      '<td>'+icon+' '+(p.payMode||'—')+'</td>'+
+      '<td style="text-align:right;color:#15803d;font-weight:700">'+fmt(p.amount)+'</td>'+
+      '<td style="color:#9ca3af;font-size:12px">'+(p.note||'—')+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Build HTML ───────────────────────────────────────────────
+  var filterBtns=['all','balance','cleared','active'].map(function(f){
+    var labels={all:'All',balance:'Has Balance',cleared:'Cleared',active:'Active'};
+    var active=supOvFilter===f;
+    return '<button onclick="supOvFilter=\''+f+'\';renderPanel()" style="padding:6px 14px;border-radius:20px;border:1px solid '+(active?'var(--primary)':'var(--border)')+';background:'+(active?'var(--primary)':'var(--white)')+';color:'+(active?'#fff':'var(--text2)')+';font-size:12px;font-weight:600;cursor:pointer">'+labels[f]+'</button>';
+  }).join('');
+
+  return (
+    // ── KPI Cards ──────────────────────────────────────────────
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px">'+
+      kpiCard('🏭','Total Suppliers',suppliers.length,'','#6366f1')+
+      kpiCard('💰','Total Purchase Value',fmt(totalPurchaseVal),'','#0ea5e9')+
+      kpiCard('✅','Total Paid',fmt(totalPaidEver),'','#10b981')+
+      kpiCard('⏳','Total Outstanding',fmt(totalOwed),totalOwed>0?'⚠️':'','#f59e0b')+
+      kpiCard('🔥','Active Suppliers',activeCount,'','#8b5cf6')+
+      kpiCard('📦','Pending Deliveries',pending.length,'','#dc2626')+
+    '</div>'+
+
+    // ── Charts Row ─────────────────────────────────────────────
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 14px">🏆 Top 5 Suppliers by Purchase Value</p>'+
+        (top5.length?barChart:'<div class="empty">No data yet.</div>')+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 14px">📅 Monthly Supplier Payments (Last 6 Months)</p>'+
+        '<div style="display:flex;gap:6px;align-items:flex-end;height:100px;padding-bottom:4px">'+monthBars+'</div>'+
+      '</div>'+
+    '</div>'+
+
+    // ── Supplier Table ─────────────────────────────────────────
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:22px">'+
+      '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+        '<p class="sec-title" style="margin:0">📋 Supplier Performance</p>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+          filterBtns+
+          '<div style="position:relative"><span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3)">🔍</span>'+
+          '<input type="text" placeholder="Search suppliers..." value="'+supOvSearch+'" oninput="supOvSearch=this.value;renderPanel()" style="padding:7px 10px 7px 30px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:180px"></div>'+
+        '</div>'+
+      '</div>'+
+      (filtered.length
+        ?'<div class="tbl-wrap"><table><thead><tr>'+
+            '<th>Supplier</th><th>Phone</th><th style="text-align:right">Total Purchases</th>'+
+            '<th style="text-align:right">Total Paid</th><th style="text-align:right">Outstanding</th>'+
+            '<th>Last Purchase</th><th style="text-align:center">Invoices</th><th style="text-align:center">Pending</th>'+
+            '<th>Status</th><th>Action</th>'+
+          '</tr></thead><tbody>'+tableRows+'</tbody></table></div>'
+        :'<div class="empty">No suppliers match.</div>')+
+    '</div>'+
+
+    // ── Bottom Row: Pending Deliveries + Recent Payments ──────
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">📦 Pending Deliveries by Supplier</p>'+
+        (pendingRows
+          ?'<div class="tbl-wrap"><table><thead><tr><th>Supplier</th><th style="text-align:center">Items</th><th>Products</th><th style="text-align:right">Est. Cost</th></tr></thead><tbody>'+pendingRows+'</tbody></table></div>'
+          :'<div class="empty">No pending deliveries.</div>')+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">🕐 Recent 10 Supplier Payments</p>'+
+        (recentRows
+          ?'<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Supplier</th><th>Mode</th><th style="text-align:right">Amount</th><th>Note</th></tr></thead><tbody>'+recentRows+'</tbody></table></div>'
+          :'<div class="empty">No payments recorded.</div>')+
+      '</div>'+
+    '</div>'
+  );
+}
+
+function kpiCard(icon,label,value,badge,color){
+  return '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;border-left:4px solid '+color+'">'+
+    '<div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">'+icon+' '+label+(badge?' '+badge:'')+'</div>'+
+    '<div style="font-size:20px;font-weight:800;color:#1e293b">'+value+'</div>'+
+  '</div>';
+}
+/* ── END SUPPLIER OVERVIEW ─────────────────────────────────── */
+
+/* ── CUSTOMER OVERVIEW ─────────────────────────────────────── */
+var custOvSearch='';
+var custOvFilter='all'; // all | balance | cleared | active
+
+function buildCustomerOverview(){
+  if(!canDo('customers'))return '<div class="empty">Access denied.</div>';
+
+  var customers=DB.customers||[];
+  var sales=DB.sales||[];
+  var creditPayments=DB.creditPayments||[];
+
+  // ── Per-customer aggregates ──────────────────────────────────
+  var custMap={};
+  customers.forEach(function(c){
+    custMap[c.id]={
+      id:c.id,name:c.name,phone:c.phone||'—',type:c.type||'retail',
+      creditBalance:c.creditBalance||0,
+      totalSpent:0,totalCreditCollected:0,invoiceCount:0,lastPurchase:null
+    };
+  });
+
+  // Sales are stored per line item — group by invoiceNum first, then attribute to customer
+  var invGroups={};
+  sales.forEach(function(s){
+    var k=s.invoiceNum||s.id;
+    if(!invGroups[k])invGroups[k]={custId:s.custId,date:s.date,total:0};
+    invGroups[k].total+=(s.total||0);
+  });
+  Object.values(invGroups).forEach(function(inv){
+    if(!inv.custId||!custMap[inv.custId])return;
+    custMap[inv.custId].totalSpent+=inv.total;
+    custMap[inv.custId].invoiceCount++;
+    var d=parseDate(inv.date);
+    if(d&&(!custMap[inv.custId].lastPurchase||d>custMap[inv.custId].lastPurchase))
+      custMap[inv.custId].lastPurchase=d;
+  });
+
+  creditPayments.forEach(function(p){
+    if(!p.custId||!custMap[p.custId])return;
+    if(p.payMode!=='writeoff')custMap[p.custId].totalCreditCollected+=(p.amount||0);
+  });
+
+  var rows=Object.values(custMap);
+
+  // ── KPI totals ───────────────────────────────────────────────
+  var totalRevenue=rows.reduce(function(a,r){return a+r.totalSpent;},0);
+  var totalCreditOwed=rows.filter(function(r){return r.creditBalance>0;}).reduce(function(a,r){return a+r.creditBalance;},0);
+  var totalCreditCollected=rows.reduce(function(a,r){return a+r.totalCreditCollected;},0);
+  var activeCount=rows.filter(function(r){return r.invoiceCount>0;}).length;
+  var withBalanceCount=rows.filter(function(r){return r.creditBalance>0;}).length;
+
+  // ── Filter & search ──────────────────────────────────────────
+  var filtered=rows.filter(function(r){
+    if(custOvSearch){
+      var t=custOvSearch.toLowerCase();
+      if(r.name.toLowerCase().indexOf(t)<0&&r.phone.toLowerCase().indexOf(t)<0)return false;
+    }
+    if(custOvFilter==='balance')return r.creditBalance>0;
+    if(custOvFilter==='cleared')return r.creditBalance<=0;
+    if(custOvFilter==='active')return r.invoiceCount>0;
+    return true;
+  });
+
+  // ── Table rows ───────────────────────────────────────────────
+  var tableRows=filtered.map(function(r){
+    var status=r.creditBalance>0
+      ?'<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">HAS BALANCE</span>'
+      :'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">CLEARED</span>';
+    var typeLabel=r.type==='wholesale'?'🏭 Wholesale':r.type==='vip'?'⭐ VIP':'🛒 Retail';
+    var lastP=r.lastPurchase?r.lastPurchase.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    var collectBtn=r.creditBalance>0
+      ?'<button class="btn sm" style="color:#dc2626;border-color:#fca5a5;font-size:11px" onclick="switchTab(\'creditcust\')">💳 Collect</button>'
+      :'';
+    return '<tr>'+
+      '<td><b>'+r.name+'</b></td>'+
+      '<td>'+r.phone+'</td>'+
+      '<td style="font-size:11px;color:#6b7280">'+typeLabel+'</td>'+
+      '<td style="text-align:right">'+fmt(r.totalSpent)+'</td>'+
+      '<td style="text-align:right;color:#15803d">'+fmt(r.totalCreditCollected)+'</td>'+
+      '<td style="text-align:right;color:'+(r.creditBalance>0?'#dc2626':'#374151')+'"><b>'+fmt(r.creditBalance)+'</b></td>'+
+      '<td>'+lastP+'</td>'+
+      '<td style="text-align:center">'+r.invoiceCount+'</td>'+
+      '<td>'+status+'</td>'+
+      '<td>'+collectBtn+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Top 5 customers by spend ─────────────────────────────────
+  var top5=[].concat(rows).sort(function(a,b){return b.totalSpent-a.totalSpent;}).slice(0,5);
+  var maxVal=top5[0]?top5[0].totalSpent:1;
+  var custColors=['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b'];
+  var barChart=top5.map(function(r,i){
+    var pct=maxVal>0?Math.round(r.totalSpent/maxVal*100):0;
+    return '<div style="margin-bottom:10px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
+        '<span style="font-weight:600;color:#374151">'+r.name+'</span>'+
+        '<span style="color:#6b7280">'+fmt(r.totalSpent)+'</span>'+
+      '</div>'+
+      '<div style="background:#f3f4f6;border-radius:6px;height:10px;overflow:hidden">'+
+        '<div style="width:'+pct+'%;height:100%;background:'+custColors[i]+';border-radius:6px;transition:width .4s"></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Monthly revenue last 6 months ────────────────────────────
+  var now=new Date();
+  var months=[];
+  for(var m=5;m>=0;m--){
+    var d=new Date(now.getFullYear(),now.getMonth()-m,1);
+    months.push({label:d.toLocaleDateString('en-GB',{month:'short',year:'2-digit'}),year:d.getFullYear(),month:d.getMonth(),total:0});
+  }
+  sales.forEach(function(s){
+    var d=parseDate(s.date);
+    if(!d)return;
+    months.forEach(function(mb){if(d.getFullYear()===mb.year&&d.getMonth()===mb.month)mb.total+=(s.total||0);});
+  });
+  var maxMonth=Math.max.apply(null,months.map(function(mb){return mb.total;}));
+  if(maxMonth===0)maxMonth=1;
+  var monthBars=months.map(function(mb){
+    var pct=Math.round(mb.total/maxMonth*100);
+    return '<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:4px">'+
+      '<div style="font-size:10px;color:#6b7280;font-weight:600">'+fmt(mb.total)+'</div>'+
+      '<div style="width:100%;display:flex;align-items:flex-end;height:60px">'+
+        '<div style="width:100%;height:'+(pct||2)+'%;min-height:3px;background:#6366f1;border-radius:4px 4px 0 0"></div>'+
+      '</div>'+
+      '<div style="font-size:10px;color:#9ca3af">'+mb.label+'</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Customers with outstanding balance ───────────────────────
+  var debtors=[].concat(rows).filter(function(r){return r.creditBalance>0;})
+    .sort(function(a,b){return b.creditBalance-a.creditBalance;});
+  var debtorRows=debtors.map(function(r){
+    var lastP=r.lastPurchase?r.lastPurchase.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    var pct=r.totalSpent>0?Math.round(r.creditBalance/r.totalSpent*100):0;
+    return '<tr>'+
+      '<td><b>'+r.name+'</b></td>'+
+      '<td>'+r.phone+'</td>'+
+      '<td style="text-align:right">'+fmt(r.totalSpent)+'</td>'+
+      '<td style="text-align:right;color:#dc2626;font-weight:700">'+fmt(r.creditBalance)+'</td>'+
+      '<td style="text-align:center"><span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">'+pct+'%</span></td>'+
+      '<td>'+lastP+'</td>'+
+      '<td><button class="btn sm" style="color:#dc2626;border-color:#fca5a5;font-size:11px" onclick="switchTab(\'creditcust\')">💳 Collect</button></td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Recent 10 credit payments ────────────────────────────────
+  var recentPays=[].concat(creditPayments)
+    .filter(function(p){return p.payMode!=='writeoff';})
+    .sort(function(a,b){return (parseDate(b.date)||0)-(parseDate(a.date)||0);})
+    .slice(0,10);
+  var modeIcons={cash:'💵',transfer:'🏦',pos:'💳',cheque:'📝'};
+  var recentRows=recentPays.map(function(p){
+    var icon=modeIcons[p.payMode]||'💰';
+    return '<tr>'+
+      '<td>'+(parseDate(p.date)?parseDate(p.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—')+'</td>'+
+      '<td><b>'+p.custName+'</b></td>'+
+      '<td>'+icon+' '+(p.payMode||'—')+'</td>'+
+      '<td style="text-align:right;color:#15803d;font-weight:700">'+fmt(p.amount)+'</td>'+
+      '<td style="color:#9ca3af;font-size:12px">'+(p.by||'—')+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // ── Filter buttons ───────────────────────────────────────────
+  var filterBtns=['all','balance','cleared','active'].map(function(f){
+    var labels={all:'All',balance:'Has Balance',cleared:'Cleared',active:'Active'};
+    var isActive=custOvFilter===f;
+    return '<button onclick="custOvFilter=\''+f+'\';renderPanel()" style="padding:6px 14px;border-radius:20px;border:1px solid '+(isActive?'var(--primary)':'var(--border)')+';background:'+(isActive?'var(--primary)':'var(--white)')+';color:'+(isActive?'#fff':'var(--text2)')+';font-size:12px;font-weight:600;cursor:pointer">'+labels[f]+'</button>';
+  }).join('');
+
+  // ── Build HTML ───────────────────────────────────────────────
+  return (
+    // ── KPI Cards ──────────────────────────────────────────────
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px">'+
+      kpiCard('👥','Total Customers',customers.length,'','#6366f1')+
+      kpiCard('💰','Total Revenue',fmt(totalRevenue),'','#0ea5e9')+
+      kpiCard('⚠️','Credit Owed to Shop',fmt(totalCreditOwed),totalCreditOwed>0?'🔴':'','#dc2626')+
+      kpiCard('✅','Credit Collected',fmt(totalCreditCollected),'','#10b981')+
+      kpiCard('🔥','Active Customers',activeCount,'','#8b5cf6')+
+      kpiCard('🔴','With Balance',withBalanceCount,'','#f59e0b')+
+    '</div>'+
+
+    // ── Charts Row ─────────────────────────────────────────────
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 14px">🏆 Top 5 Customers by Purchase Value</p>'+
+        (top5.length?barChart:'<div class="empty">No sales data yet.</div>')+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 14px">📅 Monthly Revenue (Last 6 Months)</p>'+
+        '<div style="display:flex;gap:6px;align-items:flex-end;height:100px;padding-bottom:4px">'+monthBars+'</div>'+
+      '</div>'+
+    '</div>'+
+
+    // ── Performance Table ───────────────────────────────────────
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:22px">'+
+      '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+        '<p class="sec-title" style="margin:0">📋 Customer Performance</p>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+          filterBtns+
+          '<div style="position:relative"><span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3)">🔍</span>'+
+          '<input type="text" placeholder="Search customers..." value="'+custOvSearch+'" oninput="custOvSearch=this.value;renderPanel()" style="padding:7px 10px 7px 30px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:180px"></div>'+
+        '</div>'+
+      '</div>'+
+      (filtered.length
+        ?'<div class="tbl-wrap"><table><thead><tr>'+
+            '<th>Customer</th><th>Phone</th><th>Type</th>'+
+            '<th style="text-align:right">Total Spent</th><th style="text-align:right">Credit Paid</th>'+
+            '<th style="text-align:right">Credit Balance</th><th>Last Purchase</th>'+
+            '<th style="text-align:center">Invoices</th><th>Status</th><th>Action</th>'+
+          '</tr></thead><tbody>'+tableRows+'</tbody></table></div>'
+        :'<div class="empty">No customers match.</div>')+
+    '</div>'+
+
+    // ── Bottom Row ─────────────────────────────────────────────
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">🔴 Outstanding Credit Balances</p>'+
+        (debtorRows
+          ?'<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th style="text-align:right">Total Spent</th><th style="text-align:right">Owes</th><th style="text-align:center">% of Sales</th><th>Last Purchase</th><th></th></tr></thead><tbody>'+debtorRows+'</tbody></table></div>'
+          :'<div class="empty">🎉 No outstanding balances!</div>')+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">🕐 Recent 10 Credit Payments</p>'+
+        (recentRows
+          ?'<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Customer</th><th>Mode</th><th style="text-align:right">Amount</th><th>Recorded by</th></tr></thead><tbody>'+recentRows+'</tbody></table></div>'
+          :'<div class="empty">No credit payments yet.</div>')+
+      '</div>'+
+    '</div>'
+  );
+}
+/* ── END CUSTOMER OVERVIEW ─────────────────────────────────── */
+
+/* ══════════════════════════════════════════════════════════════
+   INVENTORY VALUATION REPORT
+══════════════════════════════════════════════════════════════ */
+var invValFilter='all'; // all | low | out | over
+
+function buildInventoryVal(){
+  if(!canDo('inventory'))return '<div class="empty">Access denied.</div>';
+  var inv=DB.inventory||[];
+
+  // ── Per-item calcs ───────────────────────────────────────────
+  var items=inv.map(function(i){
+    var costVal=(i.qty||0)*(i.cost||0);
+    var sellVal=(i.qty||0)*(i.sell||0);
+    var potProfit=sellVal-costVal;
+    var margin=sellVal>0?Math.round(potProfit/sellVal*100):0;
+    var status=i.qty<=0?'out':i.qty<=i.minQty?'low':i.qty>=(i.minQty||5)*5?'over':'ok';
+    return {id:i.id,name:i.name,cat:i.cat||'Uncategorised',qty:i.qty||0,
+      cost:i.cost||0,sell:i.sell||0,minQty:i.minQty||0,
+      costVal:costVal,sellVal:sellVal,potProfit:potProfit,margin:margin,status:status};
+  });
+
+  // ── Filter ───────────────────────────────────────────────────
+  var filtered=items.filter(function(it){
+    if(invValFilter==='low')return it.status==='low';
+    if(invValFilter==='out')return it.status==='out';
+    if(invValFilter==='over')return it.status==='over';
+    return true;
+  });
+
+  // ── KPIs ─────────────────────────────────────────────────────
+  var totalSKUs=items.length;
+  var totalUnits=items.reduce(function(a,it){return a+it.qty;},0);
+  var totalCostVal=items.reduce(function(a,it){return a+it.costVal;},0);
+  var totalSellVal=items.reduce(function(a,it){return a+it.sellVal;},0);
+  var totalPotProfit=totalSellVal-totalCostVal;
+  var avgMargin=totalSellVal>0?Math.round(totalPotProfit/totalSellVal*100):0;
+  var outCount=items.filter(function(it){return it.status==='out';}).length;
+  var lowCount=items.filter(function(it){return it.status==='low';}).length;
+
+  // ── Category breakdown ───────────────────────────────────────
+  var catMap={};
+  items.forEach(function(it){
+    if(!catMap[it.cat])catMap[it.cat]={cat:it.cat,costVal:0,sellVal:0,skus:0};
+    catMap[it.cat].costVal+=it.costVal;
+    catMap[it.cat].sellVal+=it.sellVal;
+    catMap[it.cat].skus++;
+  });
+  var cats=Object.values(catMap).sort(function(a,b){return b.sellVal-a.sellVal;}).slice(0,6);
+  var maxCatVal=cats[0]?cats[0].sellVal:1;
+  var catColors=['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444'];
+  var catBars=cats.map(function(c,i){
+    var pct=Math.round(c.sellVal/maxCatVal*100);
+    return '<div style="margin-bottom:9px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
+        '<span style="font-weight:600;color:#374151">'+c.cat+' <span style="color:#9ca3af;font-weight:400">('+c.skus+' SKUs)</span></span>'+
+        '<span style="color:#6b7280">'+fmt(c.sellVal)+'</span>'+
+      '</div>'+
+      '<div style="background:#f3f4f6;border-radius:6px;height:10px;overflow:hidden">'+
+        '<div style="width:'+pct+'%;height:100%;background:'+catColors[i%catColors.length]+';border-radius:6px"></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Table rows ───────────────────────────────────────────────
+  var statusBadge={
+    out:'<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">OUT</span>',
+    low:'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">LOW</span>',
+    over:'<span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">OVER</span>',
+    ok:'<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">OK</span>'
+  };
+  var tableRows=filtered.map(function(it){
+    return '<tr>'+
+      '<td><b>'+it.name+'</b></td>'+
+      '<td style="color:#6b7280">'+it.cat+'</td>'+
+      '<td style="text-align:center">'+it.qty+'</td>'+
+      '<td style="text-align:right">'+fmt(it.cost)+'</td>'+
+      '<td style="text-align:right">'+fmt(it.sell)+'</td>'+
+      '<td style="text-align:right;color:#0ea5e9">'+fmt(it.costVal)+'</td>'+
+      '<td style="text-align:right;color:#6366f1">'+fmt(it.sellVal)+'</td>'+
+      '<td style="text-align:right;color:#10b981;font-weight:700">'+fmt(it.potProfit)+'</td>'+
+      '<td style="text-align:center"><span style="font-weight:700;color:'+(it.margin>=30?'#15803d':it.margin>=15?'#92400e':'#dc2626')+'">'+it.margin+'%</span></td>'+
+      '<td>'+statusBadge[it.status]+'</td>'+
+    '</tr>';
+  }).join('');
+
+  var filterBtns=[['all','All'],['low','Low Stock'],['out','Out of Stock'],['over','Overstocked']].map(function(f){
+    var active=invValFilter===f[0];
+    return '<button onclick="invValFilter=\''+f[0]+'\';renderPanel()" style="padding:6px 14px;border-radius:20px;border:1px solid '+(active?'var(--primary)':'var(--border)')+';background:'+(active?'var(--primary)':'var(--white)')+';color:'+(active?'#fff':'var(--text2)')+';font-size:12px;font-weight:600;cursor:pointer">'+f[1]+'</button>';
+  }).join('');
+
+  return (
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:22px">'+
+      kpiCard('📦','Total SKUs',totalSKUs,'','#6366f1')+
+      kpiCard('🔢','Total Units',totalUnits.toLocaleString(),'','#0ea5e9')+
+      kpiCard('💰','Stock Value (Cost)',fmt(totalCostVal),'','#f59e0b')+
+      kpiCard('🏷️','Stock Value (Sell)',fmt(totalSellVal),'','#8b5cf6')+
+      kpiCard('📈','Potential Profit',fmt(totalPotProfit),'','#10b981')+
+      kpiCard('📊','Avg Margin',avgMargin+'%','','#06b6d4')+
+      kpiCard('🔴','Out of Stock',outCount,outCount>0?'⚠️':'','#dc2626')+
+      kpiCard('🟡','Low Stock',lowCount,lowCount>0?'⚠️':'','#f59e0b')+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 14px">📂 Stock Value by Category</p>'+
+        (cats.length?catBars:'<div class="empty">No categories.</div>')+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">⚠️ Alerts</p>'+
+        (outCount?'<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px"><b style="color:#dc2626">'+outCount+' item(s) OUT OF STOCK</b><div style="color:#6b7280;font-size:12px;margin-top:4px">'+items.filter(function(it){return it.status==='out';}).map(function(it){return it.name;}).join(', ')+'</div></div>':'')+
+        (lowCount?'<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px"><b style="color:#92400e">'+lowCount+' item(s) LOW STOCK</b><div style="color:#6b7280;font-size:12px;margin-top:4px">'+items.filter(function(it){return it.status==='low';}).map(function(it){return it.name+' ('+it.qty+' left)';}).join(', ')+'</div></div>':'')+
+        (!outCount&&!lowCount?'<div style="color:#15803d;font-size:13px;padding:10px">✅ All stock levels are healthy!</div>':'')+
+        '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-top:8px;font-size:13px">'+
+          '<b style="color:#15803d">Profit Summary</b>'+
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;font-size:12px">'+
+            '<div>Cost invested:</div><div style="text-align:right;font-weight:700">'+fmt(totalCostVal)+'</div>'+
+            '<div>If all sold at sell price:</div><div style="text-align:right;font-weight:700">'+fmt(totalSellVal)+'</div>'+
+            '<div style="color:#15803d;font-weight:700">Potential profit:</div><div style="text-align:right;font-weight:700;color:#15803d">'+fmt(totalPotProfit)+'</div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:22px">'+
+      '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+        '<p class="sec-title" style="margin:0">📋 Item Valuation Table <span style="font-size:12px;color:#9ca3af;font-weight:400">('+filtered.length+' items)</span></p>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap">'+filterBtns+'</div>'+
+      '</div>'+
+      (filtered.length?
+        '<div class="tbl-wrap"><table><thead><tr>'+
+          '<th>Item</th><th>Category</th><th style="text-align:center">Qty</th>'+
+          '<th style="text-align:right">Cost Price</th><th style="text-align:right">Sell Price</th>'+
+          '<th style="text-align:right">Stock @ Cost</th><th style="text-align:right">Stock @ Sell</th>'+
+          '<th style="text-align:right">Pot. Profit</th><th style="text-align:center">Margin</th><th>Status</th>'+
+        '</tr></thead><tbody>'+tableRows+'</tbody>'+
+        '<tfoot><tr style="background:#f8fafc;font-weight:700">'+
+          '<td colspan="5">TOTALS</td>'+
+          '<td style="text-align:right;color:#0ea5e9">'+fmt(filtered.reduce(function(a,it){return a+it.costVal;},0))+'</td>'+
+          '<td style="text-align:right;color:#6366f1">'+fmt(filtered.reduce(function(a,it){return a+it.sellVal;},0))+'</td>'+
+          '<td style="text-align:right;color:#10b981">'+fmt(filtered.reduce(function(a,it){return a+it.potProfit;},0))+'</td>'+
+          '<td colspan="2"></td>'+
+        '</tr></tfoot>'+
+        '</table></div>'
+      :'<div class="empty">No items match.</div>')+
+    '</div>'
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   PROFIT & LOSS SUMMARY
+══════════════════════════════════════════════════════════════ */
+var pandlPeriod='thismonth'; // thismonth | lastmonth | thisyear | custom
+var pandlFrom='';
+var pandlTo='';
+
+function getPandLRange(){
+  var now=new Date();
+  var y=now.getFullYear(),m=now.getMonth();
+  if(pandlPeriod==='thismonth'){
+    var f=new Date(y,m,1),t=new Date(y,m+1,0);
+    return {from:f.toISOString().slice(0,10),to:t.toISOString().slice(0,10)};
+  }
+  if(pandlPeriod==='lastmonth'){
+    var f=new Date(y,m-1,1),t=new Date(y,m,0);
+    return {from:f.toISOString().slice(0,10),to:t.toISOString().slice(0,10)};
+  }
+  if(pandlPeriod==='thisyear'){
+    return {from:y+'-01-01',to:y+'-12-31'};
+  }
+  return {from:pandlFrom,to:pandlTo};
+}
+
+function buildPandL(){
+  if(!canDo('finance')&&!canDo('reports'))return '<div class="empty">Access denied.</div>';
+  var range=getPandLRange();
+  var from=range.from,to=range.to;
+
+  // ── Revenue: sum invoice totals in range ─────────────────────
+  var invGroups={};
+  (DB.sales||[]).forEach(function(s){
+    if(!dateInRange(s.date,from,to))return;
+    var k=s.invoiceNum||s.id;
+    if(!invGroups[k])invGroups[k]={total:0,cost:0};
+    invGroups[k].total+=(s.total||0);
+    invGroups[k].cost+=((s.cost||0)*(s.qty||1));
+  });
+  var grossRevenue=Object.values(invGroups).reduce(function(a,g){return a+g.total;},0);
+  var cogs=Object.values(invGroups).reduce(function(a,g){return a+g.cost;},0);
+  var grossProfit=grossRevenue-cogs;
+  var grossMargin=grossRevenue>0?Math.round(grossProfit/grossRevenue*100):0;
+
+  // ── Returns deduction ────────────────────────────────────────
+  var totalReturns=(DB.salesReturns||[]).filter(function(r){return dateInRange(r.date,from,to)&&r.refundType==='cash';}).reduce(function(a,r){return a+(r.refundAmt||0);},0);
+  var netRevenue=grossRevenue-totalReturns;
+
+  // ── Expenses (non-restock cashflow out) ─────────────────────
+  var expLines=(DB.cashflow||[]).filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&dateInRange(c.date,from,to);});
+  var totalExpenses=expLines.reduce(function(a,e){return a+e.amount;},0);
+
+  // ── Supplier payments (restock) ──────────────────────────────
+  var supplierSpend=(DB.cashflow||[]).filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,from,to);}).reduce(function(a,e){return a+e.amount;},0);
+
+  // ── Net profit ───────────────────────────────────────────────
+  var netProfit=grossProfit-totalExpenses;
+  var netMargin=netRevenue>0?Math.round(netProfit/netRevenue*100):0;
+
+  // ── Expense breakdown by category ────────────────────────────
+  var expCatMap={};
+  expLines.forEach(function(e){
+    var cat=e.cat||'Other';
+    if(!expCatMap[cat])expCatMap[cat]=0;
+    expCatMap[cat]+=e.amount;
+  });
+  var expCats=Object.entries(expCatMap).sort(function(a,b){return b[1]-a[1];});
+  var maxExpCat=expCats[0]?expCats[0][1]:1;
+  var expCatColors=['#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e'];
+  var expCatBars=expCats.map(function(ec,i){
+    var pct=Math.round(ec[1]/maxExpCat*100);
+    return '<div style="margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
+        '<span style="font-weight:600;color:#374151">'+ec[0]+'</span>'+
+        '<span style="color:#6b7280">'+fmt(ec[1])+'</span>'+
+      '</div>'+
+      '<div style="background:#f3f4f6;border-radius:6px;height:9px;overflow:hidden">'+
+        '<div style="width:'+pct+'%;height:100%;background:'+expCatColors[i%expCatColors.length]+';border-radius:6px"></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Monthly P&L (last 6 months) ──────────────────────────────
+  var now=new Date();
+  var months6=[];
+  for(var m=5;m>=0;m--){
+    var d=new Date(now.getFullYear(),now.getMonth()-m,1);
+    months6.push({label:d.toLocaleDateString('en-GB',{month:'short',year:'2-digit'}),year:d.getFullYear(),month:d.getMonth(),rev:0,exp:0,profit:0});
+  }
+  // Revenue by month
+  var mInvGroups={};
+  (DB.sales||[]).forEach(function(s){
+    var k=s.invoiceNum||s.id;
+    if(!mInvGroups[k])mInvGroups[k]={date:s.date,cost:0,total:0};
+    mInvGroups[k].total+=(s.total||0);
+    mInvGroups[k].cost+=((s.cost||0)*(s.qty||1));
+  });
+  Object.values(mInvGroups).forEach(function(g){
+    var d=parseDate(g.date);if(!d)return;
+    months6.forEach(function(mb){if(d.getFullYear()===mb.year&&d.getMonth()===mb.month){mb.rev+=g.total;mb.profit+=(g.total-g.cost);}});
+  });
+  (DB.cashflow||[]).forEach(function(c){
+    if(c.type!=='out'||c.isReturn||c.cat==='Restock')return;
+    var d=parseDate(c.date);if(!d)return;
+    months6.forEach(function(mb){if(d.getFullYear()===mb.year&&d.getMonth()===mb.month)mb.exp+=c.amount;});
+  });
+  months6.forEach(function(mb){mb.netProfit=mb.profit-mb.exp;});
+  var maxBar=Math.max.apply(null,months6.map(function(mb){return Math.max(mb.rev,mb.exp,Math.abs(mb.netProfit));}));
+  if(maxBar===0)maxBar=1;
+
+  var chartBars=months6.map(function(mb){
+    var revPct=Math.round(mb.rev/maxBar*80);
+    var expPct=Math.round(mb.exp/maxBar*80);
+    var netPct=Math.round(Math.abs(mb.netProfit)/maxBar*80);
+    var netCol=mb.netProfit>=0?'#10b981':'#ef4444';
+    return '<div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:2px">'+
+      '<div style="font-size:9px;color:#9ca3af;writing-mode:horizontal-tb">'+mb.label+'</div>'+
+      '<div style="display:flex;gap:2px;align-items:flex-end;height:80px;width:100%">'+
+        '<div title="Revenue: '+fmt(mb.rev)+'" style="flex:1;height:'+(revPct||1)+'%;min-height:2px;background:#6366f1;border-radius:2px 2px 0 0"></div>'+
+        '<div title="Expenses: '+fmt(mb.exp)+'" style="flex:1;height:'+(expPct||1)+'%;min-height:2px;background:#ef4444;border-radius:2px 2px 0 0"></div>'+
+        '<div title="Net Profit: '+fmt(mb.netProfit)+'" style="flex:1;height:'+(netPct||1)+'%;min-height:2px;background:'+netCol+';border-radius:2px 2px 0 0;opacity:.8"></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Period selector ──────────────────────────────────────────
+  var periods=[['thismonth','This Month'],['lastmonth','Last Month'],['thisyear','This Year'],['custom','Custom']];
+  var periodBtns=periods.map(function(p){
+    var active=pandlPeriod===p[0];
+    return '<button onclick="pandlPeriod=\''+p[0]+'\';renderPanel()" style="padding:6px 14px;border-radius:20px;border:1px solid '+(active?'var(--primary)':'var(--border)')+';background:'+(active?'var(--primary)':'var(--white)')+';color:'+(active?'#fff':'var(--text2)')+';font-size:12px;font-weight:600;cursor:pointer">'+p[1]+'</button>';
+  }).join('');
+
+  var customRange=pandlPeriod==='custom'?
+    '<div style="display:flex;gap:8px;align-items:center;margin-top:10px">'+
+      '<input type="date" value="'+pandlFrom+'" onchange="pandlFrom=this.value;renderPanel()" style="padding:7px;border:1px solid var(--border);border-radius:7px;font-size:12px">'+
+      '<span style="color:#9ca3af">to</span>'+
+      '<input type="date" value="'+pandlTo+'" onchange="pandlTo=this.value;renderPanel()" style="padding:7px;border:1px solid var(--border);border-radius:7px;font-size:12px">'+
+    '</div>':'';
+
+  var profitColor=netProfit>=0?'#15803d':'#dc2626';
+
+  return (
+    '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px">'+periodBtns+'</div>'+
+    customRange+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:22px;margin-top:'+(pandlPeriod==='custom'?'12px':'0')+'">'+
+      kpiCard('💰','Gross Revenue',fmt(grossRevenue),'','#6366f1')+
+      kpiCard('↩️','Returns Deducted',fmt(totalReturns),'','#94a3b8')+
+      kpiCard('🏭','Cost of Goods Sold',fmt(cogs),'','#f59e0b')+
+      kpiCard('📈','Gross Profit',fmt(grossProfit)+' ('+grossMargin+'%)','','#0ea5e9')+
+      kpiCard('💸','Total Expenses',fmt(totalExpenses),'','#ef4444')+
+      kpiCard(netProfit>=0?'🟢':'🔴','Net Profit',fmt(netProfit)+' ('+netMargin+'%)',netProfit>=0?'':'loss',netProfit>=0?'#10b981':'#dc2626')+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 10px">📅 6-Month P&L Chart</p>'+
+        '<div style="display:flex;gap:4px;align-items:flex-end;height:90px;margin-bottom:8px">'+chartBars+'</div>'+
+        '<div style="display:flex;gap:14px;font-size:11px;color:#6b7280">'+
+          '<span><span style="display:inline-block;width:10px;height:10px;background:#6366f1;border-radius:2px;margin-right:3px"></span>Revenue</span>'+
+          '<span><span style="display:inline-block;width:10px;height:10px;background:#ef4444;border-radius:2px;margin-right:3px"></span>Expenses</span>'+
+          '<span><span style="display:inline-block;width:10px;height:10px;background:#10b981;border-radius:2px;margin-right:3px"></span>Net Profit</span>'+
+        '</div>'+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">💸 Expenses by Category</p>'+
+        (expCatBars||'<div class="empty" style="padding:10px 0">No expenses in this period.</div>')+
+      '</div>'+
+    '</div>'+
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:22px">'+
+      '<p class="sec-title" style="margin:0 0 14px">📋 P&L Statement</p>'+
+      '<table style="width:100%;font-size:13px"><colgroup><col style="width:60%"><col style="width:40%"></colgroup>'+
+        '<tbody>'+
+          '<tr style="background:#f8fafc"><td style="padding:8px 10px;font-weight:700;color:#374151">REVENUE</td><td></td></tr>'+
+          '<tr><td style="padding:6px 10px 6px 20px;color:#374151">Gross Sales</td><td style="padding:6px 10px;text-align:right;font-weight:600">'+fmt(grossRevenue)+'</td></tr>'+
+          '<tr><td style="padding:6px 10px 6px 20px;color:#374151">Less: Returns &amp; Refunds</td><td style="padding:6px 10px;text-align:right;color:#dc2626">('+fmt(totalReturns)+')</td></tr>'+
+          '<tr style="border-top:1px solid #e5e7eb"><td style="padding:8px 10px;font-weight:700">Net Revenue</td><td style="padding:8px 10px;text-align:right;font-weight:700">'+fmt(netRevenue)+'</td></tr>'+
+          '<tr style="background:#f8fafc"><td style="padding:8px 10px;font-weight:700;color:#374151">COST OF GOODS</td><td></td></tr>'+
+          '<tr><td style="padding:6px 10px 6px 20px;color:#374151">Cost of Goods Sold</td><td style="padding:6px 10px;text-align:right;color:#dc2626">('+fmt(cogs)+')</td></tr>'+
+          '<tr style="border-top:1px solid #e5e7eb"><td style="padding:8px 10px;font-weight:700">Gross Profit</td><td style="padding:8px 10px;text-align:right;font-weight:700;color:#0ea5e9">'+fmt(grossProfit)+' <span style="font-size:11px;color:#9ca3af">('+grossMargin+'%)</span></td></tr>'+
+          '<tr style="background:#f8fafc"><td style="padding:8px 10px;font-weight:700;color:#374151">EXPENSES</td><td></td></tr>'+
+          expCats.map(function(ec){return '<tr><td style="padding:6px 10px 6px 20px;color:#374151">'+ec[0]+'</td><td style="padding:6px 10px;text-align:right;color:#dc2626">('+fmt(ec[1])+')</td></tr>';}).join('')+
+          '<tr style="border-top:1px solid #e5e7eb"><td style="padding:8px 10px;font-weight:700">Total Expenses</td><td style="padding:8px 10px;text-align:right;font-weight:700;color:#dc2626">('+fmt(totalExpenses)+')</td></tr>'+
+          '<tr style="background:'+(netProfit>=0?'#f0fdf4':'#fef2f2')+';border-top:2px solid '+(netProfit>=0?'#86efac':'#fca5a5')+'">'+
+            '<td style="padding:10px;font-size:15px;font-weight:800;color:'+profitColor+'">NET PROFIT</td>'+
+            '<td style="padding:10px;text-align:right;font-size:15px;font-weight:800;color:'+profitColor+'">'+fmt(netProfit)+' <span style="font-size:11px">('+netMargin+'%)</span></td>'+
+          '</tr>'+
+        '</tbody>'+
+      '</table>'+
+    '</div>'
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   SALES RETURNS TRACKER
+══════════════════════════════════════════════════════════════ */
+var retSearch='';
+var retDateFrom='';
+var retDateTo='';
+
+function buildReturnsTracker(){
+  if(!canDo('sales')&&!canDo('reports'))return '<div class="empty">Access denied.</div>';
+  var returns=DB.salesReturns||[];
+
+  // ── Filter ───────────────────────────────────────────────────
+  var filtered=returns.filter(function(r){
+    if(retSearch){
+      var t=retSearch.toLowerCase();
+      if((r.itemName||'').toLowerCase().indexOf(t)<0&&
+         (r.custName||'').toLowerCase().indexOf(t)<0&&
+         (r.invoiceNum||'').toLowerCase().indexOf(t)<0)return false;
+    }
+    if(retDateFrom&&!(parseDate(r.date)>=parseDate(retDateFrom)||(r.month&&r.month>=retDateFrom.slice(0,7))))return false;
+    if(retDateTo&&!(parseDate(r.date)<=parseDate(retDateTo)||(r.month&&r.month<=retDateTo.slice(0,7))))return false;
+    return true;
+  }).slice().sort(function(a,b){return (parseDate(b.date)||0)-(parseDate(a.date)||0);});
+
+  // ── KPIs ─────────────────────────────────────────────────────
+  var now=new Date();
+  var thisMonthStr=now.getFullYear()+'-'+(String(now.getMonth()+1).padStart(2,'0'));
+  var totalRefundVal=returns.reduce(function(a,r){return a+(r.refundAmt||0);},0);
+  var thisMonthReturns=returns.filter(function(r){return (r.month||'')===thisMonthStr||(r.date||'').indexOf(thisMonthStr)===0;});
+  var thisMonthVal=thisMonthReturns.reduce(function(a,r){return a+(r.refundAmt||0);},0);
+
+  // Most returned item
+  var itemRetMap={};
+  returns.forEach(function(r){
+    if(!itemRetMap[r.itemName])itemRetMap[r.itemName]={name:r.itemName,count:0,val:0};
+    itemRetMap[r.itemName].count+=(r.qty||1);
+    itemRetMap[r.itemName].val+=(r.refundAmt||0);
+  });
+  var topItem=Object.values(itemRetMap).sort(function(a,b){return b.count-a.count;})[0];
+
+  // ── Top 5 returned items chart ────────────────────────────────
+  var top5Items=Object.values(itemRetMap).sort(function(a,b){return b.count-a.count;}).slice(0,5);
+  var maxItemCount=top5Items[0]?top5Items[0].count:1;
+  var itemColors=['#ef4444','#f97316','#f59e0b','#8b5cf6','#6366f1'];
+  var itemBars=top5Items.map(function(it,i){
+    var pct=Math.round(it.count/maxItemCount*100);
+    return '<div style="margin-bottom:9px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
+        '<span style="font-weight:600;color:#374151">'+it.name+'</span>'+
+        '<span style="color:#6b7280">'+it.count+' units · '+fmt(it.val)+'</span>'+
+      '</div>'+
+      '<div style="background:#f3f4f6;border-radius:6px;height:10px;overflow:hidden">'+
+        '<div style="width:'+pct+'%;height:100%;background:'+itemColors[i]+';border-radius:6px"></div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  // ── Table rows ───────────────────────────────────────────────
+  var refundTypeBadge={
+    cash:'<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CASH</span>',
+    credit:'<span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CREDIT</span>',
+    exchange:'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXCHANGE</span>'
+  };
+  var tableRows=filtered.map(function(r){
+    var d=parseDate(r.date);
+    var dateStr=d?d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    return '<tr>'+
+      '<td>'+dateStr+'</td>'+
+      '<td><b>#'+(r.invoiceNum||r.invoiceId||'—')+'</b></td>'+
+      '<td>'+(r.custName||'Walk-in')+'</td>'+
+      '<td>'+r.itemName+'</td>'+
+      '<td style="text-align:center">'+r.qty+'</td>'+
+      '<td style="text-align:right;color:#dc2626;font-weight:700">'+fmt(r.refundAmt||0)+'</td>'+
+      '<td style="color:#6b7280;font-size:12px">'+(r.reason||'—')+'</td>'+
+      '<td>'+(refundTypeBadge[r.refundType]||refundTypeBadge['cash'])+'</td>'+
+      '<td style="color:#9ca3af;font-size:11px">'+(r.by||'—')+'</td>'+
+    '</tr>';
+  }).join('');
+
+  return (
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px">'+
+      kpiCard('↩️','Total Returns',returns.length,'','#ef4444')+
+      kpiCard('💸','Total Refund Value',fmt(totalRefundVal),'','#f97316')+
+      kpiCard('📅','This Month Returns',thisMonthReturns.length,'','#8b5cf6')+
+      kpiCard('🗓️','This Month Value',fmt(thisMonthVal),'','#f59e0b')+
+      kpiCard('🔁','Most Returned',topItem?topItem.name+' ('+topItem.count+'x)':'—','','#dc2626')+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px">'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 14px">🔁 Top 5 Most Returned Items</p>'+
+        (top5Items.length?itemBars:'<div class="empty">No returns yet.</div>')+
+      '</div>'+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">📊 Returns Breakdown</p>'+
+        (function(){
+          var types={cash:0,credit:0,exchange:0};
+          returns.forEach(function(r){if(types[r.refundType]!==undefined)types[r.refundType]+=(r.refundAmt||0);});
+          var total=types.cash+types.credit+types.exchange||1;
+          return ['cash','credit','exchange'].map(function(t){
+            var pct=Math.round(types[t]/total*100);
+            var cols={cash:'#10b981',credit:'#6366f1',exchange:'#f59e0b'};
+            var labels={cash:'Cash Refunds',credit:'Store Credit',exchange:'Exchanges'};
+            return '<div style="margin-bottom:10px">'+
+              '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
+                '<span style="font-weight:600">'+labels[t]+'</span>'+
+                '<span style="color:#6b7280">'+fmt(types[t])+' ('+pct+'%)</span>'+
+              '</div>'+
+              '<div style="background:#f3f4f6;border-radius:6px;height:9px;overflow:hidden">'+
+                '<div style="width:'+pct+'%;height:100%;background:'+cols[t]+';border-radius:6px"></div>'+
+              '</div>'+
+            '</div>';
+          }).join('');
+        })()+
+      '</div>'+
+    '</div>'+
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:22px">'+
+      '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px">'+
+        '<p class="sec-title" style="margin:0">📋 Returns Log <span style="font-size:12px;color:#9ca3af;font-weight:400">('+filtered.length+')</span></p>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+          '<input type="date" value="'+retDateFrom+'" onchange="retDateFrom=this.value;renderPanel()" style="padding:6px;border:1px solid var(--border);border-radius:7px;font-size:12px">'+
+          '<span style="color:#9ca3af">–</span>'+
+          '<input type="date" value="'+retDateTo+'" onchange="retDateTo=this.value;renderPanel()" style="padding:6px;border:1px solid var(--border);border-radius:7px;font-size:12px">'+
+          '<div style="position:relative"><span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3)">🔍</span>'+
+          '<input type="text" placeholder="Search..." value="'+retSearch+'" oninput="retSearch=this.value;renderPanel()" style="padding:7px 10px 7px 30px;border:1px solid var(--border);border-radius:8px;font-size:12px;width:160px"></div>'+
+          '<button onclick="retSearch=\'\';retDateFrom=\'\';retDateTo=\'\';renderPanel()" class="btn sm">Clear</button>'+
+        '</div>'+
+      '</div>'+
+      (filtered.length?
+        '<div class="tbl-wrap"><table><thead><tr>'+
+          '<th>Date</th><th>Invoice #</th><th>Customer</th><th>Item</th>'+
+          '<th style="text-align:center">Qty</th><th style="text-align:right">Refund</th>'+
+          '<th>Reason</th><th>Type</th><th>By</th>'+
+        '</tr></thead><tbody>'+tableRows+'</tbody></table></div>'
+      :'<div class="empty">No returns match.</div>')+
+    '</div>'
+  );
+}
+/* ══════════════════════════════════════════════════════════════ */
+
+
 function buildSupplierPayments(){
   if(!canDo('suppliers'))return '<div class="empty">Access denied.</div>';
 
@@ -8687,7 +9560,7 @@ function buildSupplierPayments(){
     '<p class="sec-title" style="margin-bottom:10px">Payment history</p>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'+
       '<input type="text" placeholder="Search supplier or reference..." value="'+supPaySearch+'" oninput="supPaySearch=this.value;renderPanel()" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;min-width:200px">'+
-      '<select onchange="supPayFilterSup=this.value;renderPanel()" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px">'+supOpts+'</select>'+
+      '<div style="position:relative;display:inline-block"><input type="text" id="sup-pay-filter-search" autocomplete="off" placeholder="Filter by supplier..." oninput="filterSupPayDd(this.value)" onfocus="filterSupPayDd(this.value,true)" onblur="setTimeout(function(){var d=document.getElementById(&apos;sup-pay-filter-dd&apos;);if(d)d.style.display=&apos;none&apos;;},200)" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;min-width:170px" value="'+(supPayFilterSup?(DB.suppliers.find(function(s){return s.id==supPayFilterSup;})||{name:''}).name:'')+'"><input type="hidden" id="sup-pay-filter-sup" value="'+supPayFilterSup+'"><div id="sup-pay-filter-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:9999;max-height:180px;overflow-y:auto;margin-top:2px"></div></div>'+
       '<input type="date" value="'+supPayDateFrom+'" onchange="supPayDateFrom=this.value;renderPanel()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">'+
       '<span style="font-size:12px;color:var(--text3)">to</span>'+
       '<input type="date" value="'+supPayDateTo+'" onchange="supPayDateTo=this.value;renderPanel()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">'+
