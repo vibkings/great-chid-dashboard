@@ -1577,7 +1577,7 @@ function buildClosingReport(){
   var balCash=cash-expCash;
   var balTransfer=transfer-expTransfer;
   var balPos=pos-expPos;
-  var balTotal=(cash+pos+transfer+cpTotal+depTotal)-(expTotal+suppPayTotal+retTotal);
+  var balTotal=(cash+pos+transfer+cpTotal+depTotal)-(expTotal+retTotal); // suppPayTotal excluded — shown in detail section separately
   // By staff
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
@@ -1736,7 +1736,7 @@ function printClosingReport(){
     return c.isReturn&&c.type==='out'&&dateInRange(c.date,closingDate,closingDate);
   }).reduce(function(a,c){return a+c.amount;},0);
   var balCash2=cash-expCash2; var balPos2=pos-expPos2; var balTransfer2=transfer-expTransfer2;
-  var balTotal2=(cash+pos+transfer+cpTotal+depTotal)-(expTotal+suppPayTotal2+retTotal2);
+  var balTotal2=(cash+pos+transfer+cpTotal+depTotal)-(expTotal+retTotal2); // suppPayTotal2 excluded
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
   var staffRows=Object.keys(byStaff).map(function(s){var st=byStaff[s];return '<tr><td>'+s+'</td><td>'+st.count+'</td><td>'+fmt(st.total)+'</td><td>'+fmt(st.profit)+'</td></tr>';}).join('');
