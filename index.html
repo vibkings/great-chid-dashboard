@@ -5223,7 +5223,7 @@ function showDepositTopupDialog(cust,depBal,invoiceTotal,shortfall,creditLimit,c
   var overlay=document.createElement('div');
   overlay.id='dep-topup-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
-  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('');
+  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
   var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
   var creditOpt=creditLimit>0&&availableCredit>=shortfall?'<option value="credit">Add to credit balance</option>':'';
   overlay.innerHTML=
@@ -6196,7 +6196,7 @@ function showReturnModal(invoiceId){
         '<select id="ret-bank-id">'+
           '<option value="">-- Select bank account --</option>'+
           (DB.banks||[]).map(function(b){
-            var label=(b.bankName||'')+(b.acctName?' - '+b.acctName:'');
+            var label=(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'');
             return '<option value="'+b.id+'">'+label+'</option>';
           }).join('')+
         '</select>'+
@@ -7188,9 +7188,32 @@ function eiPaymentChange(){
   var bankWrap=document.getElementById('ei-bank-wrap');
   var posWrap=document.getElementById('ei-pos-wrap');
   var partWrap=document.getElementById('ei-partamt-wrap');
-  if(bankWrap)bankWrap.style.display=val==='transfer'?'block':'none';
-  if(posWrap)posWrap.style.display=val==='pos'?'block':'none';
-  if(partWrap)partWrap.style.display=val==='part'?'block':'none';
+  var partModeWrap=document.getElementById('ei-partmode-wrap');
+  var partBankWrap=document.getElementById('ei-partbank-wrap');
+  var partPosWrap=document.getElementById('ei-partpos-wrap');
+  var isPart=val==='part';
+  var isTransfer=val==='transfer';
+  var isPos=val==='pos';
+  // Main mode selectors (bank/pos) — show for transfer/pos only, not for part (part has its own)
+  if(bankWrap)bankWrap.style.display=isTransfer?'block':'none';
+  if(posWrap)posWrap.style.display=isPos?'block':'none';
+  // Part payment fields
+  if(partWrap)partWrap.style.display=isPart?'block':'none';
+  if(partModeWrap)partModeWrap.style.display=isPart?'block':'none';
+  // Part sub-mode (bank/pos) — driven by ei-partmode
+  if(isPart)eiPartModeChange();
+  else{
+    if(partBankWrap)partBankWrap.style.display='none';
+    if(partPosWrap)partPosWrap.style.display='none';
+  }
+}
+
+function eiPartModeChange(){
+  var mode=(document.getElementById('ei-partmode')||{}).value||'cash';
+  var partBankWrap=document.getElementById('ei-partbank-wrap');
+  var partPosWrap=document.getElementById('ei-partpos-wrap');
+  if(partBankWrap)partBankWrap.style.display=mode==='transfer'?'block':'none';
+  if(partPosWrap)partPosWrap.style.display=mode==='pos'?'block':'none';
 }
 
 function editInvoice(invNum){
@@ -7225,7 +7248,7 @@ function editInvoice(invNum){
       '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:8px;padding:10px;font-size:12px;color:#92400e;margin-bottom:16px">'+
         '⚠️ Editing an invoice adjusts sale prices, quantities and discounts. Stock levels are NOT automatically adjusted — do a stock adjustment separately if needed. All edits are logged.'+
       '</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">'+
         '<div>'+
           '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Customer</label>'+
           '<div style="position:relative">'+
@@ -7260,7 +7283,7 @@ function editInvoice(invNum){
           '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Bank account</label>'+
           '<select id="ei-bankid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select bank --</option>'+
-            (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(String(b.id)===String(s0.bankId)?' selected':'')+'>'+b.bankName+(b.acctName?' - '+b.acctName:'')+'</option>';}).join('')+
+            (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(String(b.id)===String(s0.bankId)?' selected':'')+'>'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
         '<div id="ei-pos-wrap" style="display:'+(s0.payMode==='pos'&&s0.payment!=='split'?'block':'none')+'">'+
@@ -7273,6 +7296,28 @@ function editInvoice(invNum){
         '<div id="ei-partamt-wrap" style="display:'+(s0.payment==='part'?'block':'none')+'">'+
           '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Amount paid now (₦)</label>'+
           '<input type="number" id="ei-partamt" value="'+(s0.partPayment||0)+'" min="0" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
+        '</div>'+
+        '<div id="ei-partmode-wrap" style="display:'+(s0.payment==='part'?'block':'none')+'">'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Part payment mode</label>'+
+          '<select id="ei-partmode" onchange="eiPartModeChange()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
+            '<option value="cash"'+(s0.payment==='part'&&s0.payMode==='cash'?' selected':'')+'>Cash</option>'+
+            '<option value="transfer"'+(s0.payment==='part'&&s0.payMode==='transfer'?' selected':'')+'>Bank Transfer</option>'+
+            '<option value="pos"'+(s0.payment==='part'&&s0.payMode==='pos'?' selected':'')+'>POS</option>'+
+          '</select>'+
+        '</div>'+
+        '<div id="ei-partbank-wrap" style="display:'+(s0.payment==='part'&&s0.payMode==='transfer'?'block':'none')+'">'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Bank account</label>'+
+          '<select id="ei-partbankid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
+            '<option value="">-- Select bank --</option>'+
+            (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(s0.payment==='part'&&String(b.id)===String(s0.bankId)?' selected':'')+'>'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('')+
+          '</select>'+
+        '</div>'+
+        '<div id="ei-partpos-wrap" style="display:'+(s0.payment==='part'&&s0.payMode==='pos'?'block':'none')+'">'+
+          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">POS terminal</label>'+
+          '<select id="ei-partposid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
+            '<option value="">-- Select POS --</option>'+
+            (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(s0.payment==='part'&&String(p.id)===String(s0.posId)?' selected':'')+'>'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
+          '</select>'+
         '</div>'+
       '</div>'+
       '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">'+
@@ -7316,13 +7361,16 @@ function saveInvoiceEdit(invNum){
   var eiBankId=(document.getElementById('ei-bankid')||{}).value||null;
   var eiPosId=(document.getElementById('ei-posid')||{}).value||null;
   var eiPartAmt=parseFloat((document.getElementById('ei-partamt')||{}).value)||0;
+  var eiPartMode=(document.getElementById('ei-partmode')||{}).value||'cash';
+  var eiPartBankId=(document.getElementById('ei-partbankid')||{}).value||null;
+  var eiPartPosId=(document.getElementById('ei-partposid')||{}).value||null;
   // Map payment select value to payment + payMode
   var newPayment,newPayMode,newBankId=null,newPosId=null,newPartPayment=null;
   if(eiPayVal==='cash'){newPayment='cash';newPayMode='cash';}
   else if(eiPayVal==='pos'){newPayment='cash';newPayMode='pos';newPosId=eiPosId;}
   else if(eiPayVal==='transfer'){newPayment='cash';newPayMode='transfer';newBankId=eiBankId;}
   else if(eiPayVal==='split'){newPayment='split';newPayMode='split';}
-  else if(eiPayVal==='part'){newPayment='part';newPayMode='cash';newPartPayment=eiPartAmt;}
+  else if(eiPayVal==='part'){newPayment='part';newPayMode=eiPartMode;newPartPayment=eiPartAmt;newBankId=eiPartMode==='transfer'?eiPartBankId:null;newPosId=eiPartMode==='pos'?eiPartPosId:null;}
   else if(eiPayVal==='credit'){newPayment='credit';newPayMode='credit';}
   else if(eiPayVal==='deposit'){newPayment='deposit';newPayMode='deposit';}
   else{newPayment=eiPayVal;newPayMode=eiPayVal;}
