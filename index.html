@@ -7625,11 +7625,13 @@ function saveInvoiceEdit(invNum){
     }
   });
   logActivity('Invoice edited','Invoice #'+invNum+' — total: '+fmt(oldTotal)+' → '+fmt(newTotal)+'. Reason: '+reason,'Admin: '+DB.currentUser.name);
-  document.getElementById('inv-edit-modal').remove();
+  // Close ALL invoice modals first before any re-render
+  var editMod=document.getElementById('inv-edit-modal');if(editMod)editMod.remove();
+  var detailMod=document.getElementById('inv-detail-modal');if(detailMod)detailMod.remove();
   var stockMsg=stockChanges.length?'\n\n📦 Stock adjusted:\n'+stockChanges.map(function(c){return c.name+': '+c.before+' → '+c.after+(c.diff>0?' (+'+c.diff+' added back)':' ('+Math.abs(c.diff)+' deducted)');}).join('\n'):'';
+  renderPanel();
   showToast('Invoice #'+invNum+' updated.'+(stockChanges.length?' Stock auto-adjusted.':''));
-  if(stockMsg)alert('Invoice #'+invNum+' saved.'+stockMsg);
-  var old=document.getElementById('inv-detail-modal');if(old)old.remove();
+  if(stockMsg)setTimeout(function(){alert('Invoice #'+invNum+' saved.'+stockMsg);},300);
 }
 
 function viewInvoiceDetail(invNum){
@@ -11234,6 +11236,8 @@ function writeOffCredit(custId){
 ══════════════════════════════════════════════════════════════ */
 
 function showAddCommission(invNum, custId, custName){
+  // Close invoice detail modal if open so commission modal isn't hidden behind it
+  var detailMod=document.getElementById('inv-detail-modal');if(detailMod)detailMod.remove();
   var old=document.getElementById('commission-modal');if(old)old.remove();
   var cust=(DB.customers||[]).find(function(c){return c.id==custId;})||{};
   var grandTotal=(DB.sales||[]).filter(function(s){return (s.invoiceNum||s.id)==invNum;}).reduce(function(a,s){return a+s.total;},0);
@@ -11250,7 +11254,7 @@ function showAddCommission(invNum, custId, custName){
 
   var overlay=document.createElement('div');
   overlay.id='commission-modal';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
   overlay.innerHTML=
     '<div style="background:#fff;border-radius:14px;padding:24px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
