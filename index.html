@@ -1553,6 +1553,7 @@ function buildClosingReport(){
     (function(){
       var todaySession=(DB.tillSessions||[]).find(function(t){return t.date===closingDate;});
       var openFloat=todaySession?todaySession.openFloat:0;
+      var cashExpToday=expToday.filter(function(e){return !e.payMode||e.payMode==='cash';}).reduce(function(a,e){return a+e.amount;},0);
       var expectedCash=openFloat+cash-cashExpToday;
       var closingCount=todaySession?todaySession.closingCount:null;
       var variance=closingCount!==null?closingCount-expectedCash:null;
