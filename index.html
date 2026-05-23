@@ -4021,7 +4021,11 @@ function buildCustomers(){
         var itemList=g.items.map(function(s){return s.name+' ×'+s.qty+'  @'+fmt(s.salePrice);}).join('<br>');
         var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':'<span class="badge ok">Paid</span>';
         return '<tr><td><b>'+g.invoiceNum+'</b></td><td>'+g.date+'</td><td style="font-size:11px;max-width:200px">'+itemList+'</td><td style="text-align:right"><b>'+fmt(g.total)+'</b></td><td style="text-align:right;color:#16a34a">'+fmt(g.profit)+'</td><td>'+payModeLabel(g)+'</td><td>'+pt+'</td><td>'+g.seller+'</td>'+
-          '<td><button class="btn sm" style="color:#1a237e;border-color:#93c5fd;font-size:11px" onclick="printCustomerInvoice(\''+k+'\','+cust.id+')">Print ↗</button></td></tr>';
+          '<td style="white-space:nowrap">'+
+            '<button class="btn sm" style="color:#0d6efd;border-color:#93c5fd;font-size:11px" onclick="viewInvoiceDetail(\''+k+'\')">View</button> '+
+            '<button class="btn sm" style="color:#1a237e;border-color:#93c5fd;font-size:11px" onclick="printCustomerInvoice(\''+k+'\','+cust.id+')">Print ↗</button> '+
+            '<button class="btn sm" style="color:#15803d;border-color:#86efac;font-size:11px" onclick="showAddCommission(\''+k+'\','+cust.id+',\''+cust.name.replace(/'/g,'\'')+'\')" title="Add commission for this invoice">🎯</button>'+
+          '</td></tr>';
       }).join(''):'<tr><td colspan="9" class="empty">No purchases yet.</td></tr>';
 
       // ── Purchase history analytics ─────────────────────────────
@@ -11086,33 +11090,72 @@ function showAddCommission(invNum, custId, custName){
   var old=document.getElementById('commission-modal');if(old)old.remove();
   var cust=(DB.customers||[]).find(function(c){return c.id==custId;})||{};
   var grandTotal=(DB.sales||[]).filter(function(s){return (s.invoiceNum||s.id)==invNum;}).reduce(function(a,s){return a+s.total;},0);
-  // Get existing commissions for this invoice
   var existing=(DB.commissionLedger||[]).filter(function(c){return c.invoiceNum==invNum&&c.type==='earned';});
-  var existingHtml=existing.length?'<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">Already added for this invoice:</div>'+
-    existing.map(function(e){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 8px;background:#f0fdf4;border-radius:6px;margin-bottom:4px"><span>'+e.description+'</span><span style="font-weight:700;color:#15803d">'+fmt(e.amount)+'</span></div>';}).join('')+'</div>':'';
+  var existingTotal=existing.reduce(function(a,e){return a+(e.amount||0);},0);
+  var commBal=cust.commissionBalance||0;
+  var existingHtml=existing.length?
+    '<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">Already added for this invoice:</div>'+
+    existing.map(function(e){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 8px;background:#f0fdf4;border-radius:6px;margin-bottom:4px"><span>'+e.description+'</span><span style="font-weight:700;color:#15803d">'+fmt(e.amount)+'</span></div>';}).join('')+
+    '<div style="font-size:11px;color:#6b7280;margin-top:4px">Total commission on this invoice: <b>'+fmt(existingTotal)+'</b></div></div>':'';
+
+  var bankOptsHtml=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
+  var posOptsHtml=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
 
   var overlay=document.createElement('div');
   overlay.id='commission-modal';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
   overlay.innerHTML=
-    '<div style="background:#fff;border-radius:14px;padding:24px;max-width:480px;width:100%">'+
+    '<div style="background:#fff;border-radius:14px;padding:24px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
         '<div style="font-size:16px;font-weight:700;color:#1e293b">🎯 Add Commission</div>'+
         '<button onclick="document.getElementById(\'commission-modal\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer">&times;</button>'+
       '</div>'+
       '<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px">'+
         '<b>Customer:</b> '+custName+' &nbsp;|&nbsp; <b>Invoice:</b> #'+invNum+' &nbsp;|&nbsp; <b>Sale:</b> '+fmt(grandTotal)+
+        (commBal>0?'<div style="margin-top:4px;color:#92400e;font-weight:600">⏳ Existing commission balance: '+fmt(commBal)+'</div>':'')+
       '</div>'+
       existingHtml+
-      '<div style="display:flex;flex-direction:column;gap:12px">'+
-        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Description / Item Category <span style="color:#dc2626">*</span></label>'+
-        '<input type="text" id="cm-desc" placeholder="e.g. Wires, Fittings, Cables, Switches..." style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
-        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Commission Amount (₦) <span style="color:#dc2626">*</span></label>'+
-        '<input type="number" id="cm-amount" placeholder="0" min="0" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
-        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Note (optional)</label>'+
-        '<input type="text" id="cm-note" placeholder="Any additional note..." style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
+
+      // ── Commission Entry ─────────────────────────────
+      '<div style="border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:14px">'+
+        '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">📋 Commission Details</div>'+
+        '<div style="display:flex;flex-direction:column;gap:10px">'+
+          '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Description / Item Category <span style="color:#dc2626">*</span></label>'+
+          '<input type="text" id="cm-desc" placeholder="e.g. Wires, Fittings, Cables, Switches..." style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
+          '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Commission Amount (₦) <span style="color:#dc2626">*</span></label>'+
+          '<input type="number" id="cm-amount" placeholder="0" min="0" oninput="cmUpdatePayHint()" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
+          '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Note (optional)</label>'+
+          '<input type="text" id="cm-note" placeholder="Any additional note..." style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
+        '</div>'+
       '</div>'+
-      '<div style="display:flex;gap:10px;margin-top:18px">'+
+
+      // ── Pay Now Section ──────────────────────────────
+      '<div style="border:1px solid #c4b5fd;border-radius:10px;padding:14px;margin-bottom:14px;background:#faf5ff">'+
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'+
+          '<input type="checkbox" id="cm-pay-now" onchange="cmTogglePayNow()" style="width:16px;height:16px;cursor:pointer;accent-color:#7c3aed">'+
+          '<label for="cm-pay-now" style="font-size:13px;font-weight:700;color:#7c3aed;cursor:pointer">💸 Pay commission now?</label>'+
+        '</div>'+
+        '<div id="cm-pay-fields" style="display:none">'+
+          '<div style="font-size:11px;color:#6b7280;margin-bottom:10px">Leave blank to pay the full commission amount entered above</div>'+
+          '<div style="display:flex;flex-direction:column;gap:10px">'+
+            '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Amount to pay now (₦)</label>'+
+            '<input type="number" id="cm-pay-amt" placeholder="Leave blank = pay full amount" min="0" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box">'+
+            '<div id="cm-pay-hint" style="font-size:11px;color:#7c3aed;margin-top:3px"></div></div>'+
+            '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Payment mode <span style="color:#dc2626">*</span></label>'+
+            '<select id="cm-pay-mode" onchange="cmTogglePayMode()" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px">'+
+              '<option value="cash">💵 Cash</option>'+
+              '<option value="transfer">🏦 Bank Transfer</option>'+
+              '<option value="pos">💳 POS</option>'+
+            '</select></div>'+
+            '<div id="cm-bank-wrap" style="display:none"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Bank account</label>'+
+            '<select id="cm-bank-id" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px"><option value="">Select bank...</option>'+bankOptsHtml+'</select></div>'+
+            '<div id="cm-pos-wrap" style="display:none"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">POS Terminal</label>'+
+            '<select id="cm-pos-id" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px"><option value="">Select POS...</option>'+posOptsHtml+'</select></div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+
+      '<div style="display:flex;gap:10px">'+
         '<button onclick="saveCommissionEntry(\''+invNum+'\','+custId+',\''+custName+'\')" style="flex:1;padding:11px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">✅ Save Commission</button>'+
         '<button onclick="document.getElementById(\'commission-modal\').remove()" style="padding:11px 18px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
       '</div>'+
@@ -11122,24 +11165,66 @@ function showAddCommission(invNum, custId, custName){
   document.getElementById('cm-desc').focus();
 }
 
+function cmTogglePayNow(){
+  var cb=document.getElementById('cm-pay-now');
+  var fields=document.getElementById('cm-pay-fields');
+  if(fields)fields.style.display=cb&&cb.checked?'block':'none';
+}
+
+function cmTogglePayMode(){
+  var mode=(document.getElementById('cm-pay-mode')||{}).value;
+  var bw=document.getElementById('cm-bank-wrap');
+  var pw=document.getElementById('cm-pos-wrap');
+  if(bw)bw.style.display=mode==='transfer'?'block':'none';
+  if(pw)pw.style.display=mode==='pos'?'block':'none';
+}
+
+function cmUpdatePayHint(){
+  var amt=parseFloat((document.getElementById('cm-amount')||{}).value)||0;
+  var hint=document.getElementById('cm-pay-hint');
+  if(hint&&amt>0)hint.textContent='Will pay: '+fmt(amt)+' (full amount)';
+  else if(hint)hint.textContent='';
+}
+
 function saveCommissionEntry(invNum, custId, custName){
   var desc=(document.getElementById('cm-desc')||{}).value.trim();
   var amt=parseFloat((document.getElementById('cm-amount')||{}).value)||0;
   var note=(document.getElementById('cm-note')||{}).value.trim();
+  var payNow=(document.getElementById('cm-pay-now')||{}).checked;
+  var payAmt=parseFloat((document.getElementById('cm-pay-amt')||{}).value)||amt; // default = full amount
+  var payMode=(document.getElementById('cm-pay-mode')||{}).value||'cash';
+  var bankId=(document.getElementById('cm-bank-id')||{}).value||null;
+  var posId=(document.getElementById('cm-pos-id')||{}).value||null;
+
   if(!desc){alert('Enter a description.');return;}
   if(!amt||amt<=0){alert('Enter a valid commission amount.');return;}
+  if(payNow&&payAmt>amt){alert('Pay amount cannot exceed commission amount ('+fmt(amt)+')');return;}
+
   var now=new Date();
   var date=now.toLocaleDateString();
   var month=now.toISOString().slice(0,7);
-  // Save commission earned entry
-  DB.commissionLedger.push({id:uid(),custId:custId,custName:custName,invoiceNum:invNum,description:desc,amount:amt,note:note,type:'earned',date:date,month:month,by:DB.currentUser.name});
-  // Update customer commissionBalance
   var cust=(DB.customers||[]).find(function(c){return c.id==custId;});
+
+  // Record commission earned
+  DB.commissionLedger.push({id:uid(),custId:custId,custName:custName,invoiceNum:invNum,description:desc,amount:amt,note:note,type:'earned',date:date,month:month,by:DB.currentUser.name});
   if(cust)cust.commissionBalance=(cust.commissionBalance||0)+amt;
+
+  // If paying now, record payout immediately
+  if(payNow&&payAmt>0){
+    var payNote='Commission payout — Invoice #'+invNum+(note?' ('+note+')':'');
+    DB.commissionLedger.push({id:uid(),custId:custId,custName:custName,invoiceNum:invNum,description:'Commission payout',amount:payAmt,note:payNote,type:'paid',date:date,month:month,by:DB.currentUser.name});
+    if(cust)cust.commissionBalance=(cust.commissionBalance||0)-payAmt;
+    // Auto-record as expense
+    DB.cashflow.push({id:uid(),desc:'Commission paid — '+custName+' Invoice #'+invNum,amount:payAmt,type:'out',cat:'Commission',payMode:payMode,bankId:bankId,posId:posId,date:date,month:month,by:DB.currentUser.name});
+  }
+
   saveData();
   document.getElementById('commission-modal').remove();
-  alert('✅ Commission of '+fmt(amt)+' added for '+custName);
+  var msg='✅ Commission of '+fmt(amt)+' added for '+custName+'.';
+  if(payNow&&payAmt>0)msg+='\n💸 '+fmt(payAmt)+' paid out via '+payMode+' and recorded as expense.';
+  alert(msg);
 }
+
 
 function showPayCommission(custId){
   var cust=(DB.customers||[]).find(function(c){return c.id==custId;});
