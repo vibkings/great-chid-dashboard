@@ -8038,6 +8038,8 @@ function submitPurchase(){
         qtyReceived:l.qtyReceived,
         qtyPending:l.qtyPending,
         cost:l.cost,
+        sell:l.sell||l.cost||0,
+        cat:l.cat||'',
         dateOrdered:date,
         dateExpected:null,
         status:'pending', // 'pending' | 'partial' | 'complete'
@@ -8166,6 +8168,83 @@ function printPurchaseRecord(id){
 // ============================================================
 // PURCHASES TAB
 // ============================================================
+function repairMissingInventory(){
+  var missing=(DB.pendingDeliveries||[]).filter(function(d){
+    if(d.qtyReceived<=0)return false;
+    return !DB.inventory.find(function(i){return i.id==d.itemId;});
+  });
+  if(!missing.length){alert('No missing items found.');return;}
+  var created=[];
+  missing.forEach(function(d){
+    // Double-check by name in case it exists with different id
+    var byName=DB.inventory.find(function(i){return i.name.toLowerCase()===d.itemName.toLowerCase();});
+    if(byName){
+      // Item exists by name — just update the itemId reference and add qty
+      if(!byName.qty)byName.qty=0;
+      byName.qty+=d.qtyReceived;
+      d.itemId=byName.id; // fix the reference
+      created.push(d.itemName+' — added '+d.qtyReceived+' units to existing record');
+    } else {
+      // Truly new — create inventory item
+      var newId=d.itemId||uid();
+      var newItem={id:newId,name:d.itemName,qty:d.qtyReceived,
+        cost:d.cost||0,sell:d.sell||d.cost||0,minQty:5,
+        supId:d.supId||null,cat:d.cat||''};
+      DB.inventory.push(newItem);
+      d.itemId=newId;
+      DB.adjLog.push({id:uid(),itemId:newId,itemName:d.itemName,type:'add',
+        reason:'Repair: item created from completed delivery — Invoice #'+d.invoiceNum+' from '+d.supName,
+        before:0,change:d.qtyReceived,after:d.qtyReceived,
+        date:new Date().toLocaleDateString(),by:DB.currentUser.name});
+      created.push(d.itemName+' — created with '+d.qtyReceived+' units');
+    }
+  });
+  saveData();
+  renderPanel();
+  alert('✅ Repair complete!\n\n'+created.join('\n')+'\n\nCheck your inventory to confirm.');
+}
+
+function receiveAllDeliveries(invoiceNum){
+  var pending=(DB.pendingDeliveries||[]).filter(function(d){return d.status!=='complete'&&(d.invoiceNum||d.id)==invoiceNum;});
+  if(!pending.length){alert('No pending items for this invoice.');return;}
+  var itemList=pending.map(function(d){return d.itemName+' × '+d.qtyPending;}).join('\n');
+  if(!confirm('Receive ALL remaining items for Invoice #'+invoiceNum+'?\n\n'+itemList))return;
+  var now=new Date();
+  var date=now.toLocaleDateString();
+  pending.forEach(function(d){
+    var qtyToReceive=d.qtyPending;
+    if(qtyToReceive<=0)return;
+    var invItem=DB.inventory.find(function(i){return i.id==d.itemId;});
+    if(invItem){
+      var before=invItem.qty;
+      invItem.qty+=qtyToReceive;
+      DB.adjLog.push({id:uid(),itemId:invItem.id,itemName:invItem.name,type:'add',
+        reason:'Full delivery received — Invoice #'+d.invoiceNum+' from '+d.supName,
+        before:before,change:qtyToReceive,after:invItem.qty,date:date,by:DB.currentUser.name});
+    } else {
+      var newItem={id:d.itemId||uid(),name:d.itemName,qty:qtyToReceive,
+        cost:d.cost||0,sell:d.sell||d.cost||0,minQty:5,supId:d.supId||null,cat:d.cat||''};
+      DB.inventory.push(newItem);
+      DB.adjLog.push({id:uid(),itemId:newItem.id,itemName:newItem.name,type:'add',
+        reason:'New item created from delivery — Invoice #'+d.invoiceNum+' from '+d.supName,
+        before:0,change:qtyToReceive,after:qtyToReceive,date:date,by:DB.currentUser.name});
+    }
+    d.qtyReceived=(d.qtyReceived||0)+qtyToReceive;
+    d.qtyPending=0;
+    d.lastReceivedDate=date;
+    d.status='complete';
+    d.completedDate=date;
+    var purchase=DB.purchases.find(function(p){return p.id==d.purchaseId||p.invoiceNum==d.invoiceNum;});
+    if(purchase){
+      var pItem=purchase.items.find(function(l){return l.name===d.itemName||(l.itemId&&l.itemId==d.itemId);});
+      if(pItem){pItem.qtyReceived=(pItem.qtyReceived||0)+qtyToReceive;pItem.qtyPending=0;}
+    }
+  });
+  logActivity('Full delivery received','Invoice #'+invoiceNum+' — all items received from '+pending[0].supName,'purchase');
+  saveData();renderPanel();
+  showToast('✅ All items for Invoice #'+invoiceNum+' received and added to stock.');
+}
+
 function receiveDelivery(deliveryId){
   var d=DB.pendingDeliveries.find(function(x){return x.id==deliveryId;});
   if(!d){alert('Delivery record not found.');return;}
@@ -8192,6 +8271,17 @@ function receiveDelivery(deliveryId){
       type:'add',reason:'Pending delivery received — Invoice #'+d.invoiceNum+' from '+d.supName,
       before:before,change:qtyToReceive,after:invItem.qty,
       date:new Date().toLocaleDateString(),by:DB.currentUser.name});
+  } else {
+    // Item not in inventory yet — create it from pending delivery data
+    var newItem={id:d.itemId||uid(),name:d.itemName,qty:qtyToReceive,
+      cost:d.cost||0,sell:d.sell||d.cost||0,minQty:5,
+      supId:d.supId||null,cat:d.cat||''};
+    DB.inventory.push(newItem);
+    DB.adjLog.push({id:uid(),itemId:newItem.id,itemName:newItem.name,
+      type:'add',reason:'New item created from pending delivery — Invoice #'+d.invoiceNum+' from '+d.supName,
+      before:0,change:qtyToReceive,after:qtyToReceive,
+      date:new Date().toLocaleDateString(),by:DB.currentUser.name});
+    showToast('📦 New inventory item created: '+d.itemName);
   }
 
   // Update delivery record
@@ -8347,31 +8437,88 @@ function buildPurchases(){
     '</tr>';
   }).join('');
 
-  // Pending deliveries section
+  // Pending deliveries section — grouped by invoice like Sales pending supply
+  // Check for completed deliveries where inventory item is missing (repair section)
+  var missingInv=(DB.pendingDeliveries||[]).filter(function(d){
+    if(d.qtyReceived<=0)return false;
+    var invItem=DB.inventory.find(function(i){return i.id==d.itemId;});
+    return !invItem; // received but not in inventory
+  });
+  var repairSection=missingInv.length?
+    '<div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:10px;padding:14px;margin-top:12px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+        '<div>'+
+          '<p style="margin:0;font-weight:700;color:#dc2626;font-size:14px">⚠️ '+missingInv.length+' item(s) received but missing from inventory</p>'+
+          '<p style="margin:4px 0 0;font-size:12px;color:#6b7280">These were received before the fix was applied. Click "Repair" to add them to inventory now.</p>'+
+        '</div>'+
+        '<button onclick="repairMissingInventory()" style="padding:8px 16px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔧 Repair Now</button>'+
+      '</div>'+
+      '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Supplier</th><th>Invoice</th><th style="text-align:center">Qty Received</th></tr></thead><tbody>'+
+      missingInv.map(function(d){
+        return '<tr><td><b>'+d.itemName+'</b></td><td>'+d.supName+'</td><td>#'+(d.invoiceNum||'—')+'</td><td style="text-align:center;font-weight:700;color:#dc2626">'+d.qtyReceived+'</td></tr>';
+      }).join('')+
+      '</tbody></table></div>'+
+    '</div>':'';
+
   var pendingRows='';
   if(DB.pendingDeliveries&&DB.pendingDeliveries.length){
     var openPending=DB.pendingDeliveries.filter(function(d){return d.status!=='complete';});
     if(openPending.length){
-      pendingRows='<p class="sec-title" style="margin-top:1.5rem;color:var(--warning-text)">&#128230; Pending Deliveries ('+openPending.length+')</p>'+
-        '<div class="tbl-wrap"><table><thead><tr><th>Date ordered</th><th>Invoice #</th><th>Supplier</th><th>Item</th><th style="text-align:center">Ordered</th><th style="text-align:center">Received</th><th style="text-align:center">Pending</th><th>Status</th><th></th></tr></thead><tbody>'+
-        openPending.map(function(d){
-          return '<tr style="background:#fffbeb">'+
-            '<td>'+d.dateOrdered+'</td>'+
-            '<td><b>'+(d.invoiceNum||'-')+'</b></td>'+
-            '<td>'+d.supName+'</td>'+
-            '<td>'+d.itemName+'</td>'+
-            '<td style="text-align:center">'+d.qtyOrdered+'</td>'+
-            '<td style="text-align:center;color:var(--success)">'+d.qtyReceived+'</td>'+
-            '<td style="text-align:center;color:var(--danger);font-weight:700">'+d.qtyPending+'</td>'+
-            '<td><span class="badge low">Pending</span></td>'+
-            '<td><button class="btn sm" onclick="receiveDelivery(\''+d.id+'\')" style="background:#16a34a;color:#fff;border-color:#16a34a;font-size:11px;font-weight:700">&#10003; Receive</button></td>'+
-          '</tr>';
-        }).join('')+
-        '</tbody></table></div>';
+      // Group by invoiceNum
+      var pendingGroups={};
+      openPending.forEach(function(d){
+        var k=d.invoiceNum||d.id;
+        if(!pendingGroups[k])pendingGroups[k]={invoiceNum:k,supName:d.supName,dateOrdered:d.dateOrdered,items:[]};
+        pendingGroups[k].items.push(d);
+      });
+      var groupHtml=Object.values(pendingGroups).map(function(g){
+        var totalOrdered=g.items.reduce(function(a,d){return a+d.qtyOrdered;},0);
+        var totalReceived=g.items.reduce(function(a,d){return a+(d.qtyReceived||0);},0);
+        var totalPending=g.items.reduce(function(a,d){return a+d.qtyPending;},0);
+        var pct=totalOrdered>0?Math.round(totalReceived/totalOrdered*100):0;
+        var itemRows=g.items.map(function(d){
+          var iPct=d.qtyOrdered>0?Math.round((d.qtyReceived||0)/d.qtyOrdered*100):0;
+          return '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 120px 110px;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:13px">'+
+            '<div style="font-weight:500">'+d.itemName+'</div>'+
+            '<div style="text-align:center;color:#6b7280">'+d.qtyOrdered+'</div>'+
+            '<div style="text-align:center;color:#15803d;font-weight:600">'+(d.qtyReceived||0)+'</div>'+
+            '<div style="text-align:center;color:#dc2626;font-weight:700">'+d.qtyPending+'</div>'+
+            '<div>'+
+              '<div style="background:#e5e7eb;border-radius:6px;height:8px;overflow:hidden">'+
+                '<div style="width:'+iPct+'%;height:100%;background:'+(iPct>=100?'#10b981':'#f59e0b')+';border-radius:6px;transition:width .3s"></div>'+
+              '</div>'+
+              '<div style="font-size:10px;color:#9ca3af;margin-top:2px">'+iPct+'%</div>'+
+            '</div>'+
+            '<button onclick="receiveDelivery(\''+d.id+'\')" style="padding:5px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✓ Receive</button>'+
+          '</div>';
+        }).join('');
+        return '<div style="background:#fff;border:1px solid #fcd34d;border-radius:10px;margin-bottom:12px;overflow:hidden">'+
+          '<div style="background:#fffbeb;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+            '<div>'+
+              '<span style="font-weight:700;color:#92400e">Invoice #'+g.invoiceNum+'</span>'+
+              '<span style="color:#6b7280;font-size:12px;margin-left:10px">'+g.supName+'</span>'+
+              '<span style="color:#9ca3af;font-size:11px;margin-left:10px">'+g.dateOrdered+'</span>'+
+            '</div>'+
+            '<div style="display:flex;align-items:center;gap:10px">'+
+              '<div style="font-size:12px;color:#6b7280">'+totalReceived+'/'+totalOrdered+' received</div>'+
+              '<div style="background:#e5e7eb;border-radius:6px;height:8px;width:80px;overflow:hidden">'+
+                '<div style="width:'+pct+'%;height:100%;background:'+(pct>=100?'#10b981':'#f59e0b')+';border-radius:6px"></div>'+
+              '</div>'+
+              '<span style="font-size:12px;font-weight:700;color:#92400e">'+pct+'%</span>'+
+              '<button onclick="receiveAllDeliveries(\''+g.invoiceNum+'\')" style="padding:5px 12px;background:#fff;color:#16a34a;border:1px solid #16a34a;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">□ Receive all</button>'+
+            '</div>'+
+          '</div>'+
+          '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 120px 110px;gap:8px;padding:6px 12px;background:#f9fafb;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">'+
+            '<div>Item</div><div style="text-align:center">Ordered</div><div style="text-align:center">Received</div><div style="text-align:center">Pending</div><div>Progress</div><div></div>'+
+          '</div>'+
+          itemRows+
+        '</div>';
+      }).join('');
+      pendingRows='<p class="sec-title" style="margin-top:1.5rem;color:var(--warning-text)">📦 Pending Deliveries ('+openPending.length+' items · '+Object.keys(pendingGroups).length+' invoices)</p>'+groupHtml;
     }
   }
 
-  return kpiHtml+'<p class="sec-title">Record new purchase</p>'+
+  return kpiHtml+repairSection+'<p class="sec-title">Record new purchase</p>'+
     '<div class="fg" style="grid-template-columns:1fr 1fr 1fr"><div class="form-group"><label>Supplier <span style="color:var(--danger)">*</span></label>'+
     '<div style="position:relative">'+
       '<input type="text" id="pu-sup-search" autocomplete="off" placeholder="Type to search supplier..." oninput="filterSupDd(this.value)" onfocus="filterSupDd(this.value,true)" onblur="setTimeout(function(){var d=document.getElementById(\'pu-sup-dd\');if(d)d.style.display=\'none\';},200)" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;box-sizing:border-box">'+
