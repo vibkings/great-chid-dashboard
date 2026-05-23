@@ -4617,9 +4617,10 @@ function printCustomerInvoice(invNum,custId){
   var partPaid=s0.partPayment||0;
   var depApplied=invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
   var invNet=s0.payment==='credit'?Math.max(0,grandTotal-depApplied):s0.payment==='part'?Math.max(0,grandTotal-partPaid-depApplied):0;
-  var bal=cust?calcOutstandingAtDate(custId,s0.date,invNum,invNet):{prevInvTotal:0,outstandingAtDate:0};
-  var prevInvTotal=bal.prevInvTotal;
-  var outstandingBal=bal.outstandingAtDate;
+  // Use live creditBalance — most accurate source of truth
+  var liveCredit2=cust?Math.max(0,cust.creditBalance||0):0;
+  var prevInvTotal=Math.max(0,liveCredit2-invNet);
+  var outstandingBal=liveCredit2;
   function doPrint(withOutstanding){
     var _printTotal=s0.depositTotal||grandTotal;var html=buildInvoiceHTML({invoiceNum:invNum,custName:s0.printName||(cust?cust.name:'Unknown'),custAddr:cust?cust.address||'':'',day:day,month:mon,year:yr,rows:rows+emptyRows,itemCount:invSales.length,grandTotal:_printTotal,payment:s0.payment,payMode:s0.payMode,depTopupMode:s0.depTopupMode||null,depositApplied:depApplied||0,bankId:s0.bankId,posId:s0.posId,splitPayment:s0.splitPayment||null,seller:s0.seller,pendingSupply:s0.pendingSupply||false,wasEverPending:s0.wasEverPending||false,supplyDate:s0.supplyDate||null,
       partPayment:partPaid,
@@ -7752,13 +7753,15 @@ function reprintInvoice(invNum){
   var emptyRows='';var minR=Math.max(12,invSales.length);for(var i=invSales.length;i<minR;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
   var custId=s0.custId;
   var cust=custId?DB.customers.find(function(c){return c.id==custId;}):null;
-  // Date-aware: only count invoices/payments that existed at the time of this invoice
+  // Use live creditBalance as source of truth — reconstruct prevInvTotal from it
   var partPaid=s0.partPayment||0;
   var depApplied=invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
   var invNet=s0.payment==='credit'?Math.max(0,grandTotal-depApplied):s0.payment==='part'?Math.max(0,grandTotal-partPaid-depApplied):0;
-  var bal=cust?calcOutstandingAtDate(custId,s0.date,invNum,invNet):{prevInvTotal:0,outstandingAtDate:0};
-  var prevInvTotal=bal.prevInvTotal;
-  var outstandingBal=bal.outstandingAtDate;
+  // Live outstanding = what customer owes RIGHT NOW
+  var liveCredit=cust?Math.max(0,cust.creditBalance||0):0;
+  // Previous balance = live balance minus this invoice's unpaid portion
+  var prevInvTotal=Math.max(0,liveCredit-invNet);
+  var outstandingBal=liveCredit;
   function doPrint(withOutstanding){
     // For deposit invoices use original total (before deposit applied)
     var _reprintTotal=s0.payment==='deposit'?(s0.depositTotal||grandTotal):grandTotal;
