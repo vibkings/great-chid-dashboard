@@ -358,7 +358,7 @@ input.inline-edit{border:1.5px solid var(--primary);border-radius:5px;padding:4p
 var DB={
   users:[{id:1,name:'Admin',username:'admin',password:'admin123',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
-  adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],
+  adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],commissionLedger:[],
   warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
@@ -439,7 +439,7 @@ var GCE_API_KEY_QS   = '?key=' + GCE_API_KEY;
 // Each has its own lastModified timestamp
 var GCE_COLLECTIONS = [
   'sales','inventory','customers','suppliers','purchases','cashflow',
-  'creditPayments','deposits','salesReturns','adjLog','stockCounts',
+  'creditPayments','deposits','salesReturns','adjLog','stockCounts','commissionLedger',
   'supplierPayments','tillSessions','activityLog','settings',
   'creditCustomers','users','banks','posTerminals','categories',
   'expenseCats','transferLog','warehouse','recycleBin','drafts',
@@ -639,6 +639,7 @@ function applyCollection(colName, payload) {
     suppliers:'suppliers', purchases:'purchases', cashflow:'cashflow',
     creditPayments:'creditPayments', deposits:'deposits',
     salesReturns:'salesReturns', adjLog:'adjLog', stockCounts:'stockCounts',
+    commissionLedger:'commissionLedger',
     supplierPayments:'supplierPayments', tillSessions:'tillSessions',
     activityLog:'activityLog', settings:'settings',
     creditCustomers:'creditCustomers', users:'users', banks:'banks',
@@ -1122,6 +1123,7 @@ function applySnapshot(snapshot) {
   DB.cashflow = snapshot.cashflow || [];
   DB.creditPayments = snapshot.creditPayments || [];
   DB.deposits = snapshot.deposits || [];
+  DB.commissionLedger = snapshot.commissionLedger || [];
   DB.suppliers = snapshot.suppliers || [];
   DB.customers = snapshot.customers || [];
   DB.creditCustomers = snapshot.creditCustomers || [];
@@ -4104,6 +4106,7 @@ function buildCustomers(){
         '<button class="btn sm" onclick="printCustomerReport('+cust.id+')" style="color:#1a237e;border-color:#93c5fd">&#128438; Print report</button>'+
         '<button class="btn sm" onclick="editCustomer('+cust.id+')" style="color:var(--primary);border-color:#b6d4fe">&#9998; Edit customer</button>'+
         '<button class="btn sm" onclick="printCustomerStatement('+cust.id+')" style="color:#065f46;border-color:#6ee7b7">🖨️ Print statement</button>'+
+        ((cust.commissionBalance||0)>0?'<button class="btn sm" onclick="showPayCommission('+cust.id+')" style="color:#dc2626;border-color:#fca5a5;font-weight:700">💸 Pay Commission ('+fmt(cust.commissionBalance||0)+')</button>':'')+
         '</div>'+
         '</div>'+
         '<div class="cust-detail-grid">'+
@@ -4116,11 +4119,27 @@ function buildCustomers(){
         '</div>'+
         '<div class="metrics" style="margin-bottom:8px">'+
         mc('Purchases',invKeys.length,'Invoices','')+
-        mc('Total spent',fmt(custSales.reduce(function(a,s){return a+s.total;},0)),'Lifetime','')+
+        mc('Total spent',fmt(lifetimeSpend),'Lifetime','')+
+        (function(){
+          // Total payments made (credit payments + direct paid invoices)
+          var totalPaid=(DB.creditPayments||[]).filter(function(p){return String(p.custId)==String(cust.id)&&p.payMode!=='writeoff';}).reduce(function(a,p){return a+(p.amount||0);},0);
+          var directPaid=custSales.filter(function(s){return s.payment!=='credit';}).reduce(function(a,s){return a+s.total;},0);
+          return mc('Total payments',fmt(totalPaid+directPaid),'Made','green');
+        }())+
         mc('Credit owed',weOweThem?fmt(Math.abs(creditBalance)):fmt(creditBalance),weOweThem?'We owe customer':theyOweUs?'Outstanding':'Clear',weOweThem?'blue':theyOweUs?'red':'green')+
         mc('Credit limit',creditLimit>0?fmt(creditLimit):'No limit','','')+
         (cust.openingBalance>0&&creditBalance>0?mc('Opening balance',fmt(cust.openingBalance),'Set at setup','amber'):cust.openingBalance>0&&creditBalance<=0?mc('Opening balance',fmt(cust.openingBalance),'✅ Cleared','green'):'')+
         (function(){var depBal=(DB.deposits||[]).filter(function(d){return d.custId==cust.id;}).reduce(function(a,d){return a+d.amount;},0);return mc('Deposit balance',fmt(depBal),'Available',depBal>0?'green':'');}())+
+        (function(){
+          var commEarned=(DB.commissionLedger||[]).filter(function(e){return String(e.custId)==String(cust.id)&&e.type==='earned';}).reduce(function(a,e){return a+(e.amount||0);},0);
+          var commPaid=(DB.commissionLedger||[]).filter(function(e){return String(e.custId)==String(cust.id)&&e.type==='paid';}).reduce(function(a,e){return a+(e.amount||0);},0);
+          var commBal=commEarned-commPaid;
+          var goodsBal=lifetimeSpend-commEarned;
+          return mc('Commission earned',fmt(commEarned),'Total accrued','amber')+
+                 mc('Commission paid',fmt(commPaid),'Paid out',commPaid>0?'green':'')+
+                 mc('Commission balance',fmt(commBal),commBal>0?'Pending payout':'All cleared',commBal>0?'red':'green')+
+                 mc('Goods balance',fmt(goodsBal),'Purchases − Commission','blue');
+        }())+
         '</div>'+
         creditBar+
         (cust.notes?'<div style="margin-top:8px;padding:8px 10px;background:#f9f9f9;border-radius:8px;font-size:13px;color:#666">'+cust.notes+'</div>':'')+
@@ -4230,6 +4249,57 @@ function buildCustomers(){
         }())+
         '<p class="sec-title" style="margin-top:1.25rem">Purchase History &amp; Analytics</p>'+
         historyAnalytics+
+        (function(){
+          var commEntries=(DB.commissionLedger||[]).filter(function(e){return String(e.custId)==String(cust.id);})
+            .slice().sort(function(a,b){return (parseDate(b.date)||0)-(parseDate(a.date)||0);});
+          if(!commEntries.length)return '<p class="sec-title" style="margin-top:1rem">🎯 Commission Ledger</p><div class="empty">No commission entries yet. Click "🎯 Add Commission" on any invoice.</div>';
+          var running=0;
+          var rows=commEntries.slice().reverse().map(function(e){
+            if(e.type==='earned')running+=e.amount;
+            else running-=e.amount;
+            var typeBadge=e.type==='earned'
+              ?'<span style="background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">EARNED</span>'
+              :'<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">PAID OUT</span>';
+            var amtCell=e.type==='earned'
+              ?'<td style="text-align:right;color:#92400e;font-weight:700">+ '+fmt(e.amount)+'</td>'
+              :'<td style="text-align:right;color:#dc2626;font-weight:700">− '+fmt(e.amount)+'</td>';
+            return '<tr style="background:'+(e.type==='paid'?'#fef2f2':'')+'">'+
+              '<td>'+e.date+'</td>'+
+              '<td>'+(e.invoiceNum?'<b>#'+e.invoiceNum+'</b>':'—')+'</td>'+
+              '<td>'+e.description+'</td>'+
+              amtCell+
+              '<td style="text-align:right;font-weight:700;color:'+(running>0?'#92400e':'#15803d')+'">'+fmt(Math.max(0,running))+'</td>'+
+              '<td>'+typeBadge+'</td>'+
+              '<td style="color:#9ca3af;font-size:11px">'+(e.note||'—')+'</td>'+
+              '<td style="color:#9ca3af;font-size:11px">'+e.by+'</td>'+
+            '</tr>';
+          }).reverse().join('');
+          var commEarned=commEntries.filter(function(e){return e.type==='earned';}).reduce(function(a,e){return a+e.amount;},0);
+          var commPaid=commEntries.filter(function(e){return e.type==='paid';}).reduce(function(a,e){return a+e.amount;},0);
+          var commBal=commEarned-commPaid;
+          return '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1.25rem;margin-bottom:8px">'+
+            '<p class="sec-title" style="margin:0">🎯 Commission Ledger</p>'+
+            (commBal>0?'<button class="btn sm" onclick="showPayCommission('+cust.id+')" style="color:#dc2626;border-color:#fca5a5;font-weight:700">💸 Pay '+fmt(commBal)+' Commission</button>':'')+
+          '</div>'+
+          '<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">'+
+            kpiCard('🎯','Total Earned',fmt(commEarned),'','#f59e0b')+
+            kpiCard('💸','Total Paid Out',fmt(commPaid),'','#dc2626')+
+            kpiCard('💰','Balance Due',fmt(commBal),commBal>0?'⚠️':'','#15803d')+
+            kpiCard('📦','Goods Balance',fmt(lifetimeSpend-commEarned),'After commission','#6366f1')+
+          '</div>'+
+          '<div class="tbl-wrap"><table><thead><tr>'+
+            '<th>Date</th><th>Invoice #</th><th>Description</th>'+
+            '<th style="text-align:right">Amount</th><th style="text-align:right">Running Balance</th>'+
+            '<th>Type</th><th>Note</th><th>By</th>'+
+          '</tr></thead><tbody>'+rows+'</tbody>'+
+          '<tfoot><tr style="background:#fef9c3;font-weight:700">'+
+            '<td colspan="3">TOTALS</td>'+
+            '<td style="text-align:right;color:#92400e">+ '+fmt(commEarned)+' earned</td>'+
+            '<td style="text-align:right;color:'+(commBal>0?'#92400e':'#15803d')+'">'+fmt(commBal)+' due</td>'+
+            '<td colspan="3"></td>'+
+          '</tr></tfoot>'+
+          '</table></div>';
+        }())+
         '<p class="sec-title" style="margin-top:1rem">All Invoices</p>'+
         '<div class="tbl-wrap"><table><thead><tr><th>Invoice #</th><th>Date</th><th>Items bought</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Payment mode</th><th>Pay type</th><th>Seller</th><th></th></tr></thead><tbody>'+invRows+'</tbody></table></div>';
     }
@@ -7520,11 +7590,34 @@ function viewInvoiceDetail(invNum){
             '<div><span style="color:#6c757d">Gross profit:</span> <span style="color:#198754;font-weight:700">'+fmt(grandProfit)+'</span></div>'+
           '</div>'+
         '</div>'+
+        (function(){
+          // Commission KPI cards — only if commission exists for this invoice
+          var invCommissions=(DB.commissionLedger||[]).filter(function(e){return e.invoiceNum==invNum&&e.type==='earned';});
+          if(!invCommissions.length)return '';
+          var totalComm=invCommissions.reduce(function(a,e){return a+(e.amount||0);},0);
+          var balAfterComm=grandTotal-totalComm;
+          return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px">'+
+            '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 12px;border-left:3px solid #0ea5e9">'+
+              '<div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Invoice Total</div>'+
+              '<div style="font-size:17px;font-weight:800;color:#0c4a6e">'+fmt(grandTotal)+'</div>'+
+            '</div>'+
+            '<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;border-left:3px solid #f59e0b">'+
+              '<div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Commission Given</div>'+
+              '<div style="font-size:17px;font-weight:800;color:#78350f">'+fmt(totalComm)+'</div>'+
+              '<div style="font-size:10px;color:#92400e;margin-top:2px">'+invCommissions.map(function(e){return e.description+': '+fmt(e.amount);}).join(' · ')+'</div>'+
+            '</div>'+
+            '<div style="background:'+(balAfterComm>=0?'#f0fdf4':'#fef2f2')+';border:1px solid '+(balAfterComm>=0?'#86efac':'#fca5a5')+';border-radius:8px;padding:10px 12px;border-left:3px solid '+(balAfterComm>=0?'#10b981':'#dc2626')+'">'+
+              '<div style="font-size:10px;font-weight:700;color:'+(balAfterComm>=0?'#065f46':'#991b1b')+';text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Balance After Commission</div>'+
+              '<div style="font-size:17px;font-weight:800;color:'+(balAfterComm>=0?'#14532d':'#7f1d1d')+'">'+fmt(balAfterComm)+'</div>'+
+            '</div>'+
+          '</div>';
+        }())+
         '<div style="display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap">'+
           '<button onclick="reprintInvoice(\''+invNum+'\');document.getElementById(\'inv-detail-modal\').remove()" style="flex:1;padding:9px;background:#0d6efd;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">&#128438; Print invoice</button>'+
           '<button onclick="shareInvoiceWhatsApp(\''+invNum+'\')" style="flex:1;padding:9px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📲 Share via WhatsApp</button>'+
           (isAdmin()?'<button onclick="editInvoice(\''+invNum+'\');document.getElementById(\'inv-detail-modal\').remove()" style="padding:9px 14px;background:#fff8f0;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">✏️ Edit invoice</button>':'')+''+
           (isAdmin()?'<button onclick="showEditInvoiceNote(\''+invNum+'\')" style="padding:9px 14px;background:#fff8f0;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📝 Add note</button>':'')+''+
+          (s0.custId&&String(s0.custId)!==''&&s0.payment!=='walkin'?'<button onclick="showAddCommission(\''+invNum+'\','+s0.custId+',\''+((s0.custName||'Customer').replace(/'/g,''))+'\')">🎯 Add Commission</button>':'')+''+
           '<button onclick="document.getElementById(\'inv-detail-modal\').remove()" style="padding:9px 20px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
         '</div>'+
       '</div>'+
@@ -10879,6 +10972,144 @@ function writeOffCredit(custId){
   renderApp();
   alert('Write-off of '+fmt(amt)+' applied to '+cust.name+'.\nRemaining balance: '+fmt(Math.max(0,cust.creditBalance)));
 }
+
+/* ══════════════════════════════════════════════════════════════
+   COMMISSION SYSTEM
+══════════════════════════════════════════════════════════════ */
+
+function showAddCommission(invNum, custId, custName){
+  var old=document.getElementById('commission-modal');if(old)old.remove();
+  var cust=(DB.customers||[]).find(function(c){return c.id==custId;})||{};
+  var grandTotal=(DB.sales||[]).filter(function(s){return (s.invoiceNum||s.id)==invNum;}).reduce(function(a,s){return a+s.total;},0);
+  // Get existing commissions for this invoice
+  var existing=(DB.commissionLedger||[]).filter(function(c){return c.invoiceNum==invNum&&c.type==='earned';});
+  var existingHtml=existing.length?'<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">Already added for this invoice:</div>'+
+    existing.map(function(e){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 8px;background:#f0fdf4;border-radius:6px;margin-bottom:4px"><span>'+e.description+'</span><span style="font-weight:700;color:#15803d">'+fmt(e.amount)+'</span></div>';}).join('')+'</div>':'';
+
+  var overlay=document.createElement('div');
+  overlay.id='commission-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML=
+    '<div style="background:#fff;border-radius:14px;padding:24px;max-width:480px;width:100%">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+        '<div style="font-size:16px;font-weight:700;color:#1e293b">🎯 Add Commission</div>'+
+        '<button onclick="document.getElementById(\'commission-modal\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer">&times;</button>'+
+      '</div>'+
+      '<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px">'+
+        '<b>Customer:</b> '+custName+' &nbsp;|&nbsp; <b>Invoice:</b> #'+invNum+' &nbsp;|&nbsp; <b>Sale:</b> '+fmt(grandTotal)+
+      '</div>'+
+      existingHtml+
+      '<div style="display:flex;flex-direction:column;gap:12px">'+
+        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Description / Item Category <span style="color:#dc2626">*</span></label>'+
+        '<input type="text" id="cm-desc" placeholder="e.g. Wires, Fittings, Cables, Switches..." style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
+        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Commission Amount (₦) <span style="color:#dc2626">*</span></label>'+
+        '<input type="number" id="cm-amount" placeholder="0" min="0" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
+        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Note (optional)</label>'+
+        '<input type="text" id="cm-note" placeholder="Any additional note..." style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:10px;margin-top:18px">'+
+        '<button onclick="saveCommissionEntry(\''+invNum+'\','+custId+',\''+custName+'\')" style="flex:1;padding:11px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">✅ Save Commission</button>'+
+        '<button onclick="document.getElementById(\'commission-modal\').remove()" style="padding:11px 18px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+      '</div>'+
+    '</div>';
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+  document.body.appendChild(overlay);
+  document.getElementById('cm-desc').focus();
+}
+
+function saveCommissionEntry(invNum, custId, custName){
+  var desc=(document.getElementById('cm-desc')||{}).value.trim();
+  var amt=parseFloat((document.getElementById('cm-amount')||{}).value)||0;
+  var note=(document.getElementById('cm-note')||{}).value.trim();
+  if(!desc){alert('Enter a description.');return;}
+  if(!amt||amt<=0){alert('Enter a valid commission amount.');return;}
+  var now=new Date();
+  var date=now.toLocaleDateString();
+  var month=now.toISOString().slice(0,7);
+  // Save commission earned entry
+  DB.commissionLedger.push({id:uid(),custId:custId,custName:custName,invoiceNum:invNum,description:desc,amount:amt,note:note,type:'earned',date:date,month:month,by:DB.currentUser.name});
+  // Update customer commissionBalance
+  var cust=(DB.customers||[]).find(function(c){return c.id==custId;});
+  if(cust)cust.commissionBalance=(cust.commissionBalance||0)+amt;
+  saveData();
+  document.getElementById('commission-modal').remove();
+  alert('✅ Commission of '+fmt(amt)+' added for '+custName);
+}
+
+function showPayCommission(custId){
+  var cust=(DB.customers||[]).find(function(c){return c.id==custId;});
+  if(!cust){alert('Customer not found.');return;}
+  var balance=cust.commissionBalance||0;
+  if(balance<=0){alert('No commission balance to pay out.');return;}
+  var old=document.getElementById('pay-commission-modal');if(old)old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='pay-commission-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML=
+    '<div style="background:#fff;border-radius:14px;padding:24px;max-width:460px;width:100%">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+        '<div style="font-size:16px;font-weight:700;color:#1e293b">💸 Pay Commission</div>'+
+        '<button onclick="document.getElementById(\'pay-commission-modal\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer">&times;</button>'+
+      '</div>'+
+      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px">'+
+        '<b>'+cust.name+'</b> — Commission Balance: <span style="font-weight:800;color:#15803d">'+fmt(balance)+'</span>'+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;gap:12px">'+
+        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Amount to pay (₦) <span style="color:#dc2626">*</span></label>'+
+        '<input type="number" id="pcm-amt" value="'+balance+'" min="1" max="'+balance+'" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
+        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Payment mode</label>'+
+        '<select id="pcm-mode" onchange="togglePcmSubFields('+custId+')" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px">'+
+          '<option value="cash">Cash</option><option value="transfer">Bank Transfer</option><option value="pos">POS</option>'+
+        '</select></div>'+
+        '<div id="pcm-bank-wrap" style="display:none"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Bank</label>'+
+        '<select id="pcm-bank" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px"><option value="">Select bank...</option>'+bankOpts()+'</select></div>'+
+        '<div id="pcm-pos-wrap" style="display:none"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">POS Terminal</label>'+
+        '<select id="pcm-pos" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px"><option value="">Select POS...</option>'+posOpts()+'</select></div>'+
+        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Note (optional)</label>'+
+        '<input type="text" id="pcm-note" placeholder="e.g. Commission for May 2026" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:10px;margin-top:18px">'+
+        '<button onclick="recordCommissionPayout('+custId+')" style="flex:1;padding:11px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💸 Pay Commission</button>'+
+        '<button onclick="document.getElementById(\'pay-commission-modal\').remove()" style="padding:11px 18px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+      '</div>'+
+    '</div>';
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+  document.body.appendChild(overlay);
+}
+
+function togglePcmSubFields(){
+  var mode=(document.getElementById('pcm-mode')||{}).value;
+  var bw=document.getElementById('pcm-bank-wrap');
+  var pw=document.getElementById('pcm-pos-wrap');
+  if(bw)bw.style.display=mode==='transfer'?'block':'none';
+  if(pw)pw.style.display=mode==='pos'?'block':'none';
+}
+
+function recordCommissionPayout(custId){
+  var cust=(DB.customers||[]).find(function(c){return c.id==custId;});
+  if(!cust){alert('Customer not found.');return;}
+  var amt=parseFloat((document.getElementById('pcm-amt')||{}).value)||0;
+  var mode=(document.getElementById('pcm-mode')||{}).value||'cash';
+  var bankId=(document.getElementById('pcm-bank')||{}).value||null;
+  var posId=(document.getElementById('pcm-pos')||{}).value||null;
+  var note=(document.getElementById('pcm-note')||{}).value.trim()||'Commission payout — '+cust.name;
+  if(!amt||amt<=0){alert('Enter a valid amount.');return;}
+  if(amt>(cust.commissionBalance||0)){alert('Amount exceeds commission balance ('+fmt(cust.commissionBalance)+')');return;}
+  var now=new Date();
+  var date=now.toLocaleDateString();
+  var month=now.toISOString().slice(0,7);
+  // Record commission ledger payout entry
+  DB.commissionLedger.push({id:uid(),custId:custId,custName:cust.name,invoiceNum:null,description:'Commission payout',amount:amt,note:note,type:'paid',date:date,month:month,by:DB.currentUser.name});
+  // Reduce customer commissionBalance
+  cust.commissionBalance=(cust.commissionBalance||0)-amt;
+  // Auto-record as expense in cashflow
+  DB.cashflow.push({id:uid(),desc:'Commission paid — '+cust.name+(note?' ('+note+')':''),amount:amt,type:'out',cat:'Commission',payMode:mode,bankId:bankId||null,posId:posId||null,date:date,month:month,by:DB.currentUser.name});
+  saveData();
+  document.getElementById('pay-commission-modal').remove();
+  renderApp();
+  alert('✅ Commission of '+fmt(amt)+' paid to '+cust.name+' and recorded as expense.');
+}
+/* ══════════════════════════════════════════════════════════════ */
 
 function recordCreditPayment(custId){
   var cust=DB.customers.find(function(c){return c.id==custId;});
