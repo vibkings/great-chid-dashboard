@@ -9852,8 +9852,16 @@ function buildReturnsTracker(){
          (r.custName||'').toLowerCase().indexOf(t)<0&&
          (r.invoiceNum||'').toLowerCase().indexOf(t)<0)return false;
     }
-    if(retDateFrom&&!(parseDate(r.date)>=parseDate(retDateFrom)||(r.month&&r.month>=retDateFrom.slice(0,7))))return false;
-    if(retDateTo&&!(parseDate(r.date)<=parseDate(retDateTo)||(r.month&&r.month<=retDateTo.slice(0,7))))return false;
+    if(retDateFrom){
+      var rFrom=parseDate(retDateFrom);
+      var rDate=parseSaleDate(r.date);
+      if(rFrom&&rDate&&rDate<rFrom.getTime())return false;
+    }
+    if(retDateTo){
+      var rTo=parseDate(retDateTo);
+      var rDate2=parseSaleDate(r.date);
+      if(rTo&&rDate2){rTo.setHours(23,59,59,999);if(rDate2>rTo.getTime())return false;}
+    }
     return true;
   }).slice().sort(function(a,b){return (parseDate(b.date)||0)-(parseDate(a.date)||0);});
 
