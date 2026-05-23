@@ -4135,9 +4135,7 @@ function buildCustomers(){
           var commPaid=(DB.commissionLedger||[]).filter(function(e){return String(e.custId)==String(cust.id)&&e.type==='paid';}).reduce(function(a,e){return a+(e.amount||0);},0);
           var commBal=commEarned-commPaid;
           var goodsBal=lifetimeSpend-commEarned;
-          return mc('Commission earned',fmt(commEarned),'Total accrued','amber')+
-                 mc('Commission paid',fmt(commPaid),'Paid out',commPaid>0?'green':'')+
-                 mc('Commission balance',fmt(commBal),commBal>0?'Pending payout':'All cleared',commBal>0?'red':'green')+
+          return mc('Commission paid',fmt(commPaid),'Paid out',commPaid>0?'green':'')+
                  mc('Goods balance',fmt(goodsBal),'Purchases − Commission','blue');
         }())+
         '</div>'+
@@ -4300,6 +4298,42 @@ function buildCustomers(){
           '</tr></tfoot>'+
           '</table></div>';
         }())+
+        (function(){
+          var custReturns=(DB.salesReturns||[]).filter(function(r){return String(r.custId)==String(cust.id);})
+            .slice().sort(function(a,b){return (parseSaleDate(b.date)||0)-(parseSaleDate(a.date)||0);});
+          if(!custReturns.length)return '';
+          var totalReturnVal=custReturns.reduce(function(a,r){return a+(r.refundAmt||0);},0);
+          var cashRefunds=custReturns.filter(function(r){return r.refundType==='cash';}).reduce(function(a,r){return a+(r.refundAmt||0);},0);
+          var storeCredit=custReturns.filter(function(r){return r.refundType==='credit'||r.refundType==='exchange';}).reduce(function(a,r){return a+(r.refundAmt||0);},0);
+          var retTypeBadge={
+            cash:'<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CASH REFUND</span>',
+            credit:'<span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">STORE CREDIT</span>',
+            exchange:'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXCHANGE</span>'
+          };
+          var retRows=custReturns.map(function(r){
+            return '<tr>'+
+              '<td>'+r.date+'</td>'+
+              '<td><b>#'+(r.invoiceNum||r.invoiceId||'—')+'</b></td>'+
+              '<td>'+r.itemName+'</td>'+
+              '<td style="text-align:center">'+r.qty+'</td>'+
+              '<td style="text-align:right;color:#dc2626;font-weight:700">'+fmt(r.refundAmt||0)+'</td>'+
+              '<td style="color:#6b7280;font-size:11px">'+(r.reason||'—')+'</td>'+
+              '<td>'+(retTypeBadge[r.refundType]||retTypeBadge['cash'])+'</td>'+
+              '<td style="color:#9ca3af;font-size:11px">'+r.by+'</td>'+
+            '</tr>';
+          }).join('');
+          return '<p class="sec-title" style="margin-top:1rem">↩️ Returns & Refunds</p>'+
+            '<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">'+
+              kpiCard('↩️','Total Returns',custReturns.length,'','#ef4444')+
+              kpiCard('💸','Total Refund Value',fmt(totalReturnVal),'','#f97316')+
+              kpiCard('💵','Cash Refunded',fmt(cashRefunds),'','#10b981')+
+              kpiCard('🏦','Store Credit Applied',fmt(storeCredit),'Reduces balance','#6366f1')+
+            '</div>'+
+            '<div class="tbl-wrap"><table><thead><tr>'+
+              '<th>Date</th><th>Invoice #</th><th>Item</th><th style="text-align:center">Qty</th>'+
+              '<th style="text-align:right">Refund</th><th>Reason</th><th>Type</th><th>By</th>'+
+            '</tr></thead><tbody>'+retRows+'</tbody></table></div>';
+        }())+
         '<p class="sec-title" style="margin-top:1rem">All Invoices</p>'+
         '<div class="tbl-wrap"><table><thead><tr><th>Invoice #</th><th>Date</th><th>Items bought</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Payment mode</th><th>Pay type</th><th>Seller</th><th></th></tr></thead><tbody>'+invRows+'</tbody></table></div>';
     }
@@ -4337,13 +4371,21 @@ function buildCustomers(){
 // Parses a locale date string (e.g. "5/13/2026") → timestamp for comparison
 function parseSaleDate(str){
   if(!str)return 0;
+  // Try ISO format first (YYYY-MM-DD)
   var t=new Date(str).getTime();
-  if(!isNaN(t))return t;
+  if(!isNaN(t)&&str.indexOf('-')>=0)return t;
+  // Nigerian DD/MM/YYYY format
   var parts=str.split('/');
   if(parts.length===3){
+    var day=parseInt(parts[0]),mon=parseInt(parts[1]),yr=parseInt(parts[2]);
+    // If year looks like a 4-digit year it's DD/MM/YYYY
+    if(yr>1000)return new Date(yr,mon-1,day).getTime();
+    // Fallback: try MM/DD/YYYY
     return new Date(parseInt(parts[2]),parseInt(parts[0])-1,parseInt(parts[1])).getTime();
   }
-  return 0;
+  // Try generic parse as last resort
+  var t2=new Date(str).getTime();
+  return isNaN(t2)?0:t2;
 }
 
 // Extract numeric part of invoice number for ordering (handles YYYY/NNNN or plain number)
@@ -4392,6 +4434,7 @@ function generateInvoiceNum(){
 function calcOutstandingAtDate(custId, invDate, invNum, invNet){
   var invTs=parseSaleDate(invDate);
   var invN=parseInvNum(invNum);
+  var sCustId=String(custId);
 
   function isBefore(sDate, sInvNum){
     var sTs=parseSaleDate(sDate);
@@ -4401,35 +4444,50 @@ function calcOutstandingAtDate(custId, invDate, invNum, invNet){
   }
 
   // Opening balance set at customer setup — always counts as pre-existing debt
-  var cust=DB.customers.find(function(c){return c.id==custId;});
+  var cust=DB.customers.find(function(c){return String(c.id)==sCustId;});
   var openingBal=cust?(cust.openingBalance||0):0;
 
-  // Only unpaid (credit) or partially paid invoices before this one
-  var prevUnpaid=DB.sales.filter(function(s){
-    return s.custId==custId &&
+  // Only unpaid (credit) or partially paid invoices BEFORE this one
+  var prevInvMap={};
+  DB.sales.filter(function(s){
+    return String(s.custId)==sCustId &&
       (s.payment==='credit'||s.payment==='part') &&
-      (s.invoiceNum||s.id)!==invNum &&
+      String(s.invoiceNum||s.id)!==String(invNum) &&
       isBefore(s.date, s.invoiceNum||s.id);
+  }).forEach(function(s){
+    var k=String(s.invoiceNum||s.id);
+    if(!prevInvMap[k])prevInvMap[k]={total:0,partPayment:s.partPayment||0,depositApplied:s.depositApplied||0,payment:s.payment};
+    prevInvMap[k].total+=s.total;
   });
 
-  // Credit payments made on or before this invoice date
+  // Credit payments made BEFORE this invoice (by timestamp)
   var prevCreditPayments=(DB.creditPayments||[]).filter(function(p){
-    return p.custId==custId && parseSaleDate(p.date)<=invTs;
+    return String(p.custId)==sCustId && parseSaleDate(p.date)<=invTs;
   });
 
-  var prevOwed=prevUnpaid.reduce(function(a,s){
-    var dep=s.depositApplied||0;
-    if(s.payment==='credit') return a+Math.max(0,s.total-dep);
-    if(s.payment==='part') return a+Math.max(0,s.total-(s.partPayment||0)-dep);
+  // Returns that reduced balance before this invoice
+  var prevReturns=(DB.salesReturns||[]).filter(function(r){
+    return String(r.custId)==sCustId &&
+      (r.refundType==='credit'||r.refundType==='exchange') &&
+      parseSaleDate(r.date)<=invTs &&
+      String(r.invoiceNum)!==String(invNum);
+  });
+
+  var prevOwed=Object.values(prevInvMap).reduce(function(a,inv){
+    var dep=inv.depositApplied||0;
+    if(inv.payment==='credit') return a+Math.max(0,inv.total-dep);
+    if(inv.payment==='part') return a+Math.max(0,inv.total-(inv.partPayment||0)-dep);
     return a;
   },0);
-  var prevPaid=prevCreditPayments.reduce(function(a,p){return a+p.amount;},0);
+  var prevPaid=prevCreditPayments.reduce(function(a,p){return a+(p.amount||0);},0);
+  var prevReturnCredit=prevReturns.reduce(function(a,r){return a+(r.refundAmt||0);},0);
 
-  // prevInvTotal = opening balance + all prior unpaid invoices - payments made before this date
-  var prevInvTotal=Math.max(0,openingBal+prevOwed-prevPaid);
+  // prevInvTotal = opening balance + prior unpaid − payments − return credits
+  var prevInvTotal=Math.max(0,openingBal+prevOwed-prevPaid-prevReturnCredit);
   var outstandingAtDate=prevInvTotal+Math.max(0,invNet);
   return {prevInvTotal:prevInvTotal,outstandingAtDate:outstandingAtDate};
 }
+
 // ── Shared print-choice modal ────────────────────────────────
 // Shows "Print with outstanding balance / Print invoice only / Cancel"
 // outstandingBal = total the customer owed AT THE TIME of this invoice
@@ -7617,7 +7675,7 @@ function viewInvoiceDetail(invNum){
           '<button onclick="shareInvoiceWhatsApp(\''+invNum+'\')" style="flex:1;padding:9px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📲 Share via WhatsApp</button>'+
           (isAdmin()?'<button onclick="editInvoice(\''+invNum+'\');document.getElementById(\'inv-detail-modal\').remove()" style="padding:9px 14px;background:#fff8f0;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">✏️ Edit invoice</button>':'')+''+
           (isAdmin()?'<button onclick="showEditInvoiceNote(\''+invNum+'\')" style="padding:9px 14px;background:#fff8f0;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📝 Add note</button>':'')+''+
-          (s0.custId&&String(s0.custId)!==''&&s0.payment!=='walkin'?'<button onclick="showAddCommission(\''+invNum+'\','+s0.custId+',\''+((s0.custName||'Customer').replace(/'/g,''))+'\')">🎯 Add Commission</button>':'')+''+
+          (s0.custId&&s0.custId!==null&&String(s0.custId)!==''&&String(s0.custId)!=='walkin'&&String(s0.custId)!=='null'?'<button onclick="showAddCommission(\''+invNum+'\','+s0.custId+',\''+((s0.custName||'Customer').replace(/'/g,''))+'\')" style="padding:9px 14px;background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🎯 Add Commission</button>':'')+''+
           '<button onclick="document.getElementById(\'inv-detail-modal\').remove()" style="padding:9px 20px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
         '</div>'+
       '</div>'+
