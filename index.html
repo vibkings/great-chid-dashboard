@@ -4028,19 +4028,26 @@ function buildCustomers(){
       // Group sales by invoice for this customer
       var custSales=DB.sales.filter(function(s){return s.custId==cust.id;});
       var invGroups={};
-      custSales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invGroups[k])invGroups[k]={invoiceNum:s.invoiceNum||' - ',date:s.date,items:[],total:0,profit:0,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,seller:s.seller,_s:s};invGroups[k].items.push(s);invGroups[k].total+=s.total;invGroups[k].profit+=s.profit;});
+      custSales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invGroups[k])invGroups[k]={invoiceNum:s.invoiceNum||' - ',date:s.date,items:[],total:0,profit:0,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,seller:s.seller,dueDate:s.dueDate||null,_s:s};invGroups[k].items.push(s);invGroups[k].total+=s.total;invGroups[k].profit+=s.profit;});
       var invKeys=Object.keys(invGroups).sort(function(a,b){return invGroups[b]._s.date>invGroups[a]._s.date?1:-1;});
       var invRows=invKeys.length?invKeys.map(function(k){
         var g=invGroups[k];
         var itemList=g.items.map(function(s){return s.name+' ×'+s.qty+'  @'+fmt(s.salePrice);}).join('<br>');
         var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':'<span class="badge ok">Paid</span>';
-        return '<tr><td><b>'+g.invoiceNum+'</b></td><td>'+g.date+'</td><td style="font-size:11px;max-width:200px">'+itemList+'</td><td style="text-align:right"><b>'+fmt(g.total)+'</b></td><td style="text-align:right;color:#16a34a">'+fmt(g.profit)+'</td><td>'+payModeLabel(g)+'</td><td>'+pt+'</td><td>'+g.seller+'</td>'+
+        var dueDateCell='—';
+        if(g.payment==='credit'&&g.dueDate){
+          var _due=new Date(g.dueDate);var _now=new Date();_now.setHours(0,0,0,0);_due.setHours(0,0,0,0);
+          var _diff=Math.round((_due-_now)/86400000);
+          var _col=_diff<0?'#dc2626':_diff<=7?'#f59e0b':'#15803d';
+          dueDateCell='<span style="color:'+_col+';font-weight:600;font-size:11px">'+_due.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+(_diff<0?' ⚠️':_diff===0?' 🔔':'')+'</span>';
+        }
+        return '<tr><td><b>'+g.invoiceNum+'</b></td><td>'+g.date+'</td><td style="font-size:11px;max-width:200px">'+itemList+'</td><td style="text-align:right"><b>'+fmt(g.total)+'</b></td><td style="text-align:right;color:#16a34a">'+fmt(g.profit)+'</td><td>'+payModeLabel(g)+'</td><td>'+pt+'</td><td>'+dueDateCell+'</td><td>'+g.seller+'</td>'+
           '<td style="white-space:nowrap">'+
             '<button class="btn sm" style="color:#0d6efd;border-color:#93c5fd;font-size:11px" onclick="viewInvoiceDetail(\''+k+'\')">View</button> '+
             '<button class="btn sm" style="color:#1a237e;border-color:#93c5fd;font-size:11px" onclick="printCustomerInvoice(\''+k+'\','+cust.id+')">Print ↗</button> '+
             '<button class="btn sm" style="color:#15803d;border-color:#86efac;font-size:11px" onclick="showAddCommission(\''+k+'\','+cust.id+',\''+cust.name.replace(/'/g,'\'')+'\')" title="Add commission for this invoice">🎯</button>'+
           '</td></tr>';
-      }).join(''):'<tr><td colspan="9" class="empty">No purchases yet.</td></tr>';
+      }).join(''):'<tr><td colspan="10" class="empty">No purchases yet.</td></tr>';
 
       // ── Purchase history analytics ─────────────────────────────
       var lifetimeSpend=custSales.reduce(function(a,s){return a+s.total;},0);
@@ -4355,7 +4362,7 @@ function buildCustomers(){
             '</tr></thead><tbody>'+retRows+'</tbody></table></div>';
         }())+
         '<p class="sec-title" style="margin-top:1rem">All Invoices</p>'+
-        '<div class="tbl-wrap"><table><thead><tr><th>Invoice #</th><th>Date</th><th>Items bought</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Payment mode</th><th>Pay type</th><th>Seller</th><th></th></tr></thead><tbody>'+invRows+'</tbody></table></div>';
+        '<div class="tbl-wrap"><table><thead><tr><th>Invoice #</th><th>Date</th><th>Items bought</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Payment mode</th><th>Pay type</th><th>Due date</th><th>Seller</th><th></th></tr></thead><tbody>'+invRows+'</tbody></table></div>';
     }
   } else {
     var total=DB.customers.length,vip=DB.customers.filter(function(c){return c.type==='vip';}).length,ws=DB.customers.filter(function(c){return c.type==='wholesale';}).length,ts=DB.customers.reduce(function(a,c){return a+c.totalSpent;},0);
@@ -4713,6 +4720,18 @@ function buildInvoiceHTML(inv){
           '<div class="pay-label">Payment type</div>'+
           '<div class="pay-val">'+(inv.payment==='credit'?'\u26a0 CREDIT (amount owed)':inv.payment==='part'?'PART PAYMENT':inv.payMode==='split'?'SPLIT PAYMENT':inv.payment==='deposit'?(inv.depTopupMode?'DEPOSIT + '+(inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'TRANSFER':'CASH'):'DEPOSIT'):'CASH SALE')+'</div>'+
         '</div>'+
+        (inv.payment==='credit'&&inv.dueDate?(function(){
+          var _d=new Date(inv.dueDate);
+          var _now=new Date();_now.setHours(0,0,0,0);
+          var _due=new Date(inv.dueDate);_due.setHours(0,0,0,0);
+          var _diff=Math.round((_due-_now)/86400000);
+          var _col=_diff<0?'#dc2626':_diff<=7?'#f59e0b':'#15803d';
+          var _lbl=_diff<0?'Overdue by '+Math.abs(_diff)+' day'+( Math.abs(_diff)!==1?'s':''):_diff===0?'Due today':'Due in '+_diff+' day'+(_diff!==1?'s':'');
+          return '<div class="pay-cell" style="border-top:1px solid #f3f4f6">'+
+            '<div class="pay-label">Payment due date</div>'+
+            '<div class="pay-val" style="color:'+_col+';font-weight:700">'+_d.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})+' <span style="font-size:11px;color:'+_col+'">('+_lbl+')</span></div>'+
+          '</div>';
+        })():'')+
         '<div class="pay-cell">'+
           '<div class="pay-label">Payment mode</div>'+
           '<div class="pay-val">'+(inv.payment==='credit'?'Credit':
@@ -5501,6 +5520,7 @@ function submitInvoice(){
     if(payMode==='pos'&&DB.posTerminals.length&&!posId){alert('Select the POS terminal.');return;}
   }
   var custId=null,custName='Walk-in customer',custAddr='',printName='';
+  var dueDate=(payment==='credit'&&document.getElementById('s-due-date'))?document.getElementById('s-due-date').value:null;
   // No walk-in on credit or part payment
   if(payment==='credit'&&saleCustomerType==='walkin'){alert('Walk-in customers cannot buy on credit. Please select a registered customer with a credit limit.');return;}
   if(payment==='part'&&saleCustomerType==='walkin'){alert('Walk-in customers must pay in full.\n\nPart payment is only allowed for registered customers.\nPlease select a registered customer or use Cash / Split payment.');return;}
@@ -5657,6 +5677,7 @@ function submitInvoice(){
       discAmt:Math.round(itemDisc*100)/100,
       total:itemTotal,profit:itemProfit,
       payment:payment,payMode:payMode,bankId:bankId,posId:posId,
+      dueDate:dueDate||null,
       splitPayment:splitPayment||null,
       custId:custId,custName:custName,printName:printName,custAddr:custAddr,
       custType:saleCustomerType,date:date,month:month,
@@ -6041,6 +6062,15 @@ function buildThermalHTML(inv){
       '<div style="font-size:8px;color:#555">'+(inv.pendingSupply?'Goods pending delivery':'Collected by customer')+'</div>'+
     '</div>'+
     '<hr class="divider" style="margin-top:8px">'+
+    (inv.dueDate?(function(){
+      var _due=new Date(inv.dueDate);
+      var _now=new Date();_now.setHours(0,0,0,0);_due.setHours(0,0,0,0);
+      var _diff=Math.round((_due-_now)/86400000);
+      var _overdue=_diff<0;
+      return '<div style="background:'+(  _overdue?'#fef2f2':'#fef9c3')+';border:1px solid '+(_overdue?'#fca5a5':'#fde68a')+';border-radius:4px;padding:5px 8px;margin:5px 0;text-align:center;font-size:9px;font-weight:700;color:'+(_overdue?'#dc2626':'#92400e')+'">'+
+        '📅 PAYMENT DUE BY: '+_due.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})+
+        (_overdue?' — OVERDUE':_diff===0?' — DUE TODAY':'')+'</div>';
+    })():'')+
     '<div class="center" style="font-size:9px;color:#555;margin-top:4px">'+
       'No refund after payment.<br><i>Thank you for your patronage!</i>'+
     '</div>'+
@@ -6111,12 +6141,17 @@ function onPaymentTypeChange(){
     if(splitWrap)splitWrap.style.display='none';
     if(payModeWrap)payModeWrap.style.display='block';
     togglePaySubFields('credit','s');
-  } else if(payType.value==='deposit'){
-    payMode.value='deposit';payMode.disabled=true;
-    if(partWrap)partWrap.style.display='none';
-    if(splitWrap)splitWrap.style.display='none';
-    if(payModeWrap)payModeWrap.style.display='none';
-  } else if(payType.value==='part'){
+    var dueDateWrap=document.getElementById('s-due-date-wrap');
+    if(dueDateWrap)dueDateWrap.style.display='block';
+  } else {
+    var dueDateWrap2=document.getElementById('s-due-date-wrap');
+    if(dueDateWrap2){dueDateWrap2.style.display='none';var dd=document.getElementById('s-due-date');if(dd)dd.value='';}
+    if(payType.value==='deposit'){
+      payMode.value='deposit';payMode.disabled=true;
+      if(partWrap)partWrap.style.display='none';
+      if(splitWrap)splitWrap.style.display='none';
+      if(payModeWrap)payModeWrap.style.display='none';
+    } else if(payType.value==='part'){
     payMode.value='cash';payMode.disabled=false;
     if(partWrap)partWrap.style.display='block';
     if(splitWrap)splitWrap.style.display='none';
@@ -6134,6 +6169,7 @@ function onPaymentTypeChange(){
     if(splitWrap)splitWrap.style.display='none';
     if(payModeWrap)payModeWrap.style.display='block';
     togglePaySubFields('cash','s');
+    }
   }
   // Show "Amount received" field when customer has outstanding credit balance and payment is cash/pos/transfer
   var amtRecWrap=document.getElementById('s-amt-received-wrap');
@@ -6980,6 +7016,11 @@ function buildSales(){
       '<div class="form-group"><label>Payment type <span style="color:var(--danger)">*</span></label><select id="s-payment" onchange="onPaymentTypeChange()"><option value="cash">Cash (fully paid)</option><option value="deposit">Deposit (use customer deposit balance)</option><option value="credit">Credit (full amount owed)</option><option value="part">Part payment</option><option value="split">Split payment (2 modes)</option></select></div>'+
       '<div class="form-group" id="s-paymode-wrap"><label>Payment mode</label><select id="s-paymode" onchange="togglePaySubFields(this.value,\'s\')"><option value="cash">Cash</option><option value="pos">POS</option><option value="transfer">Bank transfer</option><option value="credit">Credit</option></select></div>'+
       '<div class="form-group" id="s-part-wrap" style="display:none"><label>Amount paid now (₦)</label><input type="number" id="s-part-payment" placeholder="0" min="0"></div>'+
+      '<div class="form-group" id="s-due-date-wrap" style="display:none">'+
+        '<label>📅 Payment due date <span style="font-size:11px;color:#6b7280;font-weight:400">— optional</span></label>'+
+        '<input type="date" id="s-due-date" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px">'+
+        '<div style="font-size:11px;color:#6b7280;margin-top:3px">Leave blank if no deadline. Shown on invoice and customer profile.</div>'+
+      '</div>'+
       '<div class="form-group" id="s-amt-received-wrap" style="display:none"><label>Amount received (₦) <span style="font-size:11px;color:#6b7280;font-weight:400">— optional, if customer paid more</span></label><input type="number" id="s-amt-received" placeholder="Leave blank if exact" min="0" oninput="onAmtReceivedChange()"></div>'+
     '</div>'+
     '<div id="s-split-wrap" style="display:none;background:#f0f7ff;border:1px solid #b6d4fe;border-radius:8px;padding:12px;margin-bottom:10px">'+
