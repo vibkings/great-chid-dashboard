@@ -5068,20 +5068,29 @@ function filterPurchaseItemDropdown(val){
   var dd=document.getElementById('pi-item-dropdown');if(dd)dd.style.display='block';
   buildPurchaseItemDropdownItems(val);
 }
+function handlePiCatChange(){
+  var sel=document.getElementById('pi-cat');
+  var newWrap=document.getElementById('pi-cat-new-wrap');
+  if(newWrap)newWrap.style.display=sel&&sel.value==='__new__'?'block':'none';
+}
+
 function selectPurchaseItem(id,name){
   document.getElementById('pi-select').value=id;
   document.getElementById('pi-search').value=name;
   var dd=document.getElementById('pi-item-dropdown');if(dd)dd.style.display='none';
   var wrap=document.getElementById('pi-name-wrap');
   if(wrap)wrap.style.display=id==='__new__'?'block':'none';
-  if(id&&id!=='__new__'){
-    var item=DB.inventory.find(function(i){return i.id==id;});
-    if(item){
-      var costEl=document.getElementById('pi-cost');
-      if(costEl&&(!costEl.value||costEl.value==='0'))costEl.value=item.cost||'';
-    }
+  if(id==='__new__'){
+    var n=document.getElementById('pi-name');
+    if(n)n.value=document.getElementById('pi-search').value;
+    var sellEl=document.getElementById('pi-sell');
+    if(sellEl)sellEl.value='';
+    var catEl=document.getElementById('pi-cat');
+    if(catEl)catEl.value='';
+    var catNewWrap=document.getElementById('pi-cat-new-wrap');
+    if(catNewWrap)catNewWrap.style.display='none';
+    setTimeout(function(){var n2=document.getElementById('pi-name');if(n2)n2.focus();},50);
   }
-  if(id==='__new__'){var n=document.getElementById('pi-name');if(n)n.value=document.getElementById('pi-search').value;}
   // Trigger original handler for any extra logic
   if(typeof onPurchaseItemSelect==='function')onPurchaseItemSelect();
 }
@@ -7866,10 +7875,17 @@ function addPurchaseItem(){
   var qtyReceived=parseInt(document.getElementById('pi-qty-received').value)||0;
   var cost=parseFloat(document.getElementById('pi-cost').value)||0;
   if(!sel){alert('Item selector not found.');return;}
-  var itemId=null,name='';
+  var itemId=null,name='',sell=0,cat='';
   if(sel.value==='__new__'){
     name=document.getElementById('pi-name')?document.getElementById('pi-name').value.trim():'';
     if(!name){alert('Enter a name for the new item.');return;}
+    sell=parseFloat(document.getElementById('pi-sell')?document.getElementById('pi-sell').value:0)||0;
+    if(sell<=0){alert('Enter a selling price for the new item.');return;}
+    if(sell<cost){alert('Selling price ('+fmt(sell)+') cannot be less than cost price ('+fmt(cost)+').');return;}
+    var catSel=document.getElementById('pi-cat');
+    var catNew=document.getElementById('pi-cat-new');
+    cat=catSel?catSel.value==='__new__'?(catNew?catNew.value.trim():''):catSel.value:'';
+    if(catSel&&catSel.value==='__new__'&&cat&&!DB.categories.includes(cat))DB.categories.push(cat);
   } else if(sel.value===''){
     alert('Please select an existing item or choose "Create new item".');return;
   } else {
@@ -7877,6 +7893,8 @@ function addPurchaseItem(){
     var item=DB.inventory.find(function(i){return i.id==itemId;});
     if(!item){alert('Item not found.');return;}
     name=item.name;
+    sell=item.sell||0;
+    cat=item.cat||'';
   }
   if(qtyOrdered<=0){alert('Enter the quantity ordered (on the invoice).');return;}
   if(qtyReceived<0||qtyReceived>qtyOrdered){alert('Qty received cannot be more than qty ordered ('+qtyOrdered+').');return;}
@@ -7887,9 +7905,11 @@ function addPurchaseItem(){
     qtyOrdered:qtyOrdered,
     qtyReceived:qtyReceived,
     qtyPending:qtyPending,
-    qty:qtyReceived, // qty = what goes to stock immediately
+    qty:qtyReceived,
     cost:cost,
-    total:qtyOrdered*cost, // invoice total based on ordered qty
+    sell:sell,
+    cat:cat,
+    total:qtyOrdered*cost,
     totalReceived:qtyReceived*cost,
     isNew:!itemId
   });
@@ -7901,6 +7921,10 @@ function addPurchaseItem(){
   document.getElementById('pi-cost').value='';
   var ni=document.getElementById('pi-name');if(ni)ni.value='';
   var nw=document.getElementById('pi-name-wrap');if(nw)nw.style.display='none';
+  var piSell=document.getElementById('pi-sell');if(piSell)piSell.value='';
+  var piCat=document.getElementById('pi-cat');if(piCat)piCat.value='';
+  var piCatNew=document.getElementById('pi-cat-new');if(piCatNew)piCatNew.value='';
+  var piCatNewWrap=document.getElementById('pi-cat-new-wrap');if(piCatNewWrap)piCatNewWrap.style.display='none';
   renderPurchaseItems();
 }
 function removePurchaseItem(lid){purchaseItems=purchaseItems.filter(function(l){return l.lineId!==lid;});renderPurchaseItems();}
@@ -8027,7 +8051,7 @@ function submitPurchase(){
     } else {
       var byName=DB.inventory.find(function(i){return i.name.toLowerCase()===l.name.toLowerCase();});
       if(byName){byName.qty+=qtyToAdd;byName.cost=l.cost;if(byName.sell<l.cost)belowCostWarnings.push(byName.name+': sell price '+fmt(byName.sell)+' is now below new cost '+fmt(l.cost));}
-      else{DB.inventory.push({id:uid(),name:l.name,qty:qtyToAdd,cost:l.cost,sell:l.cost,minQty:5,supId:supId,cat:''});}
+      else{var newId=uid();DB.inventory.push({id:newId,name:l.name,qty:qtyToAdd,cost:l.cost,sell:l.sell||l.cost,minQty:5,supId:supId,cat:l.cat||''});l.itemId=newId;}
     }
   });
 
@@ -8050,7 +8074,6 @@ function submitPurchase(){
         cost:l.cost,
         sell:l.sell||l.cost||0,
         cat:l.cat||'',
-        dateOrdered:date,
         dateExpected:null,
         status:'pending', // 'pending' | 'partial' | 'complete'
         deliveries:[] // log of partial deliveries received
@@ -8543,7 +8566,19 @@ function buildPurchases(){
         '<div style="position:relative">'+
           '<input type="text" id="pi-search" placeholder="Search items..." oninput="filterPurchaseItemDropdown(this.value)" onfocus="showPurchaseItemDropdown()" style="width:100%" autocomplete="off">'+
           '<input type="hidden" id="pi-select">'+
-          '<div id="pi-name-wrap" style="display:none;margin-top:4px"><input type="text" id="pi-name" placeholder="New item name"></div>'+
+          '<div id="pi-name-wrap" style="display:none;margin-top:6px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;display:none">'+
+            '<div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">➕ New Item Details</div>'+
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+              '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px">Item Name <span style="color:#dc2626">*</span></label>'+
+              '<input type="text" id="pi-name" placeholder="Item name" style="width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;box-sizing:border-box"></div>'+
+              '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px">Selling Price (₦) <span style="color:#dc2626">*</span></label>'+
+              '<input type="number" id="pi-sell" placeholder="0" min="0" style="width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;box-sizing:border-box"></div>'+
+              '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px">Category</label>'+
+              '<select id="pi-cat" onchange="handlePiCatChange()" style="width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">'+getCatOpts('')+'</select></div>'+
+              '<div id="pi-cat-new-wrap" style="display:none"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px">New Category Name</label>'+
+              '<input type="text" id="pi-cat-new" placeholder="e.g. Solar Products" style="width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;box-sizing:border-box"></div>'+
+            '</div>'+
+          '</div>'+
           '<div id="pi-item-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);max-height:220px;overflow-y:auto;z-index:200;margin-top:2px"></div>'+
         '</div>'+
       '</div>'+
