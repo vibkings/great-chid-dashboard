@@ -840,15 +840,21 @@ function startFirebaseListener() {
       // ── Genuine change from another device — show popup, let user decide ──
       fbLastSeenRemoteSavedAt = payload._savedAt;
       var remoteTime = payload._savedAt ? new Date(payload._savedAt).toLocaleTimeString() : 'unknown';
-      // Fetch only the sales count from remote to show in popup (don't apply yet)
+      // Fetch sales + inventory counts from remote to show in popup (don't apply yet)
       fbGetCollection('sales', function(err2, salesPayload) {
         var remoteSalesCount = 0;
         if (!err2 && salesPayload && salesPayload.data) {
           remoteSalesCount = Array.isArray(salesPayload.data) ? salesPayload.data.length : 0;
         }
-        // Store the remote savedAt so acceptFbSync knows what to pull
-        fbPendingSnapshot = { _savedAt: payload._savedAt, _deviceId: payload._deviceId, _pendingPull: true };
-        showSyncPopup(remoteTime, remoteSalesCount);
+        fbGetCollection('inventory', function(err3, invPayload) {
+          var remoteInvCount = 0;
+          if (!err3 && invPayload && invPayload.data) {
+            remoteInvCount = Array.isArray(invPayload.data) ? invPayload.data.length : 0;
+          }
+          // Store the remote savedAt so acceptFbSync knows what to pull
+          fbPendingSnapshot = { _savedAt: payload._savedAt, _deviceId: payload._deviceId, _pendingPull: true, _remoteInvCount: remoteInvCount };
+          showSyncPopup(remoteTime, remoteSalesCount);
+        });
       });
     });
   }, 20000);
@@ -864,7 +870,7 @@ function showSyncPopup(remoteTime, remoteSales) {
   if (old) old.remove();
   var localSales = DB.sales.length;
   var localInv = DB.inventory.length;
-  var remoteInv = fbPendingSnapshot && fbPendingSnapshot.inventory ? fbPendingSnapshot.inventory.length : '?';
+  var remoteInv = (fbPendingSnapshot && fbPendingSnapshot._remoteInvCount != null) ? fbPendingSnapshot._remoteInvCount : (fbPendingSnapshot && fbPendingSnapshot.inventory ? fbPendingSnapshot.inventory.length : '?');
   var sameDevice = false; // already filtered before calling this
   var popup = document.createElement('div');
   popup.id = 'fb-sync-popup';
