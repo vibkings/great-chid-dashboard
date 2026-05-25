@@ -145,6 +145,17 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13
 .nav-badge{margin-left:auto;font-size:9px;padding:1px 7px;border-radius:99px;background:var(--danger);color:#fff;font-weight:700;animation:badgePulse 2s infinite}
 @keyframes badgePulse{0%,100%{box-shadow:0 0 0 0 rgba(220,53,69,.4)}50%{box-shadow:0 0 0 4px rgba(220,53,69,0)}}
 .sidebar-bottom{margin-top:auto;padding:.75rem;border-top:1px solid var(--sidebar-border)}
+.nav-scroll{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
+.nav-scroll::-webkit-scrollbar{width:4px}
+.nav-scroll::-webkit-scrollbar-track{background:transparent}
+.nav-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:4px}
+.sidebar.collapsed{width:54px}
+.sidebar.collapsed .logo-text,.sidebar.collapsed .logo-sub,.sidebar.collapsed .sidebar-label,.sidebar.collapsed .nav-item span,.sidebar.collapsed .nav-badge,.sidebar.collapsed .user-info,.sidebar.collapsed .user-name,.sidebar.collapsed .user-role{display:none}
+.sidebar.collapsed .nav-item{justify-content:center;padding:.45rem 0;margin:1px 4px;width:calc(100% - 8px)}
+.sidebar.collapsed .nav-icon{width:auto;font-size:15px}
+.sidebar.collapsed+.main,.main.nav-collapsed{margin-left:54px}
+.nav-collapse-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#adb5bd;font-size:14px;transition:all .2s;flex-shrink:0}
+.nav-collapse-btn:hover{background:rgba(255,255,255,.2);color:#fff}
 .user-block{display:flex;align-items:center;gap:9px;padding:.6rem .75rem;background:rgba(255,255,255,.07);border-radius:var(--radius-sm);cursor:pointer;transition:background .15s}
 .user-block:hover{background:rgba(255,255,255,.13)}
 .user-avatar{width:30px;height:30px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;border:2px solid rgba(255,255,255,.2)}
@@ -2385,7 +2396,7 @@ function renderApp(){
   var pageTitle=NAV_LABELS[activeTab]||'Dashboard';
   document.getElementById('root').innerHTML=
     '<div class="shell">'+
-    '<div class="sidebar">'+
+    '<div class="sidebar" id="app-sidebar">'+
       '<div class="sidebar-logo">'+
         '<svg width="36" height="40" viewBox="0 0 72 80" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">'+
           '<path d="M36 2 L70 14 L70 48 Q70 68 36 78 Q2 68 2 48 L2 14 Z" fill="#c0392b" stroke="#fff" stroke-width="1.5"/>'+
@@ -2400,9 +2411,12 @@ function renderApp(){
           '<text x="36" y="25" text-anchor="middle" fill="#ffd700" font-size="7" font-weight="900" font-family="Arial" letter-spacing="1">GCE</text>'+
           '<text x="36" y="60" text-anchor="middle" fill="#ffd700" font-size="6" font-weight="700" font-family="Arial">ELECTRO</text>'+
         '</svg>'+
-        '<div><div class="logo-text">Great Chid Electro</div><div class="logo-sub">Business Dashboard</div></div>'+
+        '<div style="flex:1"><div class="logo-text">Great Chid Electro</div><div class="logo-sub">Business Dashboard</div></div>'+
+        '<button class="nav-collapse-btn" id="nav-collapse-btn" onclick="toggleNavCollapse()" title="Collapse/expand sidebar">&#9776;</button>'+
       '</div>'+
+      '<div class="nav-scroll" id="nav-scroll-area">'+
       navHtml+
+      '</div>'+
       '<div class="sidebar-bottom">'+
         '<div class="user-block" onclick="switchTab(\'users\')" title="Edit your profile">'+
           '<div class="user-avatar">'+initials(u.name)+'</div>'+
@@ -11827,6 +11841,30 @@ function markProformaConverted(prfNum,invNum){
 ══════════════════════════════════════════════════════════════ */
 var prodReportItemId='';
 var prodReportSearch='';
+
+/* ── Nav collapse toggle ──────────────────────────────────── */
+var _navCollapsed = localStorage.getItem('gce_nav_collapsed') === '1';
+function toggleNavCollapse(){
+  _navCollapsed = !_navCollapsed;
+  localStorage.setItem('gce_nav_collapsed', _navCollapsed ? '1' : '0');
+  applyNavCollapse();
+}
+function applyNavCollapse(){
+  var sidebar = document.getElementById('app-sidebar');
+  var main = document.querySelector('.main');
+  var btn = document.getElementById('nav-collapse-btn');
+  if(sidebar){
+    if(_navCollapsed){sidebar.classList.add('collapsed');}
+    else{sidebar.classList.remove('collapsed');}
+  }
+  if(main){
+    if(_navCollapsed){main.style.marginLeft='54px';}
+    else{main.style.marginLeft='235px';}
+  }
+  if(btn){btn.innerHTML = _navCollapsed ? '&#9776;' : '&#9776;';}
+}
+// Apply on render
+setTimeout(applyNavCollapse, 50);
 
 function prodReportLiveSearch(val, showAll){
   prodReportSearch=val;
