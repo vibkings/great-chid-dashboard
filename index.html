@@ -25,7 +25,7 @@
   --text:#212529;
   --text2:#495057;
   --text3:#6c757d;
-
+  --table-hover:#e8eeff;
   /* Bootstrap semantic colors */
   --primary:#0d6efd;
   --primary-dark:#0b5ed7;
@@ -87,6 +87,7 @@ body.dark-mode{
   --text:#e2e8f0;
   --text2:#94a3b8;
   --text3:#64748b;
+  --table-hover:rgba(99,102,241,0.15);
   --primary:#3b82f6;
   --primary-dark:#2563eb;
   --primary-bg:#1e2a40;
@@ -110,6 +111,7 @@ body.dark-mode .card{background:var(--surface);border-color:var(--border);}
 body.dark-mode input,body.dark-mode select,body.dark-mode textarea{background:var(--surface2);color:var(--text);border-color:var(--border);}
 body.dark-mode table thead tr{background:var(--surface3);}
 body.dark-mode .tbl-wrap table tr:nth-child(even) td{background:var(--surface2);}
+body.dark-mode tr:hover td{background:rgba(99,102,241,0.18)!important;color:var(--text)!important}
 body.dark-mode .badge.ok{background:#0d2318;color:#22c55e;}
 body.dark-mode .badge.owing{background:#2d0d0d;color:#ef4444;}
 body.dark-mode .badge.low{background:#2d1f00;color:#f59e0b;}
@@ -208,7 +210,7 @@ table{width:100%;border-collapse:collapse;font-size:12.5px}
 th{text-align:left;font-size:10.5px;font-weight:700;color:var(--text3);padding:9px 13px;border-bottom:2px solid var(--border);text-transform:uppercase;letter-spacing:.06em;background:var(--surface2)}
 td{padding:9px 13px;border-bottom:1px solid var(--border2);color:var(--text);vertical-align:middle}
 tr:last-child td{border-bottom:none}
-tr:hover td{background:#f0f4ff;transition:background var(--transition)}
+tr:hover td{background:var(--table-hover,rgba(99,102,241,0.08));transition:background var(--transition)}
 tbody tr{transition:background var(--transition)}
 
 /* ===== FORMS ===== */
@@ -327,7 +329,7 @@ input.inline-edit{border:1.5px solid var(--primary);border-radius:5px;padding:4p
 @media print{
   .sidebar,.topbar,.no-print,.reminder-banner{display:none!important}
   .main{margin-left:0}
-  body{background:#fff;color:#000}
+  body{background:var(--white);color:#000}
 }
 
 /* ===== CONFIRMATION MODAL ===== */
@@ -888,7 +890,7 @@ function showSyncPopup(remoteTime, remoteSales) {
   var sameDevice = false; // already filtered before calling this
   var popup = document.createElement('div');
   popup.id = 'fb-sync-popup';
-  popup.style.cssText = 'position:fixed;top:70px;right:20px;z-index:99999;background:#fff;border:2px solid #0d6efd;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:18px 20px;max-width:360px;font-family:Inter,sans-serif';
+  popup.style.cssText = 'position:fixed;top:70px;right:20px;z-index:99999;background:var(--white);border:2px solid #0d6efd;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:18px 20px;max-width:360px;font-family:Inter,sans-serif';
   popup.innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
       '<span style="font-size:22px">&#128276;</span>' +
@@ -899,23 +901,23 @@ function showSyncPopup(remoteTime, remoteSales) {
       '<button onclick="dismissFbSync()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#6c757d;line-height:1">&times;</button>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">' +
-      '<div style="background:#f8f9fa;border-radius:8px;padding:8px 10px;text-align:center">' +
+      '<div style="background:var(--surface2);border-radius:8px;padding:8px 10px;text-align:center">' +
         '<div style="font-size:10px;color:#6c757d;font-weight:600;text-transform:uppercase;margin-bottom:3px">Remote</div>' +
         '<div style="font-size:13px;font-weight:700;color:#0d6efd">' + remoteSales + ' sales</div>' +
         '<div style="font-size:11px;color:#6c757d">' + remoteInv + ' items</div>' +
       '</div>' +
-      '<div style="background:#f8f9fa;border-radius:8px;padding:8px 10px;text-align:center">' +
+      '<div style="background:var(--surface2);border-radius:8px;padding:8px 10px;text-align:center">' +
         '<div style="font-size:10px;color:#6c757d;font-weight:600;text-transform:uppercase;margin-bottom:3px">Local (yours)</div>' +
         '<div style="font-size:13px;font-weight:700;color:#212529">' + localSales + ' sales</div>' +
         '<div style="font-size:11px;color:#6c757d">' + localInv + ' items</div>' +
       '</div>' +
     '</div>' +
-    '<div style="font-size:11.5px;color:#856404;background:#fff3cd;border-radius:6px;padding:7px 10px;margin-bottom:12px">' +
+    '<div style="font-size:11.5px;color:#856404;background:var(--warning-bg);border-radius:6px;padding:7px 10px;margin-bottom:12px">' +
       '&#9888; Syncing will <b>merge remote data</b> into your local copy. Your unsaved changes may be overwritten.' +
     '</div>' +
     '<div style="display:flex;gap:8px">' +
       '<button onclick="acceptFbSync()" style="flex:1;padding:9px;background:#0d6efd;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">&#10003; Accept &amp; Sync</button>' +
-      '<button onclick="dismissFbSync()" style="flex:1;padding:9px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">&#10005; Keep mine</button>' +
+      '<button onclick="dismissFbSync()" style="flex:1;padding:9px;background:var(--surface2);color:#495057;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">&#10005; Keep mine</button>' +
     '</div>';
   document.body.appendChild(popup);
   updateSyncStatus('pending');
@@ -1045,7 +1047,7 @@ function showFirebaseDiag() {
         '<span style="font-size:16px">❌</span>'+
         '<div><div style="font-size:12px;font-weight:700;color:#dc3545;text-transform:uppercase">Live read test — FAILED ('+ms+'ms)</div>'+
         '<div style="font-size:13px;color:#dc3545;margin-top:2px">'+JSON.stringify(err)+'</div>'+
-        '<div style="font-size:12px;color:#856404;margin-top:6px;background:#fff3cd;padding:6px 10px;border-radius:6px">'+hint+'</div>'+
+        '<div style="font-size:12px;color:#856404;margin-top:6px;background:var(--warning-bg);padding:6px 10px;border-radius:6px">'+hint+'</div>'+
         '</div></div>';
     } else {
       fbConnected = true;
@@ -1061,7 +1063,7 @@ function showFirebaseDiag() {
   });
 
   var diagHtml =
-    '<div style="background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
+    '<div style="background:var(--white);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
       '<div style="background:#343a40;padding:1rem 1.25rem;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center">'+
         '<div>'+
           '<div style="font-size:15px;font-weight:700;color:#fff">🔍 Firebase Diagnostics</div>'+
@@ -1073,7 +1075,7 @@ function showFirebaseDiag() {
       '<div style="padding:0 1.25rem 1rem;display:flex;gap:8px;flex-wrap:wrap">'+
         '<button onclick="fbConnected=false;startFirebaseListener();document.getElementById(\'fb-diag-overlay\').remove();" style="flex:1;padding:9px;background:#0d6efd;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🔄 Retry connection</button>'+
         '<button onclick="fbForceMigrate(this)" style="flex:1;padding:9px;background:#198754;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📤 Force Push Data</button>'+
-        '<button onclick="document.getElementById(\'fb-diag-overlay\').remove()" style="padding:9px 18px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
+        '<button onclick="document.getElementById(\'fb-diag-overlay\').remove()" style="padding:9px 18px;background:var(--surface2);color:#495057;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
       '</div>'+
     '</div>';
 
@@ -1580,17 +1582,17 @@ function buildClosingReport(){
       return '<div class="card" style="margin-bottom:1rem;border-left:4px solid #15803d">'+
         '<div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:10px">💰 Till / Cash in Hand</div>'+
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:10px">'+
-          '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center">'+
+          '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center">'+
             '<div style="font-size:11px;color:#666;margin-bottom:4px">Opening float</div>'+
             '<div style="font-size:16px;font-weight:700;color:#15803d">'+(openFloat>0?fmt(openFloat):'Not set')+'</div>'+
           '</div>'+
-          '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center">'+
+          '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center">'+
             '<div style="font-size:11px;color:#666;margin-bottom:4px">Cash sales today</div>'+
             '<div style="font-size:16px;font-weight:700;color:#15803d">'+fmt(cash)+'</div>'+
           '</div>'+
           '</div>'+
-          (cashExpToday>0?'<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Cash expenses out</div><div style="font-size:16px;font-weight:700;color:#dc2626">-'+fmt(cashExpToday)+'</div></div>':'')+
-          '<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:10px;text-align:center">'+
+          (cashExpToday>0?'<div style="background:var(--danger-bg);border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Cash expenses out</div><div style="font-size:16px;font-weight:700;color:#dc2626">-'+fmt(cashExpToday)+'</div></div>':'')+
+          '<div style="background:var(--primary-bg);border:1px solid #93c5fd;border-radius:8px;padding:10px;text-align:center">'+
             '<div style="font-size:11px;color:#666;margin-bottom:4px">Expected in till</div>'+
             '<div style="font-size:16px;font-weight:700;color:#1d4ed8">'+fmt(expectedCash)+'</div>'+
             '<div style="font-size:9px;color:#6b7280;margin-top:2px">'+(cashExpToday>0?'Float + Sales - Expenses':'Float + Cash sales')+'</div>'+
@@ -1601,7 +1603,7 @@ function buildClosingReport(){
               '<div style="font-size:16px;font-weight:700;color:'+(variance===0?'#15803d':variance>0?'#1d4ed8':'#c0392b')+'">'+fmt(closingCount)+'</div>'+
               '<div style="font-size:10px;color:'+(variance===0?'#15803d':variance>0?'#1d4ed8':'#c0392b')+';margin-top:2px">'+(variance===0?'\u2713 Balanced':variance>0?'+'+fmt(variance)+' over':fmt(Math.abs(variance))+' short')+'</div>'+
             '</div>':
-            '<div style="background:#fff8f0;border:1px dashed #fcd34d;border-radius:8px;padding:10px;text-align:center;cursor:pointer" onclick="recordClosingCount()">'+
+            '<div style="background:var(--warning-bg);border:1px dashed #fcd34d;border-radius:8px;padding:10px;text-align:center;cursor:pointer" onclick="recordClosingCount()">'+
               '<div style="font-size:11px;color:#92400e;margin-bottom:4px">Closing cash count</div>'+
               '<div style="font-size:13px;font-weight:600;color:#92400e">Click to count</div>'+
             '</div>')+
@@ -2000,7 +2002,7 @@ function buildSettings(){
     '<p style="font-size:13px;color:#666;margin-bottom:1rem">Export your data before editing the dashboard code. Import it after to restore everything.</p>'+
     '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:1rem">'+
       '<button class="btn primary" onclick="exportBackup()" style="display:flex;align-items:center;gap:6px;font-size:13px">&#11015; Export backup (.json)</button>'+
-      '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:8px 14px;border-radius:8px;border:1px solid #ccc;background:#fff;font-weight:500">'+
+      '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:8px 14px;border-radius:8px;border:1px solid #ccc;background:var(--white);font-weight:500">'+
         '&#11014; Import backup'+
         '<input type="file" accept=".json" onchange="importBackup(this.files[0])" style="display:none">'+
       '</label>'+
@@ -2307,7 +2309,7 @@ function renderApp(){
   if(low.length&&canDo('inventory'))bannerParts.push(low.length+' item(s) low/out of stock');
   if(noCostItems.length&&canDo('inventory'))bannerParts.push(noCostItems.length+' item(s) with no cost price (cannot be sold)');
   if(belowCostItems.length&&canDo('inventory'))bannerParts.push(belowCostItems.length+' item(s) selling below cost price');
-  var banner=bannerParts.length?'<div class="reminder-banner"><span>⚠️ <strong>Stock alert:</strong> '+bannerParts.join(' · ')+'</span><button class="btn sm" style="background:#fff;color:var(--danger);border-color:#f5c6cb" onclick="switchTab(\'inventory\')">View</button></div>':'';
+  var banner=bannerParts.length?'<div class="reminder-banner"><span>⚠️ <strong>Stock alert:</strong> '+bannerParts.join(' · ')+'</span><button class="btn sm" style="background:var(--white);color:var(--danger);border-color:#f5c6cb" onclick="switchTab(\'inventory\')">View</button></div>':'';
   var lowCount=low.length+noCostItems.length+belowCostItems.length;
 
   // ── Home Summary Cards ────────────────────────────────────────
@@ -2517,7 +2519,7 @@ function showTransferModal(direction){
           '<div style="font-size:13px;font-weight:600">'+i.name+'</div>'+
           '<div style="font-size:11px;color:var(--text3)">'+(i.cat||'No category')+' &nbsp;·&nbsp; Available: <b style="color:'+(disabled?'var(--danger)':'var(--success)')+'">'+i.qty+'</b></div>'+
         '</div>'+
-        '<input type="number" id="tr-qty-'+i.id+'" placeholder="0" min="0" max="'+i.qty+'" '+(disabled?'disabled title="No stock available"':'')+' style="width:70px;font-size:13px;text-align:center;border-radius:var(--radius-sm);border:1px solid var(--border);padding:5px;'+(disabled?'background:#f5f5f5;':'')+'">'+
+        '<input type="number" id="tr-qty-'+i.id+'" placeholder="0" min="0" max="'+i.qty+'" '+(disabled?'disabled title="No stock available"':'')+' style="width:70px;font-size:13px;text-align:center;border-radius:var(--radius-sm);border:1px solid var(--border);padding:5px;'+(disabled?'background:var(--surface2);':'')+'">'+
       '</div>';
     }).join('');
   }
@@ -2596,7 +2598,7 @@ function showAddWarehouseStockModal(){
           '<div style="position:relative;margin-top:4px">'+
             '<input type="text" id="wha-search" placeholder="Search inventory item..." oninput="filterWhaItems(this.value)" autocomplete="off" style="width:100%">'+
             '<input type="hidden" id="wha-item-id">'+
-            '<div id="wha-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);max-height:200px;overflow-y:auto;z-index:300;margin-top:2px"></div>'+
+            '<div id="wha-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);max-height:200px;overflow-y:auto;z-index:300;margin-top:2px"></div>'+
           '</div>'+
           '<div id="wha-item-info" style="font-size:11px;color:#666;margin-top:3px;min-height:14px"></div>'+
         '</div>'+
@@ -2629,7 +2631,7 @@ function filterWhaItems(term){
   if(!items.length){dd.innerHTML='<div style="padding:10px;font-size:12px;color:var(--text3);text-align:center">No items found</div>';dd.style.display='block';return;}
   dd.innerHTML=items.slice(0,50).map(function(i){
     var inWh=DB.warehouse.find(function(w){return w.id===i.id;});
-    return '<div onclick="selectWhaItem('+i.id+')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f3f5;display:flex;justify-content:space-between;align-items:center" onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'\'">'+
+    return '<div onclick="selectWhaItem('+i.id+')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f3f5;display:flex;justify-content:space-between;align-items:center" onmouseover="this.style.background=\'var(--primary-bg)\'" onmouseout="this.style.background=\'var(--white)\'">'+
       '<span><b>'+i.name+'</b>'+(i.cat?' <span style="font-size:10px;color:#888">'+i.cat+'</span>':'')+'</span>'+
       '<span style="font-size:11px;color:'+(inWh?'#15803d':'#6c757d')+';white-space:nowrap;margin-left:10px">'+(inWh?'In warehouse: '+inWh.qty:'Not in warehouse')+'</span>'+
     '</div>';
@@ -2935,7 +2937,7 @@ function showImportModal(){
 
   var html=
     '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:10px;box-sizing:border-box">'+
-    '<div style="background:#fff;border-radius:10px;width:320px;max-width:100%;box-shadow:0 4px 24px rgba(0,0,0,.4)">'+
+    '<div style="background:var(--white);border-radius:10px;width:320px;max-width:100%;box-shadow:0 4px 24px rgba(0,0,0,.4)">'+
 
     '<div style="background:#0d6efd;color:#fff;padding:12px 14px;border-radius:10px 10px 0 0;display:flex;justify-content:space-between;align-items:center">'+
       '<div><div style="font-size:14px;font-weight:700">Import from Excel / CSV</div>'+
@@ -2951,7 +2953,7 @@ function showImportModal(){
 
     '<div style="font-size:11px;font-weight:700;color:#0d6efd;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Step 2 — For existing items</div>'+
 
-    '<div style="margin-bottom:5px;border:1.5px solid #6ee7b7;border-radius:7px;background:#f0fdf4;padding:8px 10px;cursor:pointer" onclick="document.getElementById(\'im-skip\').checked=true">'+
+    '<div style="margin-bottom:5px;border:1.5px solid #6ee7b7;border-radius:7px;background:var(--success-bg);padding:8px 10px;cursor:pointer" onclick="document.getElementById(\'im-skip\').checked=true">'+
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">'+
         '<input type="radio" name="inv-import-mode" id="im-skip" value="skip" checked style="width:14px;height:14px;flex-shrink:0;cursor:pointer">'+
         '<div><span style="font-size:12px;font-weight:700;color:#065f46">Skip existing</span> <span style="background:#bbf7d0;color:#065f46;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px">SAFE ✓</span>'+
@@ -2959,7 +2961,7 @@ function showImportModal(){
       '</label>'+
     '</div>'+
 
-    '<div style="margin-bottom:5px;border:1.5px solid #93c5fd;border-radius:7px;background:#eff6ff;padding:8px 10px;cursor:pointer" onclick="document.getElementById(\'im-prices\').checked=true">'+
+    '<div style="margin-bottom:5px;border:1.5px solid #93c5fd;border-radius:7px;background:var(--primary-bg);padding:8px 10px;cursor:pointer" onclick="document.getElementById(\'im-prices\').checked=true">'+
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">'+
         '<input type="radio" name="inv-import-mode" id="im-prices" value="prices" style="width:14px;height:14px;flex-shrink:0;cursor:pointer">'+
         '<div><span style="font-size:12px;font-weight:700;color:#1d4ed8">Update prices only</span>'+
@@ -2967,10 +2969,10 @@ function showImportModal(){
       '</label>'+
     '</div>'+
 
-    '<div style="margin-bottom:12px;border:1.5px solid #fbbf24;border-radius:7px;background:#fffbeb;padding:8px 10px;cursor:pointer" onclick="document.getElementById(\'im-full\').checked=true">'+
+    '<div style="margin-bottom:12px;border:1.5px solid #fbbf24;border-radius:7px;background:var(--warning-bg);padding:8px 10px;cursor:pointer" onclick="document.getElementById(\'im-full\').checked=true">'+
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">'+
         '<input type="radio" name="inv-import-mode" id="im-full" value="full" style="width:14px;height:14px;flex-shrink:0;cursor:pointer">'+
-        '<div><span style="font-size:12px;font-weight:700;color:#92400e">Full update</span> <span style="background:#fee2e2;color:#991b1b;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px">⚠ Changes qty</span>'+
+        '<div><span style="font-size:12px;font-weight:700;color:#92400e">Full update</span> <span style="background:var(--danger-bg);color:#991b1b;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px">⚠ Changes qty</span>'+
         '<div style="font-size:10.5px;color:#555">Add new + overwrite all fields.</div></div>'+
       '</label>'+
     '</div>'+
@@ -3321,12 +3323,12 @@ function printStockCountSheet(){
     '<style>@page{size:A4;margin:12mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px}'+
     '.header{text-align:center;border-bottom:3px solid #c0392b;padding-bottom:8px;margin-bottom:10px}'+
     '.co{font-size:18px;font-weight:900;color:#c0392b}.sub{font-size:10px;color:#555;font-weight:700}'+
-    '.info{display:flex;justify-content:space-between;background:#f8f9fa;border:1px solid #dee2e6;border-radius:5px;padding:8px 12px;margin-bottom:10px;font-size:11px}'+
+    '.info{display:flex;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:8px 12px;margin-bottom:10px;font-size:11px}'+
     '.info-item{display:flex;flex-direction:column;gap:2px}.info-label{font-size:9px;text-transform:uppercase;color:#888;font-weight:700}'+
     '.info-val{font-weight:700;font-size:12px}'+
     'table{width:100%;border-collapse:collapse}'+
     'th{background:#c0392b;color:#fff;font-size:9px;padding:5px 8px;text-align:left;text-transform:uppercase}'+
-    'td{border:1px solid #dee2e6;padding:5px 8px;font-size:10px}'+
+    'td{border:1px solid var(--border);padding:5px 8px;font-size:10px}'+
     'tr:nth-child(even)td{background:#f8f9fa}'+
     '.sign-section{margin-top:20px;display:flex;gap:40px}'+
     '.sign-box{flex:1;border-top:1px solid #333;padding-top:4px;font-size:10px;color:#555}'+
@@ -3418,7 +3420,7 @@ function filterAdjItemDropdown(term){
   dd.innerHTML=filtered.slice(0,60).map(function(i){
     var stockColor=i.qty===0?'#dc3545':i.qty<=i.minQty?'#856404':'#198754';
     return '<div onclick="selectAdjItem('+i.id+')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f3f5;display:flex;justify-content:space-between;align-items:center" '+
-      'onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'\'">'+
+      'onmouseover="this.style.background=\'var(--primary-bg)\'" onmouseout="this.style.background=\'var(--white)\'">'+
       '<span><b>'+i.name+'</b>'+(i.cat?' <span style="font-size:10px;color:#888">· '+i.cat+'</span>':'')+'</span>'+
       '<span style="font-size:11px;font-weight:700;color:'+stockColor+';white-space:nowrap;margin-left:10px">'+i.qty+' in stock</span>'+
     '</div>';
@@ -3543,13 +3545,13 @@ function printStockCount(id){
     '<style>@page{size:A4;margin:12mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#222}'+
     '.header{text-align:center;border-bottom:3px solid #343a40;padding-bottom:10px;margin-bottom:14px}'+
     '.co{font-size:20px;font-weight:900;color:#343a40}.sub{font-size:10px;color:#555;margin-top:2px}'+
-    '.meta{display:flex;justify-content:space-between;background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:11px}'+
+    '.meta{display:flex;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-bottom:14px;font-size:11px}'+
     '.stats{display:flex;gap:12px;margin-bottom:14px}'+
-    '.stat{flex:1;border:1px solid #dee2e6;border-radius:6px;padding:8px;text-align:center}'+
+    '.stat{flex:1;border:1px solid var(--border);border-radius:6px;padding:8px;text-align:center}'+
     '.stat-val{font-size:20px;font-weight:700}.stat-lbl{font-size:9px;color:#666;text-transform:uppercase;margin-top:2px}'+
     'table{width:100%;border-collapse:collapse;margin-bottom:14px}'+
     'th{background:#343a40;color:#fff;font-size:9px;padding:5px 8px;text-align:left;text-transform:uppercase}'+
-    'td{border:1px solid #dee2e6;padding:4px 8px;font-size:10px}'+
+    'td{border:1px solid var(--border);padding:4px 8px;font-size:10px}'+
     'tr:nth-child(even){background:#f8f9fa}'+
     '.sec{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;color:#343a40;border-left:3px solid #0d6efd;padding-left:7px}'+
     '.footer{margin-top:16px;border-top:1px solid #dee2e6;padding-top:8px;font-size:9px;color:#888;display:flex;justify-content:space-between}'+
@@ -3664,7 +3666,7 @@ function buildStockMgmt(){
           '<label>Item</label>'+
           '<input type="text" id="adj-item-search" placeholder="Search item..." oninput="filterAdjItemDropdown(this.value)" onfocus="showAdjItemDropdown()" autocomplete="off" style="width:100%">'+
           '<input type="hidden" id="adj-item">'+
-          '<div id="adj-item-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);max-height:240px;overflow-y:auto;z-index:300;margin-top:2px"></div>'+
+          '<div id="adj-item-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);max-height:240px;overflow-y:auto;z-index:300;margin-top:2px"></div>'+
           '<div id="adj-item-display" style="font-size:11px;color:var(--text3);margin-top:3px;min-height:14px"></div>'+
         '</div>'+
         '<div class="form-group"><label>Type</label><select id="adj-type"><option value="add">Add stock</option><option value="remove">Remove stock</option></select></div>'+
@@ -3676,7 +3678,7 @@ function buildStockMgmt(){
         '<p class="sec-title" style="margin:0">Adjustment log ('+filteredAdj.length+' of '+DB.adjLog.length+')</p>'+
         '<button class="btn sm" onclick="clearAdjFilters()" style="font-size:11px">Clear filters</button>'+
       '</div>'+
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;background:#f8f9fa;border:1px solid var(--border);border-radius:8px;padding:10px">'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px">'+
         '<div class="form-group" style="margin:0;flex:1;min-width:160px">'+
           '<label style="font-size:11px">Search item</label>'+
           '<input type="text" id="adj-search-input" placeholder="Search item name..." value="'+adjSearch+'" oninput="window._adjSearch=this.value;renderPanel()" style="width:100%;font-size:13px">'+
@@ -3789,27 +3791,27 @@ function buildMessagingPanel(){
   if(msgChannel==='twilio'){
     var ok=getTwilioAuthToken()&&getTwilioAccountSid();
     credSection=!ok?
-      '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:1rem">'+
+      '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:1rem">'+
         '<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">⚙️ Twilio credentials required</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">'+
           '<div><label style="font-size:11px">Account SID</label><input type="text" id="twilio-sid-input" placeholder="ACxxxxxxxxx" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>'+
           '<div><label style="font-size:11px">Auth Token</label><input type="password" id="twilio-token-input" placeholder="Auth token..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>'+
           '<button onclick="saveTwilioCreds()" style="padding:8px 14px;background:#1a237e;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Save</button>'+
         '</div></div>':
-      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
+      '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
         '✅ WhatsApp (Twilio) connected — +2347055693109 (egreatchidelectro)'+
         (noPhone.length?' | <span style="color:#92400e">⚠ '+noPhone.length+' without phone</span>':'')+
         ' <button onclick="clearTwilioCreds()" style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;text-decoration:underline">Change</button></div>';
   } else {
     var ok2=getTermiiApiKey();
     credSection=!ok2?
-      '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:1rem">'+
+      '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:1rem">'+
         '<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">⚙️ Termii API Key required</div>'+
         '<div style="display:flex;gap:8px">'+
           '<input type="text" id="termii-key-input" placeholder="Paste API key..." style="flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">'+
           '<button onclick="saveTermiiKey()" style="padding:8px 14px;background:#1a237e;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Save</button>'+
         '</div></div>':
-      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
+      '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
         '✅ SMS (Termii) connected'+
         (noPhone.length?' | <span style="color:#92400e">⚠ '+noPhone.length+' without phone</span>':'')+
         ' <button onclick="clearTermiiKey()" style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;text-decoration:underline">Change</button></div>';
@@ -3821,17 +3823,17 @@ function buildMessagingPanel(){
 
   return '<p class="sec-title">📲 Customer Messaging</p>'+
     channelToggle+credSection+
-    '<p style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">1. Choose a message template</p>'+
+    '<p style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin-bottom:8px">1. Choose a message template</p>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+tplBtns+'</div>'+
     '<div class="form-group" style="margin-bottom:1rem">'+
       '<label style="font-size:12px">Message &nbsp;<span style="font-weight:400;color:#6b7280">({name} = customer name, {balance} = balance)</span></label>'+
       '<textarea id="msg-text" rows="5" style="width:100%;padding:10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;resize:vertical;font-family:inherit" placeholder="Type your message here...">'+MSG_TEMPLATES[msgTemplateKey].text+'</textarea>'+
     '</div>'+
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
-      '<p style="font-size:12px;font-weight:700;color:#374151;margin:0">2. Select recipients</p>'+
-      '<button onclick="msgSelectAll()" style="padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:11px;cursor:pointer">Select all</button>'+
-      '<button onclick="msgSelectNone()" style="padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;font-size:11px;cursor:pointer">Clear</button>'+
-      '<button onclick="msgSelectCredit()" style="padding:5px 10px;border-radius:6px;border:1px solid #fcd34d;background:#fff8f0;font-size:11px;cursor:pointer;color:#92400e">Credit customers only</button>'+
+      '<p style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin:0">2. Select recipients</p>'+
+      '<button onclick="msgSelectAll()" style="padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;background:var(--white);font-size:11px;cursor:pointer">Select all</button>'+
+      '<button onclick="msgSelectNone()" style="padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;background:var(--white);font-size:11px;cursor:pointer">Clear</button>'+
+      '<button onclick="msgSelectCredit()" style="padding:5px 10px;border-radius:6px;border:1px solid #fcd34d;background:var(--warning-bg);font-size:11px;cursor:pointer;color:#92400e">Credit customers only</button>'+
       '<span id="msg-sel-count" style="font-size:11px;color:#6b7280">'+msgSelectedCusts.length+' selected</span>'+
     '</div>'+
     (custs.length?'<div class="tbl-wrap" style="max-height:280px;overflow-y:auto;margin-bottom:1rem"><table><thead><tr><th style="width:36px"></th><th>Name</th><th>Phone</th><th>Business</th><th>Balance</th></tr></thead><tbody>'+custRows+'</tbody></table></div>':'<div class="empty">No customers with phone numbers found.</div>')+
@@ -4185,9 +4187,9 @@ function buildCustomers(){
         }())+
         '</div>'+
         creditBar+
-        (cust.notes?'<div style="margin-top:8px;padding:8px 10px;background:#f9f9f9;border-radius:8px;font-size:13px;color:#666">'+cust.notes+'</div>':'')+
+        (cust.notes?'<div style="margin-top:8px;padding:8px 10px;background:var(--white);border-radius:8px;font-size:13px;color:#666">'+cust.notes+'</div>':'')+
         '</div>'+
-        (theyOweUs?'<div style="background:#fff5f5;border:2px solid #fca5a5;border-radius:10px;padding:14px 16px;margin-top:1rem">'+
+        (theyOweUs?'<div style="background:var(--danger-bg);border:2px solid #fca5a5;border-radius:10px;padding:14px 16px;margin-top:1rem">'+
           '<div style="font-size:13px;font-weight:700;color:#dc2626;margin-bottom:10px">💳 Record credit payment — owes '+fmt(creditBalance)+'</div>'+
           '<div class="fg" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr auto">'+
             '<div class="form-group"><label>Amount paid (₦)</label><input type="number" id="cp-amt-'+cust.id+'" placeholder="0" min="0" max="'+creditBalance+'"></div>'+
@@ -4268,7 +4270,7 @@ function buildCustomers(){
               '</tr>';
             }).join('');
             return '<div style="margin-top:14px;border-top:2px solid #e5e7eb;padding-top:12px">'+
-              '<div style="font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">📋 Account statement — payments & balance history</div>'+
+              '<div style="font-size:12px;font-weight:700;color:var(--text1,#374151);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">📋 Account statement — payments & balance history</div>'+
               '<div class="tbl-wrap"><table><thead><tr>'+
                 '<th>Date</th><th>Description</th><th>Amount</th><th>Mode</th><th>Balance</th><th>By</th>'+
               '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
@@ -4301,8 +4303,8 @@ function buildCustomers(){
             if(e.type==='earned')running+=e.amount;
             else running-=e.amount;
             var typeBadge=e.type==='earned'
-              ?'<span style="background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">EARNED</span>'
-              :'<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">PAID OUT</span>';
+              ?'<span style="background:var(--warning-bg);color:#92400e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">EARNED</span>'
+              :'<span style="background:var(--danger-bg);color:#dc2626;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">PAID OUT</span>';
             var amtCell=e.type==='earned'
               ?'<td style="text-align:right;color:#92400e;font-weight:700">+ '+fmt(e.amount)+'</td>'
               :'<td style="text-align:right;color:#dc2626;font-weight:700">− '+fmt(e.amount)+'</td>';
@@ -4335,7 +4337,7 @@ function buildCustomers(){
             '<th style="text-align:right">Amount</th><th style="text-align:right">Running Balance</th>'+
             '<th>Type</th><th>Note</th><th>By</th>'+
           '</tr></thead><tbody>'+rows+'</tbody>'+
-          '<tfoot><tr style="background:#fef9c3;font-weight:700">'+
+          '<tfoot><tr style="background:var(--warning-bg);font-weight:700">'+
             '<td colspan="3">TOTALS</td>'+
             '<td style="text-align:right;color:#92400e">+ '+fmt(commEarned)+' earned</td>'+
             '<td style="text-align:right;color:'+(commBal>0?'#92400e':'#15803d')+'">'+fmt(commBal)+' due</td>'+
@@ -4351,9 +4353,9 @@ function buildCustomers(){
           var cashRefunds=custReturns.filter(function(r){return r.refundType==='cash';}).reduce(function(a,r){return a+(r.refundAmt||0);},0);
           var storeCredit=custReturns.filter(function(r){return r.refundType==='credit'||r.refundType==='exchange';}).reduce(function(a,r){return a+(r.refundAmt||0);},0);
           var retTypeBadge={
-            cash:'<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CASH REFUND</span>',
-            credit:'<span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">STORE CREDIT</span>',
-            exchange:'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXCHANGE</span>'
+            cash:'<span style="background:var(--success-bg);color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CASH REFUND</span>',
+            credit:'<span style="background:var(--primary-bg);color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">STORE CREDIT</span>',
+            exchange:'<span style="background:var(--warning-bg);color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXCHANGE</span>'
           };
           var retRows=custReturns.map(function(r){
             return '<tr>'+
@@ -4549,11 +4551,11 @@ function showPrintChoiceModal(custName, outstandingBal, prevInvTotal, grandTotal
     ?'Previous balance: &nbsp;'+fmt(prevInvTotal)+'<br>This invoice: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'+fmt(grandTotal)+'<br><hr style="margin:6px 0;border-color:#e5e7eb"><b>Total outstanding: '+fmt(outstandingBal)+'</b>'
     :'This invoice: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'+fmt(grandTotal)+'<br><hr style="margin:6px 0;border-color:#e5e7eb"><b>Total outstanding: '+fmt(outstandingBal)+'</b>';
   overlay.innerHTML=
-    '<div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);text-align:center">'+
+    '<div style="background:var(--white);border-radius:14px;padding:28px 24px;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);text-align:center">'+
       '<div style="font-size:28px;margin-bottom:8px">🖨️</div>'+
-      '<div style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:6px">Print options</div>'+
+      '<div style="font-size:16px;font-weight:700;color:var(--text1,#1e293b);margin-bottom:6px">Print options</div>'+
       '<div style="font-size:13px;color:#64748b;margin-bottom:12px">'+custName+' has an outstanding balance.</div>'+
-      '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;text-align:left;margin-bottom:18px;line-height:1.9">'+detailLines+'</div>'+
+      '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;text-align:left;margin-bottom:18px;line-height:1.9">'+detailLines+'</div>'+
       '<div style="display:flex;flex-direction:column;gap:10px">'+
         '<button id="pco-with-bal" style="padding:11px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Print with outstanding balance</button>'+
         '<button id="pco-inv-only" style="padding:11px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Print current invoice only</button>'+
@@ -4655,7 +4657,7 @@ function printCustomerInvoice(invNum,custId){
   if(!invSales.length){alert('Invoice not found.');return;}
   var s0=invSales[0];
   var d=new Date(s0.date);var day=isNaN(d.getTime())?new Date().getDate():d.getDate();var mon=isNaN(d.getTime())?new Date().getMonth()+1:d.getMonth()+1;var yr=isNaN(d.getTime())?new Date().getFullYear():d.getFullYear();
-  var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+s.name+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:#fff5f5;color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
+  var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+s.name+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var emptyRows='';var minRI=Math.max(12,invSales.length);for(var i=invSales.length;i<minRI;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
   // Date-aware: only count invoices/payments that existed at the time of this invoice
@@ -4794,7 +4796,7 @@ function buildInvoiceHTML(inv){
           '</div>'+
           // If overpayment was applied to outstanding balance, show new outstanding
           (partOverpay>0&&(inv.outstandingBal||0)>0?
-            '<div style="padding:4px 8px;background:#fff8f0;border-bottom:1px solid #eee">'+
+            '<div style="padding:4px 8px;background:var(--warning-bg);border-bottom:1px solid #eee">'+
               '<div class="pay-label" style="color:#92400e">Outstanding balance after overpayment</div>'+
               '<div class="pay-val" style="color:'+(newOutstanding>0?'#c0392b':'#15803d')+'">'+(newOutstanding>0?fmt(newOutstanding):'Cleared ✓')+'</div>'+
             '</div>'
@@ -4802,7 +4804,7 @@ function buildInvoiceHTML(inv){
         '</div>'
       :'')+
       (inv.invoiceDiscAmt>0?
-        '<div style="padding:4px 8px;background:#fff5f5;border-bottom:1px solid #ccc">'+
+        '<div style="padding:4px 8px;background:var(--danger-bg);border-bottom:1px solid #ccc">'+
           '<div class="pay-label" style="color:#c0392b">Discount given</div>'+
           '<div class="pay-val" style="color:#c0392b">- '+fmt(inv.invoiceDiscAmt)+'</div>'+
         '</div>':'')+
@@ -4811,9 +4813,9 @@ function buildInvoiceHTML(inv){
         '<div class="pay-val">'+inv.seller+'</div>'+
       '</div>'+
     '</div>'+
-    (inv.hasPendingItems?'<div style="margin:4px 0 6px;background:#fff3cd;border:1.5px solid #ffc107;border-radius:5px;padding:6px 10px;font-size:9px;color:#856404">'+
+    (inv.hasPendingItems?'<div style="margin:4px 0 6px;background:var(--warning-bg);border:1.5px solid #ffc107;border-radius:5px;padding:6px 10px;font-size:9px;color:#856404">'+
     '<b>&#9200; PENDING SUPPLY:</b> Some items are pending supply due to insufficient stock. They will be delivered when stock is available. Retain this invoice as proof of payment.</div>':'')+
-    '<div style="margin-top:8px;border:1px solid #ddd;border-radius:5px;padding:7px 10px;background:#fafafa;font-size:8.5px;color:#444;line-height:1.6">'+
+    '<div style="margin-top:8px;border:1px solid #ddd;border-radius:5px;padding:7px 10px;background:var(--white);font-size:8.5px;color:#444;line-height:1.6">'+
     '<b style="color:#c0392b">Examine well and receive the above goods in good condition.</b> No refund of money or exchange after payment.'+
     '<div style="color:#c0392b;font-style:italic;margin-top:2px">...thanks for your patronage</div>'+
     '</div>'+
@@ -4904,7 +4906,7 @@ function buildInvoiceHTML(inv){
     '<tr class="tr"><td colspan="4" style="text-align:right;font-size:10px">'+(inv.invoiceDiscAmt>0?'NET TOTAL':'TOTAL')+'</td><td colspan="2" class="right">'+fmt(inv.grandTotal)+'</td></tr>'+
     (inv.outstandingBal>0?
       (inv.prevInvTotal>0?'<tr style="background:#fff8f0"><td colspan="4" style="text-align:right;font-size:9px;color:#92400e;font-weight:600">PREVIOUS BALANCE</td><td colspan="2" class="right" style="font-size:10px;color:#92400e">'+fmt(inv.prevInvTotal)+'</td></tr>':'')+
-      '<tr style="background:#fff0f0;border-top:2px solid #c0392b"><td colspan="4" style="text-align:right;font-size:10px;color:#c0392b;font-weight:800">TOTAL OUTSTANDING</td><td colspan="2" class="right" style="font-size:12px;color:#c0392b;font-weight:900">'+fmt(inv.outstandingBal)+'</td></tr>'
+      '<tr style="background:var(--danger-bg);border-top:2px solid #c0392b"><td colspan="4" style="text-align:right;font-size:10px;color:#c0392b;font-weight:800">TOTAL OUTSTANDING</td><td colspan="2" class="right" style="font-size:12px;color:#c0392b;font-weight:900">'+fmt(inv.outstandingBal)+'</td></tr>'
     :'')+
     '</tbody></table>'+
     footerHTML+
@@ -4941,7 +4943,7 @@ function printCustomerReport(custId){
     '.tb{background:#1a237e;color:#fff;display:inline-block;padding:3px 18px;border-radius:15px;font-size:11px;font-weight:700;margin:5px 0}'+
     'table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#1a237e;color:#fff;font-size:9px;padding:4px 6px;text-align:left}'+
     'td{border:1px solid #ddd;padding:3px 6px;font-size:10px}tr:nth-child(even) td{background:#fafafa}'+
-    '.tr td{font-weight:700;background:#f5f5f5;border-top:2px solid #1a237e}'+
+    '.tr td{font-weight:700;background:var(--surface2);border-top:2px solid #1a237e}'+
     '<\/style></head><body>'+
     '<div class="h">'+
       '<div class="logo-wrap">'+
@@ -4969,8 +4971,8 @@ function printCustomerReport(custId){
         '<div class="tb">CUSTOMER STATEMENT</div>'+
       '</div>'+
     '</div>'+
-    '<div style="background:#f9f9f9;border:1px solid #e0e0e0;border-radius:6px;padding:10px;margin-bottom:8px;font-size:11px;color:#555">Printed: '+new Date().toLocaleString()+'</div>'+
-    '<div style="background:#f9f9f9;border:1px solid #e0e0e0;border-radius:6px;padding:10px;margin-bottom:12px;font-size:11px">'+
+    '<div style="background:var(--white);border:1px solid #e0e0e0;border-radius:6px;padding:10px;margin-bottom:8px;font-size:11px;color:#555">Printed: '+new Date().toLocaleString()+'</div>'+
+    '<div style="background:var(--white);border:1px solid #e0e0e0;border-radius:6px;padding:10px;margin-bottom:12px;font-size:11px">'+
     '<b>'+cust.name+'</b>'+(cust.biz?' | '+cust.biz:'')+' | '+(cust.phone||'No phone')+(cust.address?' | '+cust.address:'')+
     '<br>Total purchases: '+invKeys.length+' invoices | Total spent: '+fmt(grandTotal)+' | Credit owed: '+fmt(cust.creditBalance||0)+' | Deposit balance: <b style="color:#1a6b3a">'+fmt(depositTotal)+'</b>'+
     '</div>'+
@@ -5050,7 +5052,7 @@ function buildInvItemDropdownItems(filter){
     var stockColor=i.qty===0?'#dc2626':i.qty<=i.minQty?'#d97706':'#16a34a';
     var stockBg=i.qty===0?'#fff0f0':i.qty<=i.minQty?'#fffbeb':'#f0fdf4';
     var stockLabel=i.qty===0?'Out of stock':i.qty<=i.minQty?'Low: '+i.qty+' left':'In stock: '+i.qty;
-    return '<div data-iid="'+i.id+'" data-iname="'+i.name.replace(/"/g,'&quot;')+'" class="inv-dd-row" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
+    return '<div data-iid="'+i.id+'" data-iname="'+i.name.replace(/"/g,'&quot;')+'" class="inv-dd-row" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">'+
       '<div style="flex:1;min-width:0">'+
         '<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.name+'</div>'+
         '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(i.cat||'Uncategorised')+'</div>'+
@@ -5061,7 +5063,7 @@ function buildInvItemDropdownItems(filter){
       '</div>'+
     '</div>';
   }).join('')+
-  '<div data-iid="__new__" data-iname="" class="inv-dd-row" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--primary);font-weight:600;border-top:2px solid var(--border)" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">➕ Add new item...</div>';
+  '<div data-iid="__new__" data-iname="" class="inv-dd-row" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--primary);font-weight:600;border-top:2px solid var(--border)" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">➕ Add new item...</div>';
   // Attach click via JS to handle names with quotes or special chars
   var ddEl=document.getElementById('inv-item-dropdown');
   if(ddEl)ddEl.querySelectorAll('.inv-dd-row').forEach(function(el){
@@ -5109,12 +5111,12 @@ function buildPurchaseItemDropdownItems(filter){
     return !term||i.name.toLowerCase().indexOf(term)>-1||(i.cat||'').toLowerCase().indexOf(term)>-1;
   });
   dd.innerHTML=items.map(function(i){
-    return '<div data-id="'+i.id+'" data-name="'+i.name.replace(/"/g,'&quot;')+'" class="pi-dd-item" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
+    return '<div data-id="'+i.id+'" data-name="'+i.name.replace(/"/g,'&quot;')+'" class="pi-dd-item" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">'+
       '<div style="font-weight:600">'+i.name+'</div>'+
       '<div style="font-size:11px;color:var(--text3);margin-top:1px">'+(i.cat||'-')+' · Stock: '+i.qty+'</div>'+
     '</div>';
   }).join('')+
-  '<div data-id="__new__" data-name="" class="pi-dd-item" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--primary);font-weight:600;border-top:2px solid var(--border)" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">&#10133; Create new item...</div>';
+  '<div data-id="__new__" data-name="" class="pi-dd-item" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--primary);font-weight:600;border-top:2px solid var(--border)" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">&#10133; Create new item...</div>';
   // Attach click via JS to avoid inline quote-escaping issues with item names containing " or '
   dd.querySelectorAll('.pi-dd-item').forEach(function(el){
     el.addEventListener('click',function(){
@@ -5174,7 +5176,7 @@ function filterSupDd(val, showAll){
   if(!matches.length){dd.style.display='none';return;}
   dd.innerHTML=matches.map(function(s){
     var badge=s.owedToSupplier>0?'<span style="color:#dc2626;font-size:10px;margin-left:6px">owes '+fmt(s.owedToSupplier)+'</span>':'';
-    return '<div onclick="selectSupDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'"><b>'+s.name+'</b>'+badge+'<div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
+    return '<div onclick="selectSupDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'"><b>'+s.name+'</b>'+badge+'<div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
   }).join('');
   dd.style.display='block';
 }
@@ -5195,9 +5197,9 @@ function filterSupPayDd(val, showAll){
   var suppliers=DB.suppliers||[];
   var q=(val||'').toLowerCase().trim();
   var matches=showAll&&!q?suppliers:suppliers.filter(function(s){return s.name.toLowerCase().indexOf(q)>=0;});
-  var allOpt='<div onclick="selectSupPayDd(\'\',\'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;color:#6b7280" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'">All Suppliers</div>';
+  var allOpt='<div onclick="selectSupPayDd(\'\',\'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;color:#6b7280" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">All Suppliers</div>';
   dd.innerHTML=allOpt+matches.map(function(s){
-    return '<div onclick="selectSupPayDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'"><b>'+s.name+'</b><div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
+    return '<div onclick="selectSupPayDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'"><b>'+s.name+'</b><div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
   }).join('');
   dd.style.display='block';
 }
@@ -5225,9 +5227,9 @@ function saleCustSearch(val, showAll){
     var depBal=(DB.deposits||[]).filter(function(d){return String(d.custId)==String(c.id);}).reduce(function(a,d){return a+d.amount;},0);
     var creditAvail=c.creditLimit>0?Math.max(0,c.creditLimit-(c.creditBalance||0)):0;
     var badge='';
-    if(depBal>0)badge='<span style="font-size:10px;background:#f0fdf4;color:#15803d;padding:1px 5px;border-radius:3px;margin-left:4px">Dep: '+fmt(depBal)+'</span>';
-    else if(creditAvail>0)badge='<span style="font-size:10px;background:#eff6ff;color:#1d4ed8;padding:1px 5px;border-radius:3px;margin-left:4px">Avail: '+fmt(creditAvail)+'</span>';
-    else if((c.creditBalance||0)>0)badge='<span style="font-size:10px;background:#fef2f2;color:#dc2626;padding:1px 5px;border-radius:3px;margin-left:4px">Owes: '+fmt(c.creditBalance)+'</span>';
+    if(depBal>0)badge='<span style="font-size:10px;background:var(--success-bg);color:#15803d;padding:1px 5px;border-radius:3px;margin-left:4px">Dep: '+fmt(depBal)+'</span>';
+    else if(creditAvail>0)badge='<span style="font-size:10px;background:var(--primary-bg);color:#1d4ed8;padding:1px 5px;border-radius:3px;margin-left:4px">Avail: '+fmt(creditAvail)+'</span>';
+    else if((c.creditBalance||0)>0)badge='<span style="font-size:10px;background:var(--danger-bg);color:#dc2626;padding:1px 5px;border-radius:3px;margin-left:4px">Owes: '+fmt(c.creditBalance)+'</span>';
     var safeName=c.name.replace(/'/g,"\'").replace(/"/g,'&quot;');
     return '<div onmousedown="event.preventDefault();saleCustSelect(\''+c.id+'\',\''+safeName+'\')"'+
       ' style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;background:var(--white);color:var(--text1)"'+
@@ -5263,7 +5265,7 @@ function onSaleCustChange(custId){
   if(depBal<=0){
     el.innerHTML='';
   } else {
-    el.innerHTML='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;margin-top:6px;font-size:13px;color:#15803d;font-weight:600">'+
+    el.innerHTML='<div style="background:var(--success-bg);border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;margin-top:6px;font-size:13px;color:#15803d;font-weight:600">'+
       '&#128176; Deposit balance: '+fmt(depBal)+' — will be auto-applied to this invoice</div>';
   }
   // Update the deposit option in the payment dropdown
@@ -5447,7 +5449,7 @@ function showDepositTopupDialog(cust,depBal,invoiceTotal,shortfall,creditLimit,c
   var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
   var creditOpt=creditLimit>0&&availableCredit>=shortfall?'<option value="credit">Add to credit balance</option>':'';
   overlay.innerHTML=
-    '<div style="background:#fff;border-radius:14px;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden">'+
+    '<div style="background:var(--white);border-radius:14px;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden">'+
       '<div style="background:#f59e0b;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
         '<div>'+
           '<div style="font-size:15px;font-weight:800;color:#fff">Deposit Shortfall</div>'+
@@ -5457,11 +5459,11 @@ function showDepositTopupDialog(cust,depBal,invoiceTotal,shortfall,creditLimit,c
       '</div>'+
       '<div style="padding:16px 18px">'+
         '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">'+
-          '<div style="background:#f0f9ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Invoice Total</div><div style="font-size:15px;font-weight:800;color:#111">'+fmt(invoiceTotal)+'</div></div>'+
-          '<div style="background:#f0fdf4;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Deposit Available</div><div style="font-size:15px;font-weight:800;color:#15803d">'+fmt(depBal)+'</div></div>'+
-          '<div style="background:#fef2f2;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Balance Needed</div><div style="font-size:15px;font-weight:800;color:#dc2626">'+fmt(shortfall)+'</div></div>'+
+          '<div style="background:var(--primary-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Invoice Total</div><div style="font-size:15px;font-weight:800;color:#111">'+fmt(invoiceTotal)+'</div></div>'+
+          '<div style="background:var(--success-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Deposit Available</div><div style="font-size:15px;font-weight:800;color:#15803d">'+fmt(depBal)+'</div></div>'+
+          '<div style="background:var(--danger-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Balance Needed</div><div style="font-size:15px;font-weight:800;color:#dc2626">'+fmt(shortfall)+'</div></div>'+
         '</div>'+
-        '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px">How will the customer pay the balance of '+fmt(shortfall)+'?</div>'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin-bottom:10px">How will the customer pay the balance of '+fmt(shortfall)+'?</div>'+
         '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">'+
           '<select id="dep-topup-mode" onchange="depTopupModeChange()" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:600">'+
             '<option value="cash">Cash</option>'+
@@ -5474,7 +5476,7 @@ function showDepositTopupDialog(cust,depBal,invoiceTotal,shortfall,creditLimit,c
         '</div>'+
         '<div style="display:flex;gap:8px">'+
           '<button onclick="confirmDepositTopup()" style="flex:1;padding:11px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#10003; Complete Sale</button>'+
-          '<button onclick="document.getElementById(\'dep-topup-overlay\').remove()" style="padding:11px 16px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+          '<button onclick="document.getElementById(\'dep-topup-overlay\').remove()" style="padding:11px 16px;background:var(--surface2);color:var(--text1,#374151);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
         '</div>'+
       '</div>'+
     '</div>';
@@ -5920,7 +5922,7 @@ function printInvoice(inv){
       ?'<span style="color:#16a34a;font-weight:700">'+suppliedQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pendingQty+' pending</span>'
       :''+l.qty;
     return '<tr><td class="center">'+(i+1)+'</td><td>'+l.name+'</td><td class="center">'+qtyCell+'</td><td class="right">'+fmt(l.price)+'</td>'+
-           '<td class="right" style="background:#fff5f5;color:#c0392b">'+(l.discAmt>0?'-'+fmt(l.discAmt):'')+'</td>'+
+           '<td class="right" style="background:var(--danger-bg);color:#c0392b">'+(l.discAmt>0?'-'+fmt(l.discAmt):'')+'</td>'+
            '<td class="right"><b>'+fmt(l.total)+'</b></td></tr>';
   }).join('');
   var minRows=Math.max(12,inv.items.length);
@@ -5986,7 +5988,7 @@ function doPrint(mode, inv) {
       var pendingQty=l.pendingQty!==undefined?l.pendingQty:0;
       var qtyCell=hasPartial?'<span style="color:#16a34a;font-weight:700">'+suppliedQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pendingQty+' pending</span>':''+l.qty;
       return '<tr><td class="center">'+(i+1)+'</td><td>'+l.name+'</td><td class="center">'+qtyCell+'</td><td class="right">'+fmt(l.price)+'</td>'+
-             '<td class="right" style="background:#fff5f5;color:#c0392b">'+(l.discAmt>0?'-'+fmt(l.discAmt):'')+'</td>'+
+             '<td class="right" style="background:var(--danger-bg);color:#c0392b">'+(l.discAmt>0?'-'+fmt(l.discAmt):'')+'</td>'+
              '<td class="right"><b>'+fmt(l.total)+'</b></td></tr>';
     }).join('');
     var minRows=Math.max(12,inv.items.length);
@@ -6136,7 +6138,7 @@ function printSaleLedger(){
     '.company{font-size:18px;font-weight:900;color:#c0392b}.sub{font-size:9px;color:#1a237e;font-weight:700}'+
     '.title{font-size:14px;font-weight:700;margin:6px 0;color:#333}'+
     'table{width:100%;border-collapse:collapse}th{background:#c0392b;color:#fff;font-size:9px;padding:4px 6px;text-align:left}td{border:1px solid #ddd;padding:3px 6px;font-size:10px}'+
-    'tr:nth-child(even)td{background:#fafafa}.total-row td{font-weight:700;background:#f5f5f5;border-top:2px solid #c0392b}'+
+    'tr:nth-child(even)td{background:#fafafa}.total-row td{font-weight:700;background:var(--surface2);border-top:2px solid #c0392b}'+
     '<\/style></head><body>'+
     '<div class="header"><div class="company">GREAT CHID ELECTRO (NIG.)</div><div class="sub">Sales Report  -  Printed '+new Date().toLocaleString()+'</div></div>'+
     '<div class="title">Sales — '+periodLabel+'</div>'+
@@ -6445,12 +6447,12 @@ function showReturnModal(invoiceId){
       '</div>'+
       // Exchange section — built from inventory
       '<div id="ret-exchange-section" style="display:none;margin-top:8px">'+
-        '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;margin-bottom:10px">'+
+        '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:8px;padding:12px;margin-bottom:10px">'+
           '<div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:8px">🔄 Exchange Goods</div>'+
           '<div style="font-size:11px;color:#166534;margin-bottom:10px">Select items the customer is taking in exchange. Total exchange value must not exceed the returned value.</div>'+
           '<div id="ret-exch-items"></div>'+
           '<button onclick="retAddExchangeRow()" style="margin-top:8px;padding:5px 12px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">+ Add item</button>'+
-          '<div style="margin-top:10px;padding:8px;background:#fff;border-radius:6px;border:1px solid #86efac">'+
+          '<div style="margin-top:10px;padding:8px;background:var(--white);border-radius:6px;border:1px solid #86efac">'+
             '<div style="display:flex;justify-content:space-between;font-size:12px">'+
               '<span style="color:#374151">Return value:</span><span id="ret-exch-return-val" style="font-weight:700;color:#dc2626">₦0</span>'+
             '</div>'+
@@ -6504,7 +6506,7 @@ function retAddExchangeRow(){
   var row=document.createElement('div');
   row.id=rowId;
   row.setAttribute('data-itemid','');
-  row.style.cssText='margin-bottom:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px';
+  row.style.cssText='margin-bottom:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px';
   row.innerHTML=
     '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">'+
       '<div style="flex:1;position:relative">'+
@@ -6515,9 +6517,9 @@ function retAddExchangeRow(){
           ' style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;box-sizing:border-box">'+
         '<div id="'+rowId+'-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--white);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.25);z-index:9999;max-height:180px;overflow-y:auto;margin-top:2px"></div>'+
       '</div>'+
-      '<button onclick="var r=document.getElementById(\''+rowId+'\');if(r){r.remove();retUpdateExchangeTotal();}" style="padding:4px 8px;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;font-size:14px;cursor:pointer;font-weight:700;flex-shrink:0">&times;</button>'+
+      '<button onclick="var r=document.getElementById(\''+rowId+'\');if(r){r.remove();retUpdateExchangeTotal();}" style="padding:4px 8px;background:var(--danger-bg);color:#dc2626;border:none;border-radius:5px;font-size:14px;cursor:pointer;font-weight:700;flex-shrink:0">&times;</button>'+
     '</div>'+
-    '<div id="'+rowId+'-selected" style="display:none;font-size:11px;color:#15803d;font-weight:600;margin-bottom:6px;padding:4px 8px;background:#f0fdf4;border-radius:4px"></div>'+
+    '<div id="'+rowId+'-selected" style="display:none;font-size:11px;color:#15803d;font-weight:600;margin-bottom:6px;padding:4px 8px;background:var(--success-bg);border-radius:4px"></div>'+
     '<div style="display:flex;gap:6px;align-items:center">'+
       '<div style="flex:1;font-size:11px;color:#6b7280">Qty:</div>'+
       '<input type="number" id="'+rowId+'-qty" min="1" value="1" placeholder="Qty" oninput="retUpdateExchangeTotal()" style="width:70px;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;text-align:center">'+
@@ -6542,7 +6544,7 @@ function retExchSearch(inp, rowId, showAll){
     var safeName=i.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
     return '<div onmousedown="event.preventDefault();retExchSelectItem(\''+rowId+'\','+i.id+',\''+safeName+'\','+i.sell+','+i.qty+')"'+
       ' style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px"'+
-      ' onmouseover="this.style.background=\'#f0fdf4\'" onmouseout="this.style.background=\'\'">'+
+      ' onmouseover="this.style.background=\'#f0fdf4\'" onmouseout="this.style.background=\'var(--white)\'">'+
       '<div>'+
         '<div style="font-weight:600;color:#111">'+i.name+'</div>'+
         '<div style="font-size:10px;color:#6b7280">'+(i.cat||'')+'</div>'+
@@ -6827,7 +6829,7 @@ function buildSales(){
         var total=s.qty;
         var pct=total>0?Math.round((supplied/total)*100):0;
         var bc=pct===0?'#dc2626':pct<100?'#f59e0b':'#16a34a';
-        return '<tr style="background:#fffbeb">'+
+        return '<tr style="background:var(--surface2)">'+
           '<td style="padding-left:24px;font-size:12px">'+s.name+'</td>'+
           '<td style="text-align:center">'+total+'</td>'+
           '<td style="text-align:center;color:#16a34a;font-weight:700">'+supplied+'</td>'+
@@ -6836,13 +6838,13 @@ function buildSales(){
           '<td>'+(pending>0?'<button class="btn sm" onclick="showSupplyQtyModal(\''+g.invoiceNum+'\',\''+s.id+'\')" style="color:#16a34a;border-color:#86efac;font-size:11px">&#10003; Supply</button>':'<span style="color:#16a34a;font-size:11px">&#10003; Done</span>')+'</td>'+
         '</tr>';
       }).join('');
-      return '<tr style="background:#fef3c7">'+
-        '<td><b>Inv #'+g.invoiceNum+'</b></td>'+
-        '<td colspan="4" style="color:#92400e;font-weight:700;font-size:12px">'+g.custName+' &middot; '+g.date+'</td>'+
+      return '<tr style="background:var(--warning-bg)">'+
+        '<td><b style="color:var(--warning-text)">Inv #'+g.invoiceNum+'</b></td>'+
+        '<td colspan="4" style="color:var(--warning-text);font-weight:700;font-size:12px">'+g.custName+' &middot; '+g.date+'</td>'+
         '<td><button class="btn sm" onclick="supplyAllNow(\''+g.invoiceNum+'\')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">&#128230; Supply all</button></td>'+
       '</tr>'+iRows;
     }).join('');
-    pendingSupplySection='<div style="background:#fff;border:2px solid #f59e0b;border-radius:10px;padding:14px;margin-bottom:1.5rem">'+
+    pendingSupplySection='<div style="background:var(--white);border:2px solid #f59e0b;border-radius:10px;padding:14px;margin-bottom:1.5rem">'+
       '<div style="font-size:14px;font-weight:700;color:#92400e;margin-bottom:10px">&#9200; Pending Supply ('+pendingInvoices.length+' invoice'+(pendingInvoices.length>1?'s':'')+')</div>'+
       '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th style="text-align:center">Ordered</th><th style="text-align:center">Supplied</th><th style="text-align:center">Pending</th><th>Progress</th><th></th></tr></thead><tbody>'+pRows+'</tbody></table></div></div>';
   }
@@ -6916,7 +6918,7 @@ function buildSales(){
         if(!cid)return '<div id="sale-deposit-notice"></div>';
         var depBal=(DB.deposits||[]).filter(function(d){return String(d.custId)==String(cid);}).reduce(function(a,d){return a+d.amount;},0);
         if(depBal<=0)return '<div id="sale-deposit-notice"></div>';
-        return '<div id="sale-deposit-notice" style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;margin-top:6px;font-size:13px;color:#15803d;font-weight:600">'+
+        return '<div id="sale-deposit-notice" style="background:var(--success-bg);border:1.5px solid #86efac;border-radius:8px;padding:8px 12px;margin-top:6px;font-size:13px;color:#15803d;font-weight:600">'+
           '💰 Deposit balance: '+fmt(depBal)+' — will be auto-applied to this invoice</div>';
       }())
     : '')+
@@ -6945,7 +6947,7 @@ function buildSales(){
   // Pending supply alert
   var allPending=Object.values(invoiceGroups).filter(function(g){return g.items.some(function(s){return s.pendingSupply;});});
   var pendingAlert=allPending.length?
-    '<div style="background:#fff3cd;border:1px solid #ffe69c;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+    '<div style="background:var(--warning-bg);border:1px solid #ffe69c;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
       '<div style="font-size:13px;font-weight:700;color:#664d03">⏳ '+allPending.length+' invoice'+(allPending.length>1?'s':'')+' with goods not yet supplied</div>'+
       '<div style="font-size:12px;color:#664d03">Total value: <b>'+fmt(allPending.reduce(function(a,g){return a+g.total;},0))+'</b></div>'+
     '</div>':'';
@@ -6994,7 +6996,7 @@ function buildSales(){
     var firstItem=g.items[0].name+(g.items.length>1?' <span style="color:var(--text3);font-size:10.5px">+'+( g.items.length-1)+' more</span>':'');
     var isPending=g.items.some(function(s){return s.pendingSupply;});
     var supplyBadge=isPending?
-      '<div style="margin-top:3px"><span style="background:#fff3cd;color:#664d03;border:1px solid #ffe69c;border-radius:10px;font-size:10px;font-weight:700;padding:2px 7px">⏳ Goods not yet supplied</span></div>':
+      '<div style="margin-top:3px"><span style="background:var(--warning-bg);color:#664d03;border:1px solid #ffe69c;border-radius:10px;font-size:10px;font-weight:700;padding:2px 7px">⏳ Goods not yet supplied</span></div>':
       (g.items[0]&&g.items[0].supplyDate&&g.items[0].supplyDate!==g.date?
         '<div style="margin-top:3px"><span style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;border-radius:10px;font-size:10px;font-weight:700;padding:2px 7px">✅ Supplied: '+g.items[0].supplyDate+'</span></div>':'');
     var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='part'?'<span class="badge low">Part pay</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':g.payment==='split'?'<span class="badge" style="background:#6f42c1;color:#fff">Split</span>':g.payMode==='pos'?'<span class="badge" style="background:#0891b2;color:#fff">POS</span>':g.payMode==='transfer'?'<span class="badge" style="background:#0d6efd;color:#fff">Transfer</span>':'<span class="badge ok">Cash</span>';
@@ -7032,7 +7034,7 @@ function buildSales(){
     '<div style="background:var(--amber-bg);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;color:var(--amber);margin-bottom:1rem"><b>Rules:</b> Invoice number required. Walk-in customers: cash only. Credit sales: registered customers with credit limit only.</div>'+
     '<div class="fg c2" style="margin-bottom:.5rem"><div class="form-group"><label>Invoice number <span style="color:var(--danger)">*</span> (required)</label>'+
     '<input type="text" id="s-inv-num" placeholder="Auto-generated" readonly style="background:var(--amber-bg);cursor:default" onfocus="this.value=generateInvoiceNum()" value="'+generateInvoiceNum()+'">'+
-    '<div id="s-inv-dup-warn" style="display:none;margin-top:4px;background:#fff5f5;border:1px solid #f5c2c7;border-radius:6px;padding:6px 10px;font-size:12px;color:#dc3545;font-weight:600">'+
+    '<div id="s-inv-dup-warn" style="display:none;margin-top:4px;background:var(--danger-bg);border:1px solid #f5c2c7;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--danger);font-weight:600">'+
     '⛔ This invoice number already exists! Check the Sales ledger before posting.</div>'+
     '</div>'+
     '<div class="form-group"><label>Invoice date <span style="font-size:10px;color:var(--text3);font-weight:400">(leave blank for today)</span></label>'+
@@ -7066,7 +7068,7 @@ function buildSales(){
       '</div>'+
       '<div class="form-group" id="s-amt-received-wrap" style="display:none"><label>Amount received (₦) <span style="font-size:11px;color:#6b7280;font-weight:400">— optional, if customer paid more</span></label><input type="number" id="s-amt-received" placeholder="Leave blank if exact" min="0" oninput="onAmtReceivedChange()"></div>'+
     '</div>'+
-    '<div id="s-split-wrap" style="display:none;background:#f0f7ff;border:1px solid #b6d4fe;border-radius:8px;padding:12px;margin-bottom:10px">'+
+    '<div id="s-split-wrap" style="display:none;background:var(--primary-bg);border:1px solid #b6d4fe;border-radius:8px;padding:12px;margin-bottom:10px">'+
       '<div style="font-size:12px;font-weight:700;color:#0d6efd;margin-bottom:10px">&#128260; Split payment &#8212; enter amount for each mode</div>'+
       '<div class="fg" style="grid-template-columns:1fr 1fr 1fr 1fr">'+
         '<div class="form-group"><label>Mode 1</label><select id="s-split-mode1" onchange="onSplitModeChange()"><option value="cash">Cash</option><option value="transfer">Bank transfer</option><option value="pos">POS</option></select></div>'+
@@ -7087,7 +7089,7 @@ function buildSales(){
       '<button class="btn" onclick="saveDraft()" style="color:var(--primary);border-color:#b6d4fe;font-size:13px;padding:10px 16px">&#128221; Save as draft</button>'+
       '<button class="btn" onclick="invoiceItems=[];renderInvoiceItems()" style="color:var(--danger);border-color:#fca5a5">&#10005; Clear</button>'+
     '</div>'+
-    '<div style="background:#fff3cd;border:1px solid #ffe69c;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:1.25rem;display:flex;align-items:flex-start;gap:10px">'+
+    '<div style="background:var(--warning-bg);border:1px solid #ffe69c;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:1.25rem;display:flex;align-items:flex-start;gap:10px">'+
       '<input type="checkbox" id="s-pending-supply" style="width:16px;height:16px;margin-top:2px;cursor:pointer;flex-shrink:0">'+
       '<label for="s-pending-supply" style="font-size:13px;color:#664d03;cursor:pointer;line-height:1.4">'+
         '<b>Goods not yet supplied</b> — Payment received but stock will NOT be deducted until goods are marked as supplied.'+
@@ -7095,13 +7097,13 @@ function buildSales(){
     '</div>'+
     // DRAFTS PANEL
     (DB.drafts&&DB.drafts.length?
-      '<div style="background:#fff3cd;border:1px solid #ffe69c;border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:1.5rem">'+
+      '<div style="background:var(--warning-bg);border:1px solid #ffe69c;border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:1.5rem">'+
         '<p style="font-size:11px;font-weight:700;color:#664d03;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">&#128221; Saved drafts ('+DB.drafts.length+')</p>'+
         '<div style="display:flex;flex-direction:column;gap:6px">'+
         (DB.drafts||[]).slice().reverse().map(function(d){
           var items=d.items.map(function(l){return l.name+' x'+l.qty;}).join(', ');
           var total=d.items.reduce(function(a,l){return a+(l.price*l.qty);},0);
-          return '<div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #ffe69c;border-radius:var(--radius-sm);padding:8px 12px;font-size:12px">'+
+          return '<div style="display:flex;align-items:center;justify-content:space-between;background:var(--white);border:1px solid #ffe69c;border-radius:var(--radius-sm);padding:8px 12px;font-size:12px">'+
             '<div>'+
               '<span style="font-weight:600;color:var(--dark)">'+(d.invoiceNum?'Inv #'+d.invoiceNum:'No invoice #')+'</span>'+
               ' <span style="color:var(--text2)">'+d.custName+'</span>'+
@@ -7126,8 +7128,8 @@ function buildSales(){
         var expired=validUntil<new Date();
         var validStr=validUntil.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
         var statusBadge=expired
-          ?'<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXPIRED</span>'
-          :'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">PENDING</span>';
+          ?'<span style="background:var(--danger-bg);color:#dc2626;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXPIRED</span>'
+          :'<span style="background:var(--warning-bg);color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">PENDING</span>';
         var itemSummary=p.items.slice(0,2).map(function(i){return i.name+' ×'+i.qty;}).join(', ')+(p.items.length>2?' +'+( p.items.length-2)+' more':'');
         return '<tr>'+
           '<td><b>'+p.prfNum+'</b></td>'+
@@ -7138,12 +7140,12 @@ function buildSales(){
           '<td>'+statusBadge+' valid until '+validStr+'</td>'+
           '<td style="white-space:nowrap">'+
             '<button onclick="convertProforma(\''+p.prfNum+'\')" style="padding:4px 10px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;margin-right:4px">✅ Convert to Invoice</button>'+
-            '<button onclick="printProforma(\''+p.prfNum+'\')" style="padding:4px 10px;background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;margin-right:4px">🖨️ Print</button>'+
-            '<button onclick="cancelProforma(\''+p.prfNum+'\')" style="padding:4px 10px;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">✕ Cancel</button>'+
+            '<button onclick="printProforma(\''+p.prfNum+'\')" style="padding:4px 10px;background:var(--primary-bg);color:#0369a1;border:1px solid #bae6fd;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;margin-right:4px">🖨️ Print</button>'+
+            '<button onclick="cancelProforma(\''+p.prfNum+'\')" style="padding:4px 10px;background:var(--danger-bg);color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">✕ Cancel</button>'+
           '</td>'+
         '</tr>';
       }).join('');
-      return '<div style="background:#faf5ff;border:2px solid #c4b5fd;border-radius:10px;padding:14px;margin-bottom:1.5rem">'+
+      return '<div style="background:var(--surface2);border:2px solid #c4b5fd;border-radius:10px;padding:14px;margin-bottom:1.5rem">'+
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
           '<p class="sec-title" style="margin:0;color:#7c3aed">📄 Pending Proforma Invoices ('+pendingPRF.length+')</p>'+
           '<button onclick="switchTab(\'proformas\')" class="btn sm" style="color:#7c3aed;border-color:#c4b5fd;font-size:11px">View all →</button>'+
@@ -7204,7 +7206,7 @@ function buildSales(){
           '<span class="badge">'+g.refundType+'</span>';
         var itemSummary=g.items.length===1?g.items[0].itemName+' ×'+g.items[0].qty:
           g.items.length+' items';
-        return '<tr style="background:#fff5f5">'+
+        return '<tr style="background:var(--danger-bg)">'+
           '<td>'+g.date+'</td>'+
           '<td><b>'+(g.invoiceNum||'-')+'</b></td>'+
           '<td>'+(g.custName||'Walk-in customer')+'</td>'+
@@ -7277,7 +7279,7 @@ function viewReturnDetail(gKey){
   var refundBadgeColor=g.refundType==='cash'?'#16a34a':g.refundType==='transfer'?'#0d6efd':g.refundType==='credit'?'#d97706':g.refundType==='exchange'?'#0891b2':'#6b7280';
 
   modal.innerHTML=
-    '<div style="background:#fff;border-radius:14px;width:100%;max-width:580px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
+    '<div style="background:var(--white);border-radius:14px;width:100%;max-width:580px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
       // Header
       '<div style="background:#dc3545;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center">'+
         '<div>'+
@@ -7289,24 +7291,24 @@ function viewReturnDetail(gKey){
       '<div style="padding:16px 18px">'+
         // Customer + return type info
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">'+
-          '<div style="background:#f9fafb;border-radius:8px;padding:10px 12px">'+
+          '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px">'+
             '<div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Customer</div>'+
             '<div style="font-size:13px;font-weight:700">'+( g.custName||'Walk-in customer')+'</div>'+
             '<div style="font-size:11px;color:#6b7280;margin-top:2px">Invoice #'+(g.invoiceNum||'-')+'</div>'+
           '</div>'+
-          '<div style="background:#f9fafb;border-radius:8px;padding:10px 12px">'+
+          '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px">'+
             '<div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Return Method</div>'+
             '<div style="font-size:13px;font-weight:700;color:'+refundBadgeColor+'">'+refundTypeLabel+'</div>'+
             '<div style="font-size:11px;color:#6b7280;margin-top:2px">'+g.date+'</div>'+
           '</div>'+
         '</div>'+
         // Reason
-        '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e">'+
+        '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e">'+
           '<b>Reason:</b> '+g.reason+
         '</div>'+
         // Returned items
-        '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">↩ Returned Items</div>'+
-        '<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:14px">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin-bottom:6px">↩ Returned Items</div>'+
+        '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+
           '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
             '<thead><tr style="background:#fef2f2">'+
               '<th style="padding:7px 10px;text-align:left;color:#6b7280;font-weight:700">Item</th>'+
@@ -7315,7 +7317,7 @@ function viewReturnDetail(gKey){
               '<th style="padding:7px 10px;text-align:right;color:#6b7280;font-weight:700">Refund Amt</th>'+
             '</tr></thead>'+
             '<tbody>'+retItemRows+'</tbody>'+
-            '<tr style="background:#fef2f2;font-weight:800">'+
+            '<tr style="background:var(--danger-bg);font-weight:800">'+
               '<td colspan="3" style="padding:7px 10px;text-align:right;color:#374151">Total Return Value:</td>'+
               '<td style="padding:7px 10px;text-align:right;color:#dc2626;font-size:14px">'+fmt(g.refundAmt)+'</td>'+
             '</tr>'+
@@ -7323,7 +7325,7 @@ function viewReturnDetail(gKey){
         '</div>'+
         // Exchange items (if any)
         (g.refundType==='exchange'?
-          '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">🔄 Exchanged Items Given</div>'+
+          '<div style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin-bottom:6px">🔄 Exchanged Items Given</div>'+
           '<div style="border:1px solid #86efac;border-radius:8px;overflow:hidden;margin-bottom:14px">'+
             (exchItemRows?
               '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
@@ -7351,7 +7353,7 @@ function viewReturnDetail(gKey){
         // Close + Print
         '<div style="display:flex;gap:8px;margin-top:4px">'+
           '<button onclick="printReturnRecord(\''+gKey+'\');document.getElementById(\'ret-detail-modal\').remove()" style="flex:1;padding:10px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#128438; Print Record</button>'+
-          '<button onclick="document.getElementById(\'ret-detail-modal\').remove()" style="padding:10px 18px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
+          '<button onclick="document.getElementById(\'ret-detail-modal\').remove()" style="padding:10px 18px;background:var(--surface2);color:var(--text1,#374151);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
         '</div>'+
       '</div>'+
     '</div>';
@@ -7409,7 +7411,7 @@ function printReturnRecord(gKey){
     '.stamp{display:inline-block;border:2px solid #dc3545;border-radius:4px;padding:3px 12px;color:#dc3545;font-size:13px;font-weight:900;letter-spacing:2px;margin:6px 0}'+
     'table{width:100%;border-collapse:collapse;margin-top:6px}th{background:#dc3545;color:#fff;padding:5px 7px;font-size:10px;text-align:center}td{border:1px solid #ddd;padding:5px 7px;font-size:11px}'+
     '.info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}'+
-    '.info-cell{background:#f9fafb;border-radius:4px;padding:7px 10px}'+
+    '.info-cell{background:var(--surface2);border-radius:4px;padding:7px 10px}'+
     '.info-label{font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:2px}'+
     '.info-val{font-size:12px;font-weight:700}'+
     '.ft{text-align:center;font-size:9px;color:#888;margin-top:12px;border-top:1px solid #eee;padding-top:6px;font-style:italic}'+
@@ -7426,11 +7428,11 @@ function printReturnRecord(gKey){
       '<div class="info-cell"><div class="info-label">Customer</div><div class="info-val">'+(g.custName||'Walk-in')+'</div></div>'+
       '<div class="info-cell"><div class="info-label">Return Method</div><div class="info-val" style="color:#dc3545">'+refundTypeLabel+'</div></div>'+
     '</div>'+
-    '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:4px;padding:7px 10px;margin-bottom:10px;font-size:11px"><b>Reason:</b> '+g.reason+'</div>'+
+    '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:4px;padding:7px 10px;margin-bottom:10px;font-size:11px"><b>Reason:</b> '+g.reason+'</div>'+
     '<div style="font-weight:700;font-size:11px;color:#dc3545;border-bottom:1px solid #dc3545;padding-bottom:4px;margin-bottom:4px">RETURNED ITEMS</div>'+
     '<table><thead><tr><th>#</th><th style="text-align:left">Item</th><th>Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Refund Amt</th></tr></thead>'+
     '<tbody>'+retItemRows+'</tbody>'+
-    '<tr style="background:#fef2f2;font-weight:800"><td colspan="4" style="text-align:right">Total Return Value:</td><td style="text-align:right;color:#dc2626">₦'+Math.round(g.refundAmt).toLocaleString()+'</td></tr>'+
+    '<tr style="background:var(--danger-bg);font-weight:800"><td colspan="4" style="text-align:right">Total Return Value:</td><td style="text-align:right;color:#dc2626">₦'+Math.round(g.refundAmt).toLocaleString()+'</td></tr>'+
     '</table>'+
     exchSection+balSection+
     '<div style="margin-top:10px;display:flex;justify-content:space-between;font-size:11px">'+
@@ -7454,13 +7456,13 @@ function eiCustSearch(val, showAll){
     return showAll||!q||c.name.toLowerCase().indexOf(q)>=0||(c.phone&&c.phone.indexOf(q)>=0);
   }).slice(0,20);
   // Always show Walk-in option
-  var walkIn='<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\'Walk-in customer\';document.getElementById(\'ei-custid\').value=\'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;color:#6b7280;font-style:italic" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'\'">Walk-in customer (no account)</div>';
+  var walkIn='<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\'Walk-in customer\';document.getElementById(\'ei-custid\').value=\'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;color:#6b7280;font-style:italic" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'var(--white)\'">Walk-in customer (no account)</div>';
   if(!matches.length&&!showAll){dd.style.display='none';return;}
   dd.style.display='block';
   dd.innerHTML=walkIn+matches.map(function(c){
     var safeName=c.name.replace(/'/g,"\'").replace(/"/g,'&quot;');
     var bal=c.creditBalance>0?'<span style="color:#dc2626;font-size:10px"> ₦'+Math.round(c.creditBalance).toLocaleString()+' owed</span>':'';
-    return '<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\''+safeName+'\';document.getElementById(\'ei-custid\').value=\''+c.id+'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'\'">'+
+    return '<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\''+safeName+'\';document.getElementById(\'ei-custid\').value=\''+c.id+'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--primary-bg)\'" onmouseout="this.style.background=\'var(--white)\'">'+
       '<div style="font-weight:600">'+c.name+bal+'</div>'+
       '<div style="font-size:10px;color:#6b7280">'+(c.phone||'No phone')+'</div>'+
     '</div>';
@@ -7529,12 +7531,12 @@ function editInvoice(invNum){
         '<div style="font-size:16px;font-weight:700">✏️ Edit Invoice #'+invNum+'</div>'+
         '<button onclick="document.getElementById(\'inv-edit-modal\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer">&times;</button>'+
       '</div>'+
-      '<div style="background:#fff8f0;border:1px solid #fcd34d;border-radius:8px;padding:10px;font-size:12px;color:#92400e;margin-bottom:16px">'+
+      '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:8px;padding:10px;font-size:12px;color:#92400e;margin-bottom:16px">'+
         '⚠️ Editing an invoice adjusts sale prices, quantities and discounts. Stock levels are NOT automatically adjusted — do a stock adjustment separately if needed. All edits are logged.'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">'+
         '<div>'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Customer</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Customer</label>'+
           '<div style="position:relative">'+
             '<input type="text" id="ei-custname" value="'+(s0.printName||s0.custName)+'" autocomplete="off" placeholder="Type to search or enter name..."'+
               ' oninput="eiCustSearch(this.value)"'+
@@ -7546,13 +7548,13 @@ function editInvoice(invNum){
           '<input type="hidden" id="ei-custid" value="'+(s0.custId||'')+'">'+ 
         '</div>'+
         '<div>'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Sale date</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Sale date</label>'+
           '<input type="date" id="ei-date" value="'+(s0.date?(function(){var dp=s0.date.split('/');return dp.length===3?dp[2]+'-'+(dp[0].length===2?dp[0]:'0'+dp[0])+'-'+(dp[1].length===2?dp[1]:'0'+dp[1]):s0.date;})():new Date().toISOString().slice(0,10))+'" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
         '</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'+
         '<div>'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Payment type</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Payment type</label>'+
           '<select id="ei-payment" onchange="eiPaymentChange()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="cash"'+(s0.payment==='cash'?' selected':'')+'>Cash (fully paid)</option>'+
             '<option value="pos"'+(s0.payMode==='pos'&&s0.payment!=='split'?' selected':'')+'>POS</option>'+
@@ -7564,25 +7566,25 @@ function editInvoice(invNum){
           '</select>'+
         '</div>'+
         '<div id="ei-bank-wrap" style="display:'+(s0.payMode==='transfer'&&s0.payment!=='split'?'block':'none')+'">'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Bank account</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Bank account</label>'+
           '<select id="ei-bankid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select bank --</option>'+
             (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(String(b.id)===String(s0.bankId)?' selected':'')+'>'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
         '<div id="ei-pos-wrap" style="display:'+(s0.payMode==='pos'&&s0.payment!=='split'?'block':'none')+'">'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">POS terminal</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">POS terminal</label>'+
           '<select id="ei-posid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select POS --</option>'+
             (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(String(p.id)===String(s0.posId)?' selected':'')+'>'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
         '<div id="ei-partamt-wrap" style="display:'+(s0.payment==='part'?'block':'none')+'">'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Amount paid now (₦)</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Amount paid now (₦)</label>'+
           '<input type="number" id="ei-partamt" value="'+(s0.partPayment||0)+'" min="0" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
         '</div>'+
         '<div id="ei-partmode-wrap" style="display:'+(s0.payment==='part'?'block':'none')+'">'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Part payment mode</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Part payment mode</label>'+
           '<select id="ei-partmode" onchange="eiPartModeChange()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="cash"'+(s0.payment==='part'&&s0.payMode==='cash'?' selected':'')+'>Cash</option>'+
             '<option value="transfer"'+(s0.payment==='part'&&s0.payMode==='transfer'?' selected':'')+'>Bank Transfer</option>'+
@@ -7590,14 +7592,14 @@ function editInvoice(invNum){
           '</select>'+
         '</div>'+
         '<div id="ei-partbank-wrap" style="display:'+(s0.payment==='part'&&s0.payMode==='transfer'?'block':'none')+'">'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Bank account</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Bank account</label>'+
           '<select id="ei-partbankid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select bank --</option>'+
             (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(s0.payment==='part'&&String(b.id)===String(s0.bankId)?' selected':'')+'>'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
         '<div id="ei-partpos-wrap" style="display:'+(s0.payment==='part'&&s0.payMode==='pos'?'block':'none')+'">'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">POS terminal</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">POS terminal</label>'+
           '<select id="ei-partposid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select POS --</option>'+
             (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(s0.payment==='part'&&String(p.id)===String(s0.posId)?' selected':'')+'>'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
@@ -7610,18 +7612,18 @@ function editInvoice(invNum){
       '</table>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'+
         '<div>'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Invoice-level discount (₦)</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Invoice-level discount (₦)</label>'+
           '<input type="number" id="ei-inv-disc" value="'+(s0.invoiceDiscAmt||0)+'" min="0" placeholder="0" style="width:100%;padding:8px;border:1px solid #f59e0b;border-radius:6px;font-size:13px" title="Applied to the whole invoice total">'+
           '<div style="font-size:10px;color:var(--text3);margin-top:3px">Reduces the overall invoice total</div>'+
         '</div>'+
         '<div>'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reason for edit *</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Reason for edit *</label>'+
           '<input type="text" id="ei-reason" placeholder="e.g. Wrong price, customer discount" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
         '</div>'+
       '</div>'+
       '<div style="display:flex;gap:10px">'+
         '<button onclick="saveInvoiceEdit(\''+invNum+'\')" style="flex:1;padding:11px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">✅ Save changes</button>'+
-        '<button onclick="document.getElementById(\'inv-edit-modal\').remove()" style="padding:11px 20px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+        '<button onclick="document.getElementById(\'inv-edit-modal\').remove()" style="padding:11px 20px;background:var(--surface2);color:#495057;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
       '</div>'+
     '</div>';
 
@@ -7772,7 +7774,7 @@ function viewInvoiceDetail(invNum){
   modal.id='inv-detail-modal';
   modal.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box';
   modal.innerHTML=
-    '<div style="background:#fff;border-radius:12px;width:100%;max-width:680px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 40px rgba(0,0,0,.3)">'+
+    '<div style="background:var(--white);border-radius:12px;width:100%;max-width:680px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 40px rgba(0,0,0,.3)">'+
       '<div style="background:#343a40;color:#fff;padding:1rem 1.25rem;border-radius:12px 12px 0 0;display:flex;justify-content:space-between;align-items:center">'+
         '<div>'+
           '<div style="font-size:16px;font-weight:700">Invoice #'+invNum+'</div>'+
@@ -7794,12 +7796,12 @@ function viewInvoiceDetail(invNum){
           '<tbody>'+rows+'</tbody>'+
         '</table>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">'+
-          '<div style="background:#f8f9fa;border-radius:8px;padding:.875rem 1rem;font-size:13px">'+
+          '<div style="background:var(--surface2);border-radius:8px;padding:.875rem 1rem;font-size:13px">'+
             '<div style="margin-bottom:5px"><span style="color:#6c757d">Payment type:</span> '+payType+'</div>'+
             '<div style="margin-bottom:5px"><span style="color:#6c757d">Payment mode:</span> <b>'+payModeLabel(s0)+'</b></div>'+
             (s0.partPayment>0?'<div><span style="color:#6c757d">Paid now:</span> <b>'+fmt(s0.partPayment)+'</b></div>':'')+
           '</div>'+
-          '<div style="background:#f8f9fa;border-radius:8px;padding:.875rem 1rem;font-size:13px">'+
+          '<div style="background:var(--surface2);border-radius:8px;padding:.875rem 1rem;font-size:13px">'+
             (totalDisc>0?'<div style="margin-bottom:5px"><span style="color:#6c757d">Item discounts:</span> <span style="color:#dc3545">-'+fmt(totalDisc)+'</span></div>':'')+
             (invDiscAmt>0?'<div style="margin-bottom:5px"><span style="color:#6c757d">Invoice discount:</span> <span style="color:#dc3545;font-weight:700">-'+fmt(invDiscAmt)+'</span></div>':'')+
             '<div style="margin-bottom:5px;font-size:15px;font-weight:700"><span style="color:#6c757d;font-size:13px;font-weight:400">'+(invDiscAmt>0?'Net total':'Grand total')+':</span> '+fmt(grandTotal)+'</div>'+
@@ -7813,11 +7815,11 @@ function viewInvoiceDetail(invNum){
           var totalComm=invCommissions.reduce(function(a,e){return a+(e.amount||0);},0);
           var balAfterComm=grandTotal-totalComm;
           return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px">'+
-            '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px 12px;border-left:3px solid #0ea5e9">'+
+            '<div style="background:var(--primary-bg);border:1px solid #bae6fd;border-radius:8px;padding:10px 12px;border-left:3px solid #0ea5e9">'+
               '<div style="font-size:10px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Invoice Total</div>'+
               '<div style="font-size:17px;font-weight:800;color:#0c4a6e">'+fmt(grandTotal)+'</div>'+
             '</div>'+
-            '<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;border-left:3px solid #f59e0b">'+
+            '<div style="background:var(--warning-bg);border:1px solid #fde68a;border-radius:8px;padding:10px 12px;border-left:3px solid #f59e0b">'+
               '<div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Commission Given</div>'+
               '<div style="font-size:17px;font-weight:800;color:#78350f">'+fmt(totalComm)+'</div>'+
               '<div style="font-size:10px;color:#92400e;margin-top:2px">'+invCommissions.map(function(e){return e.description+': '+fmt(e.amount);}).join(' · ')+'</div>'+
@@ -7831,10 +7833,10 @@ function viewInvoiceDetail(invNum){
         '<div style="display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap">'+
           '<button onclick="reprintInvoice(\''+invNum+'\');document.getElementById(\'inv-detail-modal\').remove()" style="flex:1;padding:9px;background:#0d6efd;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">&#128438; Print invoice</button>'+
           '<button onclick="shareInvoiceWhatsApp(\''+invNum+'\')" style="flex:1;padding:9px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📲 Share via WhatsApp</button>'+
-          (isAdmin()?'<button onclick="editInvoice(\''+invNum+'\');document.getElementById(\'inv-detail-modal\').remove()" style="padding:9px 14px;background:#fff8f0;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">✏️ Edit invoice</button>':'')+''+
-          (isAdmin()?'<button onclick="showEditInvoiceNote(\''+invNum+'\')" style="padding:9px 14px;background:#fff8f0;color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📝 Add note</button>':'')+''+
-          (s0.custId&&Number(s0.custId)>0?'<button onclick="showAddCommission(\''+invNum+'\','+s0.custId+',\''+(String(s0.custName||'Customer').replace(/'/g,''))+'\')" style="padding:9px 14px;background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🎯 Add Commission</button>':'')+''+
-          '<button onclick="document.getElementById(\'inv-detail-modal\').remove()" style="padding:9px 20px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
+          (isAdmin()?'<button onclick="editInvoice(\''+invNum+'\');document.getElementById(\'inv-detail-modal\').remove()" style="padding:9px 14px;background:var(--warning-bg);color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">✏️ Edit invoice</button>':'')+''+
+          (isAdmin()?'<button onclick="showEditInvoiceNote(\''+invNum+'\')" style="padding:9px 14px;background:var(--warning-bg);color:#92400e;border:1px solid #fcd34d;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📝 Add note</button>':'')+''+
+          (s0.custId&&Number(s0.custId)>0?'<button onclick="showAddCommission(\''+invNum+'\','+s0.custId+',\''+(String(s0.custName||'Customer').replace(/'/g,''))+'\')" style="padding:9px 14px;background:var(--success-bg);color:#15803d;border:1px solid #86efac;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">🎯 Add Commission</button>':'')+''+
+          '<button onclick="document.getElementById(\'inv-detail-modal\').remove()" style="padding:9px 20px;background:var(--surface2);color:#495057;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
         '</div>'+
       '</div>'+
     '</div>';
@@ -7903,7 +7905,7 @@ function reprintInvoice(invNum){
   var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum;});
   if(!invSales.length){alert('Invoice not found.');return;}
   var s0=invSales[0];var d=new Date(s0.date),day=d.getDate(),mon=d.getMonth()+1,yr=d.getFullYear();
-  var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+s.name+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:#fff5f5;color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
+  var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+s.name+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var subtotalAll=invSales.reduce(function(a,s){return a+(s.salePrice*s.qty);},0);
   var invoiceDiscAmt=subtotalAll-grandTotal;
@@ -8228,12 +8230,12 @@ function printPurchaseRecord(id){
     '.ds{font-size:8.5px;color:#333;margin:1px 0}.of{font-size:8px;color:#333;margin:2px 0}.of b{color:#c0392b}'+
     '.tb{background:#1a237e;color:#fff;display:inline-block;padding:3px 18px;border-radius:15px;font-size:12px;font-weight:700;margin:5px 0}'+
     'table{width:100%;border-collapse:collapse}th{background:#1a237e;color:#fff;font-size:9px;padding:4px 6px;text-align:left}'+
-    'td{border:1px solid #ddd;padding:4px 6px;font-size:10px}.tr td{background:#f5f5f5;font-weight:700;border-top:2px solid #1a237e}'+
+    'td{border:1px solid #ddd;padding:4px 6px;font-size:10px}.tr td{background:var(--surface2);font-weight:700;border-top:2px solid #1a237e}'+
     '.info{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0;font-size:11px}'+
     '.pay-box{border:1px solid #ccc;border-radius:4px;overflow:hidden;margin-top:6px}'+
     '.pay-row{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #eee}'+
     '.pay-cell{padding:4px 7px}.pay-label{font-size:7.5px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.pay-val{font-size:10px;font-weight:700;color:#111}'+
-    '.disc-row{background:#f0fff4;padding:4px 7px;border-bottom:1px solid #a3cfbb}'+
+    '.disc-row{background:var(--success-bg);padding:4px 7px;border-bottom:1px solid #a3cfbb}'+
     '<\/style></head><body>'+
     '<div class="h">'+
       '<div class="logo-wrap">'+
@@ -8568,7 +8570,7 @@ function buildPurchases(){
     return !invItem; // received but not in inventory
   });
   var repairSection=missingInv.length?
-    '<div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:10px;padding:14px;margin-top:12px">'+
+    '<div style="background:var(--danger-bg);border:2px solid #fca5a5;border-radius:10px;padding:14px;margin-top:12px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
         '<div>'+
           '<p style="margin:0;font-weight:700;color:#dc2626;font-size:14px">⚠️ '+missingInv.length+' item(s) received but missing from inventory</p>'+
@@ -8615,8 +8617,8 @@ function buildPurchases(){
             '<button onclick="receiveDelivery(\''+d.id+'\')" style="padding:5px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✓ Receive</button>'+
           '</div>';
         }).join('');
-        return '<div style="background:#fff;border:1px solid #fcd34d;border-radius:10px;margin-bottom:12px;overflow:hidden">'+
-          '<div style="background:#fffbeb;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+        return '<div style="background:var(--white);border:1px solid #fcd34d;border-radius:10px;margin-bottom:12px;overflow:hidden">'+
+          '<div style="background:var(--warning-bg);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
             '<div>'+
               '<span style="font-weight:700;color:#92400e">Invoice #'+g.invoiceNum+'</span>'+
               '<span style="color:#6b7280;font-size:12px;margin-left:10px">'+g.supName+'</span>'+
@@ -8628,10 +8630,10 @@ function buildPurchases(){
                 '<div style="width:'+pct+'%;height:100%;background:'+(pct>=100?'#10b981':'#f59e0b')+';border-radius:6px"></div>'+
               '</div>'+
               '<span style="font-size:12px;font-weight:700;color:#92400e">'+pct+'%</span>'+
-              '<button onclick="receiveAllDeliveries(\''+g.invoiceNum+'\')" style="padding:5px 12px;background:#fff;color:#16a34a;border:1px solid #16a34a;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">□ Receive all</button>'+
+              '<button onclick="receiveAllDeliveries(\''+g.invoiceNum+'\')" style="padding:5px 12px;background:var(--white);color:#16a34a;border:1px solid #16a34a;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">□ Receive all</button>'+
             '</div>'+
           '</div>'+
-          '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 120px 110px;gap:8px;padding:6px 12px;background:#f9fafb;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">'+
+          '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 120px 110px;gap:8px;padding:6px 12px;background:var(--surface2);font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">'+
             '<div>Item</div><div style="text-align:center">Ordered</div><div style="text-align:center">Received</div><div style="text-align:center">Pending</div><div>Progress</div><div></div>'+
           '</div>'+
           itemRows+
@@ -8656,7 +8658,7 @@ function buildPurchases(){
         '<div style="position:relative">'+
           '<input type="text" id="pi-search" placeholder="Search items..." oninput="filterPurchaseItemDropdown(this.value)" onfocus="showPurchaseItemDropdown()" style="width:100%" autocomplete="off">'+
           '<input type="hidden" id="pi-select">'+
-          '<div id="pi-name-wrap" style="display:none;margin-top:6px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px;display:none">'+
+          '<div id="pi-name-wrap" style="display:none;margin-top:6px;background:var(--success-bg);border:1px solid #86efac;border-radius:8px;padding:10px;display:none">'+
             '<div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">➕ New Item Details</div>'+
             '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
               '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:3px">Item Name <span style="color:#dc2626">*</span></label>'+
@@ -8727,7 +8729,7 @@ function openPurchaseReturnModal(purchId){
   }).join('');
 
   modal.innerHTML=
-    '<div style="background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
+    '<div style="background:var(--white);border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
       '<div style="background:#dc3545;padding:14px 18px;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center">'+
         '<div>'+
           '<div style="font-size:15px;font-weight:800;color:#fff">&#8617; Return to Supplier</div>'+
@@ -8736,8 +8738,8 @@ function openPurchaseReturnModal(purchId){
         '<button onclick="document.getElementById(\'pu-ret-modal\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
       '</div>'+
       '<div style="padding:16px 18px">'+
-        '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">Select items to return:</div>'+
-        '<div style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:14px">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin-bottom:8px">Select items to return:</div>'+
+        '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+
           '<table style="width:100%;border-collapse:collapse">'+
             '<thead><tr style="background:#fef2f2">'+
               '<th style="padding:7px 8px;text-align:left;font-size:11px;color:#6b7280">Item</th>'+
@@ -8750,7 +8752,7 @@ function openPurchaseReturnModal(purchId){
         '</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'+
           '<div>'+
-            '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Return Type *</label>'+
+            '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Return Type *</label>'+
             '<select id="pur-type" onchange="purTypeChange()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;font-weight:600">'+
               '<option value="credit">Supplier Credit (reduce owed)</option>'+
               '<option value="refund">Cash/Transfer Refund</option>'+
@@ -8758,11 +8760,11 @@ function openPurchaseReturnModal(purchId){
             '</select>'+
           '</div>'+
           '<div>'+
-            '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Date</label>'+
+            '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Date</label>'+
             '<input type="date" id="pur-date" value="'+new Date().toISOString().slice(0,10)+'" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px">'+
           '</div>'+
         '</div>'+
-        '<div id="pur-exchange-section" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 12px;margin-bottom:12px">'+
+        '<div id="pur-exchange-section" style="display:none;background:var(--success-bg);border:1px solid #86efac;border-radius:8px;padding:10px 12px;margin-bottom:12px">'+
           '<div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:6px">&#128260; Exchange Status</div>'+
           '<div style="display:flex;gap:10px">'+
             '<label style="font-size:12px;cursor:pointer"><input type="radio" name="pur-exch-status" value="pending" checked> &#9203; Pending (goods not yet received)</label>'+
@@ -8772,12 +8774,12 @@ function openPurchaseReturnModal(purchId){
           '<input type="text" id="pur-exch-desc" placeholder="e.g. 5 pcs of Knife Switch 100A..." style="width:100%;margin-top:4px;padding:7px;border:1px solid #86efac;border-radius:6px;font-size:12px;box-sizing:border-box">'+
         '</div>'+
         '<div>'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reason *</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Reason *</label>'+
           '<input type="text" id="pur-reason" placeholder="e.g. Wrong item, damaged goods, defective..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box;margin-bottom:12px">'+
         '</div>'+
         '<div style="display:flex;gap:8px">'+
           '<button onclick="processPurchaseReturn('+purchId+')" style="flex:1;padding:11px;background:#dc3545;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#8617; Process Return</button>'+
-          '<button onclick="document.getElementById(\'pu-ret-modal\').remove()" style="padding:11px 16px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+          '<button onclick="document.getElementById(\'pu-ret-modal\').remove()" style="padding:11px 16px;background:var(--surface2);color:var(--text1,#374151);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
         '</div>'+
       '</div>'+
     '</div>';
@@ -9088,7 +9090,7 @@ function buildFinance(){
     mc('Net cash',fmt(netCash),'In - expenses',netCash>=0?'green':'red')+
     mc('Discounts given',fmt(discTotal),'Total given','amber')+
   '</div>'+
-  (pendingSupplyTotal>0?'<div style="background:#fff3cd;border:1px solid #ffe69c;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:1rem;font-size:13px;color:#664d03"><b>⏳ Goods not yet supplied:</b> '+fmt(pendingSupplyTotal)+' — payment received but stock not yet deducted</div>':'')+
+  (pendingSupplyTotal>0?'<div style="background:var(--warning-bg);border:1px solid #ffe69c;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:1rem;font-size:13px;color:#664d03"><b>⏳ Goods not yet supplied:</b> '+fmt(pendingSupplyTotal)+' — payment received but stock not yet deducted</div>':'')+
   // ── 7-day Revenue & Profit Chart ─────────────────────────
   (function(){
     var days=[];
@@ -9222,8 +9224,8 @@ function buildSupplierOverview(){
   // ── Table rows ───────────────────────────────────────────────
   var tableRows=filtered.map(function(r){
     var status=r.owedToSupplier>0
-      ?'<span style="background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">HAS BALANCE</span>'
-      :'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">CLEARED</span>';
+      ?'<span style="background:var(--warning-bg);color:#92400e;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">HAS BALANCE</span>'
+      :'<span style="background:var(--success-bg);color:#15803d;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">CLEARED</span>';
     var lastP=r.lastPurchase?r.lastPurchase.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
     var payBtn=r.owedToSupplier>0
       ?'<button class="btn sm" style="color:#15803d;border-color:#86efac;font-size:11px" onclick="paySupplier('+r.id+')">💳 Pay</button> '
@@ -9253,7 +9255,7 @@ function buildSupplierOverview(){
         '<span style="font-weight:600;color:#374151">'+r.name+'</span>'+
         '<span style="color:#6b7280">'+fmt(r.totalPurchased)+'</span>'+
       '</div>'+
-      '<div style="background:#f3f4f6;border-radius:6px;height:10px;overflow:hidden">'+
+      '<div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden">'+
         '<div style="width:'+pct+'%;height:100%;background:'+colors[i]+';border-radius:6px;transition:width .4s"></div>'+
       '</div>'+
     '</div>';
@@ -9458,8 +9460,8 @@ function buildCustomerOverview(){
   // ── Table rows ───────────────────────────────────────────────
   var tableRows=filtered.map(function(r){
     var status=r.creditBalance>0
-      ?'<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">HAS BALANCE</span>'
-      :'<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">CLEARED</span>';
+      ?'<span style="background:var(--danger-bg);color:#dc2626;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">HAS BALANCE</span>'
+      :'<span style="background:var(--success-bg);color:#15803d;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">CLEARED</span>';
     var typeLabel=r.type==='wholesale'?'🏭 Wholesale':r.type==='vip'?'⭐ VIP':'🛒 Retail';
     var lastP=r.lastPurchase?r.lastPurchase.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
     var collectBtn=r.creditBalance>0
@@ -9490,7 +9492,7 @@ function buildCustomerOverview(){
         '<span style="font-weight:600;color:#374151">'+r.name+'</span>'+
         '<span style="color:#6b7280">'+fmt(r.totalSpent)+'</span>'+
       '</div>'+
-      '<div style="background:#f3f4f6;border-radius:6px;height:10px;overflow:hidden">'+
+      '<div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden">'+
         '<div style="width:'+pct+'%;height:100%;background:'+custColors[i]+';border-radius:6px;transition:width .4s"></div>'+
       '</div>'+
     '</div>';
@@ -9532,7 +9534,7 @@ function buildCustomerOverview(){
       '<td>'+r.phone+'</td>'+
       '<td style="text-align:right">'+fmt(r.totalSpent)+'</td>'+
       '<td style="text-align:right;color:#dc2626;font-weight:700">'+fmt(r.creditBalance)+'</td>'+
-      '<td style="text-align:center"><span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">'+pct+'%</span></td>'+
+      '<td style="text-align:center"><span style="background:var(--danger-bg);color:#dc2626;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">'+pct+'%</span></td>'+
       '<td>'+lastP+'</td>'+
       '<td><button class="btn sm" style="color:#dc2626;border-color:#fca5a5;font-size:11px" onclick="switchTab(\'creditcust\')">💳 Collect</button></td>'+
     '</tr>';
@@ -9682,7 +9684,7 @@ function buildInventoryVal(){
         '<span style="font-weight:600;color:#374151">'+c.cat+' <span style="color:#9ca3af;font-weight:400">('+c.skus+' SKUs)</span></span>'+
         '<span style="color:#6b7280">'+fmt(c.sellVal)+'</span>'+
       '</div>'+
-      '<div style="background:#f3f4f6;border-radius:6px;height:10px;overflow:hidden">'+
+      '<div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden">'+
         '<div style="width:'+pct+'%;height:100%;background:'+catColors[i%catColors.length]+';border-radius:6px"></div>'+
       '</div>'+
     '</div>';
@@ -9690,10 +9692,10 @@ function buildInventoryVal(){
 
   // ── Table rows ───────────────────────────────────────────────
   var statusBadge={
-    out:'<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">OUT</span>',
-    low:'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">LOW</span>',
-    over:'<span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">OVER</span>',
-    ok:'<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">OK</span>'
+    out:'<span style="background:var(--danger-bg);color:#dc2626;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">OUT</span>',
+    low:'<span style="background:var(--warning-bg);color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">LOW</span>',
+    over:'<span style="background:var(--primary-bg);color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">OVER</span>',
+    ok:'<span style="background:var(--success-bg);color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">OK</span>'
   };
   var tableRows=filtered.map(function(it){
     return '<tr>'+
@@ -9733,10 +9735,10 @@ function buildInventoryVal(){
       '</div>'+
       '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
         '<p class="sec-title" style="margin:0 0 12px">⚠️ Alerts</p>'+
-        (outCount?'<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px"><b style="color:#dc2626">'+outCount+' item(s) OUT OF STOCK</b><div style="color:#6b7280;font-size:12px;margin-top:4px">'+items.filter(function(it){return it.status==='out';}).map(function(it){return it.name;}).join(', ')+'</div></div>':'')+
-        (lowCount?'<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px"><b style="color:#92400e">'+lowCount+' item(s) LOW STOCK</b><div style="color:#6b7280;font-size:12px;margin-top:4px">'+items.filter(function(it){return it.status==='low';}).map(function(it){return it.name+' ('+it.qty+' left)';}).join(', ')+'</div></div>':'')+
+        (outCount?'<div style="background:var(--danger-bg);border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px"><b style="color:#dc2626">'+outCount+' item(s) OUT OF STOCK</b><div style="color:#6b7280;font-size:12px;margin-top:4px">'+items.filter(function(it){return it.status==='out';}).map(function(it){return it.name;}).join(', ')+'</div></div>':'')+
+        (lowCount?'<div style="background:var(--warning-bg);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px"><b style="color:#92400e">'+lowCount+' item(s) LOW STOCK</b><div style="color:#6b7280;font-size:12px;margin-top:4px">'+items.filter(function(it){return it.status==='low';}).map(function(it){return it.name+' ('+it.qty+' left)';}).join(', ')+'</div></div>':'')+
         (!outCount&&!lowCount?'<div style="color:#15803d;font-size:13px;padding:10px">✅ All stock levels are healthy!</div>':'')+
-        '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-top:8px;font-size:13px">'+
+        '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-top:8px;font-size:13px">'+
           '<b style="color:#15803d">Profit Summary</b>'+
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;font-size:12px">'+
             '<div>Cost invested:</div><div style="text-align:right;font-weight:700">'+fmt(totalCostVal)+'</div>'+
@@ -9758,7 +9760,7 @@ function buildInventoryVal(){
           '<th style="text-align:right">Stock @ Cost</th><th style="text-align:right">Stock @ Sell</th>'+
           '<th style="text-align:right">Pot. Profit</th><th style="text-align:center">Margin</th><th>Status</th>'+
         '</tr></thead><tbody>'+tableRows+'</tbody>'+
-        '<tfoot><tr style="background:#f8fafc;font-weight:700">'+
+        '<tfoot><tr style="background:var(--surface2);font-weight:700">'+
           '<td colspan="5">TOTALS</td>'+
           '<td style="text-align:right;color:#0ea5e9">'+fmt(filtered.reduce(function(a,it){return a+it.costVal;},0))+'</td>'+
           '<td style="text-align:right;color:#6366f1">'+fmt(filtered.reduce(function(a,it){return a+it.sellVal;},0))+'</td>'+
@@ -9851,7 +9853,7 @@ function buildPandL(){
         '<span style="font-weight:600;color:#374151">'+ec[0]+'</span>'+
         '<span style="color:#6b7280">'+fmt(ec[1])+'</span>'+
       '</div>'+
-      '<div style="background:#f3f4f6;border-radius:6px;height:9px;overflow:hidden">'+
+      '<div style="background:var(--surface2);border-radius:6px;height:9px;overflow:hidden">'+
         '<div style="width:'+pct+'%;height:100%;background:'+expCatColors[i%expCatColors.length]+';border-radius:6px"></div>'+
       '</div>'+
     '</div>';
@@ -10032,7 +10034,7 @@ function buildReturnsTracker(){
         '<span style="font-weight:600;color:#374151">'+it.name+'</span>'+
         '<span style="color:#6b7280">'+it.count+' units · '+fmt(it.val)+'</span>'+
       '</div>'+
-      '<div style="background:#f3f4f6;border-radius:6px;height:10px;overflow:hidden">'+
+      '<div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden">'+
         '<div style="width:'+pct+'%;height:100%;background:'+itemColors[i]+';border-radius:6px"></div>'+
       '</div>'+
     '</div>';
@@ -10040,9 +10042,9 @@ function buildReturnsTracker(){
 
   // ── Table rows ───────────────────────────────────────────────
   var refundTypeBadge={
-    cash:'<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CASH</span>',
-    credit:'<span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CREDIT</span>',
-    exchange:'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXCHANGE</span>'
+    cash:'<span style="background:var(--success-bg);color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CASH</span>',
+    credit:'<span style="background:var(--primary-bg);color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CREDIT</span>',
+    exchange:'<span style="background:var(--warning-bg);color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXCHANGE</span>'
   };
   var tableRows=filtered.map(function(r){
     var d=parseDate(r.date);
@@ -10088,7 +10090,7 @@ function buildReturnsTracker(){
                 '<span style="font-weight:600">'+labels[t]+'</span>'+
                 '<span style="color:#6b7280">'+fmt(types[t])+' ('+pct+'%)</span>'+
               '</div>'+
-              '<div style="background:#f3f4f6;border-radius:6px;height:9px;overflow:hidden">'+
+              '<div style="background:var(--surface2);border-radius:6px;height:9px;overflow:hidden">'+
                 '<div style="width:'+pct+'%;height:100%;background:'+cols[t]+';border-radius:6px"></div>'+
               '</div>'+
             '</div>';
@@ -10161,7 +10163,7 @@ function buildSupplierPayments(){
         '<div style="text-align:center"><div style="font-size:10px;color:#666">Total paid</div><div style="font-size:13px;font-weight:700;color:#15803d">'+fmt(paid)+'</div></div>'+
         '<div style="text-align:center"><div style="font-size:10px;color:#666">Still owed</div><div style="font-size:13px;font-weight:700;color:#c0392b">'+fmt(s.owedToSupplier)+'</div></div>'+
       '</div>'+
-      '<div style="background:#f5f5f5;border-radius:4px;height:6px;overflow:hidden">'+
+      '<div style="background:var(--surface2);border-radius:4px;height:6px;overflow:hidden">'+
         '<div style="background:#15803d;height:100%;width:'+pct+'%;border-radius:4px;transition:width .5s"></div>'+
       '</div>'+
       '<div style="font-size:10px;color:#666;margin-top:4px">'+pct+'% paid</div>'+
@@ -10191,7 +10193,7 @@ function buildSupplierPayments(){
 
     // Owed cards
     (owedCards?'<p class="sec-title" style="margin-bottom:10px">Suppliers with outstanding balance</p><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:1.5rem">'+owedCards+'</div>':
-    '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 16px;font-size:13px;color:#15803d;margin-bottom:1.5rem">✅ No outstanding supplier balances — all suppliers are fully paid!</div>')+
+    '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:10px;padding:12px 16px;font-size:13px;color:#15803d;margin-bottom:1.5rem">✅ No outstanding supplier balances — all suppliers are fully paid!</div>')+
 
     // Payment history
     '<p class="sec-title" style="margin-bottom:10px">Payment history</p>'+
@@ -10207,7 +10209,7 @@ function buildSupplierPayments(){
     (rows?
       '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Supplier</th><th style="text-align:right">Amount paid</th><th>Mode</th><th>Reference</th><th>By</th></tr></thead>'+
       '<tbody>'+rows+
-      '<tr style="background:#f0fdf4;font-weight:700;border-top:2px solid #15803d"><td colspan="2">TOTAL — '+filtered.length+' payment(s)</td><td style="text-align:right;color:#15803d">'+fmt(filteredTotal)+'</td><td colspan="3"></td></tr>'+
+      '<tr style="background:var(--success-bg);font-weight:700;border-top:2px solid #15803d"><td colspan="2">TOTAL — '+filtered.length+' payment(s)</td><td style="text-align:right;color:#15803d">'+fmt(filteredTotal)+'</td><td colspan="3"></td></tr>'+
       '</tbody></table></div>'
     :'<div class="empty">No payments recorded'+(supPaySearch||supPayFilterSup||supPayDateFrom||supPayDateTo?' for this filter.':'.')+'</div>');
 }
@@ -10300,16 +10302,16 @@ function paySupplier(supId){
       '<div style="padding:16px 18px">'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">'+
           '<div>'+
-            '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Amount (&#8358;) *</label>'+
+            '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Amount (&#8358;) *</label>'+
             '<input type="number" id="sp-amount" min="0" step="any" value="'+(sup.owedToSupplier||'')+'" placeholder="Enter amount" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;font-weight:700;box-sizing:border-box">'+
           '</div>'+
           '<div>'+
-            '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Date</label>'+
+            '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Date</label>'+
             '<input type="date" id="sp-date" value="'+new Date().toISOString().slice(0,10)+'" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box">'+
           '</div>'+
         '</div>'+
         '<div style="margin-bottom:12px">'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Payment mode *</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Payment mode *</label>'+
           '<select id="sp-mode" onchange="spModeChange()" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:600">'+
             '<option value="cash">&#128181; Cash</option>'+
             '<option value="transfer">&#127974; Bank Transfer</option>'+
@@ -10318,24 +10320,24 @@ function paySupplier(supId){
           '</select>'+
         '</div>'+
         '<div id="sp-bank-row" style="margin-bottom:12px;display:none">'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Bank account</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Bank account</label>'+
           '<select id="sp-bank" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">'+
             '<option value="">-- Select bank --</option>'+bankOpts+
           '</select>'+
         '</div>'+
         '<div id="sp-pos-row" style="margin-bottom:12px;display:none">'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">POS terminal</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">POS terminal</label>'+
           '<select id="sp-pos" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">'+
             '<option value="">-- Select POS --</option>'+posOpts+
           '</select>'+
         '</div>'+
         '<div style="margin-bottom:16px">'+
-          '<label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reference / Note</label>'+
+          '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Reference / Note</label>'+
           '<input type="text" id="sp-note" placeholder="e.g. Invoice ref, cheque number..." style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;box-sizing:border-box">'+
         '</div>'+
         '<div style="display:flex;gap:8px">'+
           '<button onclick="saveSupplierPayment('+supId+')" style="flex:1;padding:11px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#10003; Record Payment</button>'+
-          '<button onclick="document.getElementById(\'sup-pay-form-overlay\').remove()" style="padding:11px 16px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+          '<button onclick="document.getElementById(\'sup-pay-form-overlay\').remove()" style="padding:11px 16px;background:var(--surface2);color:var(--text1,#374151);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
         '</div>'+
       '</div>'+
     '</div>';
@@ -10403,9 +10405,9 @@ function viewSupplierPayments(supId){
         '<button onclick="document.getElementById(\'sup-pay-modal\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer">&times;</button>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">'+
-        '<div style="background:#f0fdf4;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#666">Total paid</div><div style="font-size:15px;font-weight:700;color:#15803d">'+fmt(totalPaid)+'</div></div>'+
-        '<div style="background:#fff5f5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#666">Still owed</div><div style="font-size:15px;font-weight:700;color:#c0392b">'+fmt(sup.owedToSupplier||0)+'</div></div>'+
-        '<div style="background:#f0f9ff;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#666">Payments</div><div style="font-size:15px;font-weight:700;color:#0369a1">'+payments.length+'</div></div>'+
+        '<div style="background:var(--success-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#666">Total paid</div><div style="font-size:15px;font-weight:700;color:#15803d">'+fmt(totalPaid)+'</div></div>'+
+        '<div style="background:var(--danger-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#666">Still owed</div><div style="font-size:15px;font-weight:700;color:#c0392b">'+fmt(sup.owedToSupplier||0)+'</div></div>'+
+        '<div style="background:var(--primary-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#666">Payments</div><div style="font-size:15px;font-weight:700;color:#0369a1">'+payments.length+'</div></div>'+
       '</div>'+
       '<table style="width:100%;border-collapse:collapse;font-size:12px">'+
         '<thead><tr style="background:#f5f5f5"><th style="padding:6px;text-align:left">Date</th><th style="padding:6px;text-align:left">Amount</th><th style="padding:6px;text-align:left">Mode</th><th style="padding:6px;text-align:left">Note</th><th style="padding:6px;text-align:left">By</th></tr></thead>'+
@@ -10724,7 +10726,7 @@ function buildReports(){
       out+='<div class="tbl-wrap"><table><thead><tr>';
       out+='<th>#</th><th>Date</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th><th>Mode</th>';
       out+='</tr></thead><tbody>'+incRows;
-      out+='<tr style="background:#f0fdf4;font-weight:700;border-top:2px solid #065f46"><td colspan="4">TOTAL</td><td style="text-align:right;color:#15803d">'+fmt(incGrandTotal)+'</td><td></td></tr>';
+      out+='<tr style="background:var(--success-bg);font-weight:700;border-top:2px solid #065f46"><td colspan="4">TOTAL</td><td style="text-align:right;color:#15803d">'+fmt(incGrandTotal)+'</td><td></td></tr>';
       out+='</tbody></table></div>';
     } else {
       out+='<div class="empty">No income recorded for this period.</div>';
@@ -10771,7 +10773,7 @@ function buildReports(){
     if(retRows){
       out+='<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th><th>Items returned</th><th style="text-align:right">Refund amt</th><th>Refund type</th><th>By</th></tr></thead><tbody>';
       out+=retRows;
-      out+='<tr style="background:#fff3cd;font-weight:700;border-top:2px solid #b45309"><td colspan="5">TOTAL — '+retList.length+' return(s)</td><td style="text-align:right;color:#c0392b">'+fmt(retGrandTotal)+'</td><td colspan="2"></td></tr>';
+      out+='<tr style="background:var(--warning-bg);font-weight:700;border-top:2px solid #b45309"><td colspan="5">TOTAL — '+retList.length+' return(s)</td><td style="text-align:right;color:#c0392b">'+fmt(retGrandTotal)+'</td><td colspan="2"></td></tr>';
       out+='</tbody></table></div>';
     } else {
       out+='<div class="empty">No returns recorded'+(allReturns.length>0?' for this date range ('+allReturns.length+' total exist — try clearing the date filter)':'')+'.</div>';
@@ -10834,7 +10836,7 @@ function buildReports(){
       piPrintBtn+
     '</div>'+
     '<div class="metrics">'+mc('Invoices',piList.length,'','')+mc('Invoice total',fmt(piGrandTotal),'','')+mc('Total paid',fmt(piGrandAmtPaid),'Actual cash received','green')+mc('Total profit',fmt(piGrandProfit),pct(piGrandProfit,piGrandTotal)+' margin',piGrandProfit>=0?'green':'red')+'</div>'+
-    (piRows?'<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th><th style="text-align:center">Items</th><th style="text-align:right">Invoice total</th><th style="text-align:right">Amt paid</th><th style="text-align:right">Bal due</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+piRows+'<tr style="background:#f5f5f5;font-weight:700;border-top:2px solid #1a237e"><td colspan="5">TOTAL — '+piList.length+' invoices</td><td style="text-align:right">'+fmt(piGrandTotal)+'</td><td style="text-align:right;color:#15803d">'+fmt(piGrandAmtPaid)+'</td><td></td><td style="text-align:right">'+fmt(piGrandProfit)+'</td><td colspan="2"></td></tr></tbody></table></div>'
+    (piRows?'<div class="tbl-wrap"><table><thead><tr><th>#</th><th>Date</th><th>Invoice #</th><th>Customer</th><th style="text-align:center">Items</th><th style="text-align:right">Invoice total</th><th style="text-align:right">Amt paid</th><th style="text-align:right">Bal due</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+piRows+'<tr style="background:var(--surface2);font-weight:700;border-top:2px solid #1a237e"><td colspan="5">TOTAL — '+piList.length+' invoices</td><td style="text-align:right">'+fmt(piGrandTotal)+'</td><td style="text-align:right;color:#15803d">'+fmt(piGrandAmtPaid)+'</td><td></td><td style="text-align:right">'+fmt(piGrandProfit)+'</td><td colspan="2"></td></tr></tbody></table></div>'
     :'<div class="empty">No paid invoices for this period.</div>');
   }
 
@@ -10897,7 +10899,7 @@ function printReport(){
   var totalRev=filtered.reduce(function(a,s){return a+s.total;},0);
   var totalProfit=filtered.reduce(function(a,s){return a+s.profit;},0);
   var rows=filtered.slice().reverse().map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+s.date+'</td><td>'+(s.invoiceNum||'-')+'</td><td>'+s.name+'</td><td>'+(s.printName||s.custName)+'</td><td style="text-align:center">'+s.qty+'</td><td style="text-align:right">'+fmt(s.total)+'</td><td style="text-align:right">'+fmt(s.profit)+'</td><td>'+payModeLabel(s)+'</td><td>'+s.seller+'</td></tr>';}).join('');
-  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sales Report</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px}.h{text-align:center;border-bottom:2px solid #c0392b;padding-bottom:6px;margin-bottom:10px}.co{font-size:16px;font-weight:900;color:#c0392b}.co2{font-size:16px;font-weight:900;color:#1a237e}table{width:100%;border-collapse:collapse}th{background:#1a237e;color:#fff;padding:4px 6px;font-size:9px;text-align:left}td{border:1px solid #ddd;padding:3px 6px}.tr td{font-weight:700;background:#f5f5f5;border-top:2px solid #1a237e}</style></head><body>'+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sales Report</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px}.h{text-align:center;border-bottom:2px solid #c0392b;padding-bottom:6px;margin-bottom:10px}.co{font-size:16px;font-weight:900;color:#c0392b}.co2{font-size:16px;font-weight:900;color:#1a237e}table{width:100%;border-collapse:collapse}th{background:#1a237e;color:#fff;padding:4px 6px;font-size:9px;text-align:left}td{border:1px solid #ddd;padding:3px 6px}.tr td{font-weight:700;background:var(--surface2);border-top:2px solid #1a237e}</style></head><body>'+
     '<div class="h"><div class="co">GREAT CHID ELECTRO (NIG.)</div><div class="co2">GLOBAL DOORS LTD</div><div style="font-size:10px;margin-top:4px">Sales Report — Printed: '+new Date().toLocaleString()+'</div></div>'+
     '<table><thead><tr><th>#</th><th>Date</th><th>Inv#</th><th>Item</th><th>Customer</th><th>Qty</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+
     rows+'<tr class="tr"><td colspan="6">TOTAL</td><td style="text-align:right">'+fmt(totalRev)+'</td><td style="text-align:right">'+fmt(totalProfit)+'</td><td colspan="2"></td></tr>'+
@@ -11036,7 +11038,7 @@ function printIncomeReport(){
     'table{width:100%;border-collapse:collapse}th{background:#065f46;color:#fff;padding:4px 6px;font-size:9px;text-align:left}'+
     'td{border:1px solid #ddd;padding:3px 6px}tr:nth-child(even) td{background:#f0fdf4}'+
     '.tr td{font-weight:700;background:#d1fae5;border-top:2px solid #065f46}'+
-    '.sum{margin-top:8px;background:#f0fdf4;border:1px solid #6ee7b7;border-radius:4px;padding:6px 10px}'+
+    '.sum{margin-top:8px;background:var(--success-bg);border:1px solid #6ee7b7;border-radius:4px;padding:6px 10px}'+
     '</style></head><body>'+
     '<div class="h">'+
       '<div class="co">GREAT CHID ELECTRO (NIG.)</div>'+
@@ -11089,7 +11091,7 @@ function printReturnsReport(){
     'th{background:#b45309;color:#fff;padding:4px 6px;font-size:9px;text-align:left}'+
     'td{border:1px solid #ddd;padding:3px 6px}'+
     'tr:nth-child(even) td{background:#fffbf0}'+
-    '.tr td{font-weight:700;background:#fff3cd;border-top:2px solid #b45309}'+
+    '.tr td{font-weight:700;background:var(--warning-bg);border-top:2px solid #b45309}'+
     '</style></head><body>'+
     '<div class="h">'+
       '<div class="co">GREAT CHID ELECTRO (NIG.)</div>'+
@@ -11393,8 +11395,8 @@ function showAddCommission(invNum, custId, custName){
   var existingTotal=existing.reduce(function(a,e){return a+(e.amount||0);},0);
   var commBal=cust.commissionBalance||0;
   var existingHtml=existing.length?
-    '<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:6px">Already added for this invoice:</div>'+
-    existing.map(function(e){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 8px;background:#f0fdf4;border-radius:6px;margin-bottom:4px"><span>'+e.description+'</span><span style="font-weight:700;color:#15803d">'+fmt(e.amount)+'</span></div>';}).join('')+
+    '<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin-bottom:6px">Already added for this invoice:</div>'+
+    existing.map(function(e){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 8px;background:var(--success-bg);border-radius:6px;margin-bottom:4px"><span>'+e.description+'</span><span style="font-weight:700;color:#15803d">'+fmt(e.amount)+'</span></div>';}).join('')+
     '<div style="font-size:11px;color:#6b7280;margin-top:4px">Total commission on this invoice: <b>'+fmt(existingTotal)+'</b></div></div>':'';
 
   var bankOptsHtml=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
@@ -11404,20 +11406,20 @@ function showAddCommission(invNum, custId, custName){
   overlay.id='commission-modal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
   overlay.innerHTML=
-    '<div style="background:#fff;border-radius:14px;padding:24px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto">'+
+    '<div style="background:var(--white);border-radius:14px;padding:24px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
         '<div style="font-size:16px;font-weight:700;color:#1e293b">🎯 Add Commission</div>'+
         '<button onclick="document.getElementById(\'commission-modal\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer">&times;</button>'+
       '</div>'+
-      '<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px">'+
+      '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px">'+
         '<b>Customer:</b> '+custName+' &nbsp;|&nbsp; <b>Invoice:</b> #'+invNum+' &nbsp;|&nbsp; <b>Sale:</b> '+fmt(grandTotal)+
         (commBal>0?'<div style="margin-top:4px;color:#92400e;font-weight:600">⏳ Existing commission balance: '+fmt(commBal)+'</div>':'')+
       '</div>'+
       existingHtml+
 
       // ── Commission Entry ─────────────────────────────
-      '<div style="border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:14px">'+
-        '<div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">📋 Commission Details</div>'+
+      '<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">📋 Commission Details</div>'+
         '<div style="display:flex;flex-direction:column;gap:10px">'+
           '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Description / Item Category <span style="color:#dc2626">*</span></label>'+
           '<input type="text" id="cm-desc" placeholder="e.g. Wires, Fittings, Cables, Switches..." style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
@@ -11456,7 +11458,7 @@ function showAddCommission(invNum, custId, custName){
 
       '<div style="display:flex;gap:10px">'+
         '<button onclick="saveCommissionEntry(\''+invNum+'\','+custId+',\''+custName+'\')" style="flex:1;padding:11px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">✅ Save Commission</button>'+
-        '<button onclick="document.getElementById(\'commission-modal\').remove()" style="padding:11px 18px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+        '<button onclick="document.getElementById(\'commission-modal\').remove()" style="padding:11px 18px;background:var(--surface2);color:#495057;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
       '</div>'+
     '</div>';
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
@@ -11535,12 +11537,12 @@ function showPayCommission(custId){
   overlay.id='pay-commission-modal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
   overlay.innerHTML=
-    '<div style="background:#fff;border-radius:14px;padding:24px;max-width:460px;width:100%">'+
+    '<div style="background:var(--white);border-radius:14px;padding:24px;max-width:460px;width:100%">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
         '<div style="font-size:16px;font-weight:700;color:#1e293b">💸 Pay Commission</div>'+
         '<button onclick="document.getElementById(\'pay-commission-modal\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer">&times;</button>'+
       '</div>'+
-      '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px">'+
+      '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px">'+
         '<b>'+cust.name+'</b> — Commission Balance: <span style="font-weight:800;color:#15803d">'+fmt(balance)+'</span>'+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:12px">'+
@@ -11559,7 +11561,7 @@ function showPayCommission(custId){
       '</div>'+
       '<div style="display:flex;gap:10px;margin-top:18px">'+
         '<button onclick="recordCommissionPayout('+custId+')" style="flex:1;padding:11px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💸 Pay Commission</button>'+
-        '<button onclick="document.getElementById(\'pay-commission-modal\').remove()" style="padding:11px 18px;background:#f8f9fa;color:#495057;border:1px solid #dee2e6;border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+        '<button onclick="document.getElementById(\'pay-commission-modal\').remove()" style="padding:11px 18px;background:var(--surface2);color:#495057;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
       '</div>'+
     '</div>';
   overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
@@ -11648,13 +11650,13 @@ function buildProformas(){
   var totalVal=pending.reduce(function(a,p){return a+p.grandTotal;},0);
 
   function statusBadge(p){
-    if(p.status==='converted')return '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">CONVERTED</span>';
-    if(p.status==='cancelled')return '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">CANCELLED</span>';
+    if(p.status==='converted')return '<span style="background:var(--success-bg);color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">CONVERTED</span>';
+    if(p.status==='cancelled')return '<span style="background:var(--surface2);color:#6b7280;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">CANCELLED</span>';
     var validUntil=new Date((new Date(p.date).getTime()||parseSaleDate(p.date))+(p.validDays||7)*86400000);
     var expired=validUntil<new Date();
     return expired
-      ?'<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">EXPIRED</span>'
-      :'<span style="background:#fef9c3;color:#92400e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">PENDING</span>';
+      ?'<span style="background:var(--danger-bg);color:#dc2626;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">EXPIRED</span>'
+      :'<span style="background:var(--warning-bg);color:#92400e;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">PENDING</span>';
   }
 
   function validUntilStr(p){
@@ -11664,11 +11666,11 @@ function buildProformas(){
 
   var rows=proformas.map(function(p){
     var itemSummary=p.items.slice(0,2).map(function(i){return i.name+' ×'+i.qty;}).join(', ')+(p.items.length>2?' +'+( p.items.length-2)+' more':'');
-    var actions='<button onclick="printProforma(\''+p.prfNum+'\')" style="padding:4px 10px;background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">🖨️ Print</button> '+
-      '<button onclick="shareProformaWhatsApp(\''+p.prfNum+'\')" style="padding:4px 10px;background:#f0fdf4;color:#15803d;border:1px solid #86efac;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">📲 Share</button> ';
+    var actions='<button onclick="printProforma(\''+p.prfNum+'\')" style="padding:4px 10px;background:var(--primary-bg);color:#0369a1;border:1px solid #bae6fd;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">🖨️ Print</button> '+
+      '<button onclick="shareProformaWhatsApp(\''+p.prfNum+'\')" style="padding:4px 10px;background:var(--success-bg);color:#15803d;border:1px solid #86efac;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">📲 Share</button> ';
     if(p.status==='pending'){
       actions+='<button onclick="convertProforma(\''+p.prfNum+'\')" style="padding:4px 10px;background:#7c3aed;color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">✅ Convert</button> '+
-        '<button onclick="cancelProforma(\''+p.prfNum+'\')" style="padding:4px 10px;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">✕ Cancel</button>';
+        '<button onclick="cancelProforma(\''+p.prfNum+'\')" style="padding:4px 10px;background:var(--danger-bg);color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">✕ Cancel</button>';
     } else if(p.status==='converted'){
       actions+='<span style="font-size:11px;color:#15803d">→ Invoice #'+p.convertedInvNum+'</span>';
     }
@@ -11745,13 +11747,13 @@ function printProforma(prfNum){
       '.h{display:flex;align-items:center;gap:12px;border-bottom:3px solid #7c3aed;padding-bottom:8px;margin-bottom:8px}'+
       '.htext{flex:1}.co{font-size:15px;font-weight:900;color:#7c3aed;letter-spacing:.5px}'+
       '.co2{font-size:12px;font-weight:700;color:#1a1a1a}.su{font-size:9px;color:#555;margin:1px 0}'+
-      '.ds{font-size:8.5px;color:#555;margin:1px 0}.of{font-size:8px;color:#374151;margin:1px 0}'+
+      '.ds{font-size:8.5px;color:#555;margin:1px 0}.of{font-size:8px;color:var(--text1,#374151);margin:1px 0}'+
       '.prf-badge{background:#7c3aed;color:#fff;font-size:18px;font-weight:900;text-align:center;'+
         'padding:6px 0;letter-spacing:3px;margin-bottom:8px;border-radius:4px}'+
       '.not-tax{text-align:center;font-size:9px;color:#dc2626;font-weight:700;border:1px dashed #dc2626;'+
         'padding:3px 8px;margin-bottom:8px;border-radius:4px}'+
       '.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;font-size:11px}'+
-      '.meta-box{background:#f8f5ff;border:1px solid #e9d5ff;border-radius:6px;padding:6px 10px}'+
+      '.meta-box{background:var(--surface2);border:1px solid #e9d5ff;border-radius:6px;padding:6px 10px}'+
       '.meta-box b{display:block;color:#7c3aed;font-size:9px;text-transform:uppercase;margin-bottom:2px}'+
       'table{width:100%;border-collapse:collapse;font-size:'+fontSize+'}'+
       'thead tr{background:#7c3aed;color:#fff}'+
@@ -11761,7 +11763,7 @@ function printProforma(prfNum){
       '.totals{margin-top:6px;text-align:right;font-size:12px}'+
       '.grand{font-size:15px;font-weight:900;color:#7c3aed;border-top:2px solid #7c3aed;padding-top:4px;margin-top:4px}'+
       '.footer{margin-top:14px;border-top:2px dashed #7c3aed;padding-top:8px;font-size:9px;color:#555;text-align:center}'+
-      '.validity{background:#fef9c3;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;font-size:11px;margin-top:8px;text-align:center}'+
+      '.validity{background:var(--warning-bg);border:1px solid #fde68a;border-radius:6px;padding:6px 10px;font-size:11px;margin-top:8px;text-align:center}'+
       '.watermark{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);'+
         'font-size:80px;font-weight:900;color:rgba(124,58,237,0.06);pointer-events:none;white-space:nowrap;z-index:0}'+
     '</style></head><body>'+
@@ -11906,7 +11908,7 @@ function prodReportLiveSearch(val, showAll){
   dd.innerHTML=matches.map(function(i){
     return '<div onclick="prodReportSelect(\''+i.id+'\',\''+i.name.replace(/'/g,'&#39;')+'\')" '+
       'style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center" '+
-      'onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'">'+
+      'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">'+
       '<span><b style="font-size:13px">'+i.name+'</b> <span style="color:#9ca3af;font-size:11px;margin-left:6px">'+( i.cat||'')+'</span></span>'+
       '<span style="color:var(--primary);font-size:12px;font-weight:600;white-space:nowrap;margin-left:8px">'+i.qty+' in stock</span>'+
     '</div>';
@@ -11938,7 +11940,7 @@ function buildProductReport(){
           'onfocus="prodReportLiveSearch(this.value,true)" '+
           'onblur="setTimeout(function(){var d=document.getElementById(\'prod-report-dd\');if(d)d.style.display=\'none\';},200)" '+
           'style="width:100%;padding:10px 14px;border:2px solid var(--primary);border-radius:8px;font-size:14px;box-sizing:border-box">'+
-        '<div id="prod-report-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.12);z-index:9999;max-height:280px;overflow-y:auto;margin-top:3px"></div>'+
+        '<div id="prod-report-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--white);border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.12);z-index:9999;max-height:280px;overflow-y:auto;margin-top:3px"></div>'+
       '</div>'+
     '</div>';
 
@@ -12075,14 +12077,14 @@ function buildProductReport(){
             '<td style="color:#9ca3af;font-size:11px">'+p.by+'</td>'+
           '</tr>';
         }).join('')+
-        '<tfoot><tr style="background:#f8fafc;font-weight:700"><td colspan="3">TOTAL</td>'+
+        '<tfoot><tr style="background:var(--surface2);font-weight:700"><td colspan="3">TOTAL</td>'+
           '<td style="text-align:center">'+purchaseEvents.reduce(function(a,p){return a+p.qtyOrdered;},0)+'</td>'+
           '<td style="text-align:center;color:#15803d">'+totalPurchased+'</td>'+
           '<td></td><td style="text-align:right;color:#f59e0b">'+fmt(totalCostSpent)+'</td><td colspan="2"></td>'+
         '</tr></tfoot></table></div>'
       :'<div class="empty">No purchase records found for this product.</div>')+
       (pendingEvents.length?
-        '<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-top:10px">'+
+        '<div style="background:var(--warning-bg);border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-top:10px">'+
           '<b style="color:#92400e">📦 '+pendingEvents.length+' pending delivery(ies):</b> '+
           pendingEvents.map(function(d){return d.qtyPending+' units from '+d.supName+' (Invoice #'+d.invoiceNum+')';}).join(', ')+
         '</div>':'')+
@@ -12100,9 +12102,9 @@ function buildProductReport(){
         '</tr></thead><tbody>'+
         salesEvents.map(function(s){
           var profit=s.total-(item.cost||0)*s.qty;
-          var ptBadge=s.payment==='credit'?'<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CREDIT</span>':
-            s.payment==='part'?'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">PART</span>':
-            '<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">PAID</span>';
+          var ptBadge=s.payment==='credit'?'<span style="background:var(--danger-bg);color:#dc2626;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CREDIT</span>':
+            s.payment==='part'?'<span style="background:var(--warning-bg);color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">PART</span>':
+            '<span style="background:var(--success-bg);color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">PAID</span>';
           return '<tr>'+
             '<td>'+s.date+'</td>'+
             '<td><b>'+s.invoiceNum+'</b></td>'+
@@ -12115,7 +12117,7 @@ function buildProductReport(){
             '<td style="color:#9ca3af;font-size:11px">'+s.seller+'</td>'+
           '</tr>';
         }).join('')+
-        '<tfoot><tr style="background:#f8fafc;font-weight:700"><td colspan="3">TOTAL</td>'+
+        '<tfoot><tr style="background:var(--surface2);font-weight:700"><td colspan="3">TOTAL</td>'+
           '<td style="text-align:center">'+totalSold+'</td><td></td>'+
           '<td style="text-align:right;color:#6366f1">'+fmt(totalRevenue)+'</td>'+
           '<td style="text-align:right;color:'+profitColor+'">'+fmt(totalProfit)+'</td>'+
@@ -12134,7 +12136,7 @@ function buildProductReport(){
           '<th>Reason</th><th>Type</th><th>By</th>'+
         '</tr></thead><tbody>'+
         returnEvents.map(function(r){
-          var rtBadge={cash:'<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CASH</span>',credit:'<span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CREDIT</span>',exchange:'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXCHANGE</span>'};
+          var rtBadge={cash:'<span style="background:var(--success-bg);color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CASH</span>',credit:'<span style="background:var(--primary-bg);color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CREDIT</span>',exchange:'<span style="background:var(--warning-bg);color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXCHANGE</span>'};
           return '<tr>'+
             '<td>'+r.date+'</td>'+
             '<td><b>#'+(r.invoiceNum||'—')+'</b></td>'+
@@ -12186,7 +12188,7 @@ function buildProductReport(){
         '<tr><td style="padding:6px 10px;color:#6366f1">− Total Sold</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#6366f1">− '+totalSold+'</td></tr>'+
         '<tr><td style="padding:6px 10px;color:#f97316">+ Total Returned by customers</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#f97316">+ '+totalReturned+'</td></tr>'+
         '<tr><td style="padding:6px 10px;color:#8b5cf6">'+(netAdj>=0?'+':'')+'Net stock adjustments</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#8b5cf6">'+(netAdj>=0?'+':'')+netAdj+'</td></tr>'+
-        '<tr style="background:#f0fdf4;border-top:2px solid #86efac"><td style="padding:10px;font-weight:700;color:#15803d">Current Stock</td><td style="padding:10px;text-align:right;font-weight:800;color:#15803d;font-size:16px">'+item.qty+' units</td></tr>'+
+        '<tr style="background:var(--success-bg);border-top:2px solid #86efac"><td style="padding:10px;font-weight:700;color:#15803d">Current Stock</td><td style="padding:10px;text-align:right;font-weight:800;color:#15803d;font-size:16px">'+item.qty+' units</td></tr>'+
       '</tbody></table>'+
     '</div>';
 
