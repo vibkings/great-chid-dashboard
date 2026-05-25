@@ -4815,12 +4815,20 @@ function buildInvoiceHTML(inv){
     '<div style="color:#c0392b;font-style:italic;margin-top:2px">...thanks for your patronage</div>'+
     '</div>'+
     '<div class="ft">Thank you for patronizing <b>Great Chid Electro (Nig.)</b> &nbsp;|&nbsp; Come again!</div>'+
-    '<div style="margin-top:8px;border:2px '+(inv.pendingSupply?'dashed #d97706':'solid #16a34a')+';border-radius:5px;padding:7px 10px;background:'+(inv.pendingSupply?'#fffbeb':'#f0fdf4')+';text-align:center">'+
-      '<div style="font-size:11px;font-weight:900;color:'+(inv.pendingSupply?'#b45309':'#15803d')+';letter-spacing:.5px">'+
-        (inv.pendingSupply?'⏳ NOT YET SUPPLIED':'✅ SUPPLIED')+
+    '<div style="display:flex;align-items:flex-end;gap:10px;margin-top:8px">'+
+      '<div style="flex:1;border:2px '+(inv.pendingSupply?'dashed #d97706':'solid #16a34a')+';border-radius:5px;padding:7px 10px;background:'+(inv.pendingSupply?'#fffbeb':'#f0fdf4')+';text-align:center">'+
+        '<div style="font-size:11px;font-weight:900;color:'+(inv.pendingSupply?'#b45309':'#15803d')+';letter-spacing:.5px">'+
+          (inv.pendingSupply?'⏳ NOT YET SUPPLIED':'✅ SUPPLIED')+
+        '</div>'+
+        '<div style="font-size:9px;color:'+(inv.pendingSupply?'#92400e':'#166534')+';margin-top:2px">'+
+          (inv.pendingSupply?'Payment received. Goods will be supplied at a later date.':'Goods collected by customer'+(inv.wasEverPending&&inv.supplyDate?' on '+inv.supplyDate:'.'))+
+        '</div>'+
       '</div>'+
-      '<div style="font-size:9px;color:'+(inv.pendingSupply?'#92400e':'#166534')+';margin-top:2px">'+
-        (inv.pendingSupply?'Payment received. Goods will be supplied at a later date.':'Goods collected by customer'+(inv.wasEverPending&&inv.supplyDate?' on '+inv.supplyDate:'.'))+
+      '<div style="text-align:center;flex-shrink:0">'+
+        '<img src="https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=https://greatchid.netlify.app&color=1a237e&bgcolor=ffffff" '+
+          'width="72" height="72" alt="QR Code" style="display:block;border:1px solid #ddd;border-radius:4px;padding:2px">'+
+        '<div style="font-size:7.5px;color:#6b7280;margin-top:3px;font-weight:700;letter-spacing:.5px">📱 SCAN ME</div>'+
+        '<div style="font-size:6.5px;color:#9ca3af;">greatchid.netlify.app</div>'+
       '</div>'+
     '</div>';
 
