@@ -156,6 +156,9 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13
 .sidebar.collapsed+.main,.main.nav-collapsed{margin-left:54px}
 .nav-collapse-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#adb5bd;font-size:14px;transition:all .2s;flex-shrink:0}
 .nav-collapse-btn:hover{background:rgba(255,255,255,.2);color:#fff}
+/* Dark mode dropdown fix */
+#s-reg-cust-dd,#pi-item-dropdown,#inv-item-dropdown,#pu-sup-dd,#sup-pay-filter-dd,#prod-report-dd,#ei-cust-dd,#pcm-bank,#pcm-pos{background:var(--white)!important;color:var(--text1)!important;border-color:var(--border)!important}
+#s-reg-cust-dd div,#pi-item-dropdown div,#inv-item-dropdown div,#pu-sup-dd div,#sup-pay-filter-dd div,#prod-report-dd div,#ei-cust-dd div{background:var(--white);color:var(--text1)}
 .user-block{display:flex;align-items:center;gap:9px;padding:.6rem .75rem;background:rgba(255,255,255,.07);border-radius:var(--radius-sm);cursor:pointer;transition:background .15s}
 .user-block:hover{background:rgba(255,255,255,.13)}
 .user-avatar{width:30px;height:30px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;border:2px solid rgba(255,255,255,.2)}
@@ -2011,7 +2014,7 @@ function buildSettings(){
   return dataStats+
     versionSection+
     backupSection+
-    '<hr style="border:none;border-top:1px solid #e5e7eb;margin-bottom:1.5rem">'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin-bottom:1.5rem">'+
     '<p class="sec-title">🏦 Bank accounts</p>'+
     '<p style="font-size:13px;color:#666;margin-bottom:1rem">Banks shown when "Bank transfer" is selected as payment mode.</p>'+
     '<div class="fg" style="grid-template-columns:1fr 1fr auto"><div class="form-group"><label>Bank name</label><input type="text" id="sb-name" placeholder="e.g. Zenith Bank"></div><div class="form-group"><label>Account number (optional)</label><input type="text" id="sb-acct" placeholder="e.g. 0123456789"></div><div class="form-group"><label>&nbsp;</label><button class="btn primary" onclick="addBank()">Add bank</button></div></div>'+
@@ -2020,7 +2023,7 @@ function buildSettings(){
     '<p style="font-size:13px;color:#666;margin-bottom:1rem">Terminals shown when "POS" is selected as payment mode.</p>'+
     '<div class="fg" style="grid-template-columns:1fr 1fr auto"><div class="form-group"><label>Terminal name</label><input type="text" id="sp-pos-name" placeholder="e.g. Moniepoint POS 1"></div><div class="form-group"><label>Terminal ID (optional)</label><input type="text" id="sp-pos-tid" placeholder="e.g. TID-001"></div><div class="form-group"><label>&nbsp;</label><button class="btn primary" onclick="addPos()">Add terminal</button></div></div>'+
     '<div class="tbl-wrap"><table><thead><tr><th>Terminal name</th><th>Terminal ID</th><th></th></tr></thead><tbody>'+posRows+'</tbody></table></div>'+
-    (isAdmin()?'<hr style="border:none;border-top:1px solid #e5e7eb;margin:1.5rem 0"><p class="sec-title" style="color:var(--danger)">⚠ Danger zone</p><p style="font-size:13px;color:#666;margin-bottom:1rem">Permanently delete all business data. This cannot be undone. Export a backup first.</p><button class="btn danger" style="font-size:13px;padding:8px 14px" onclick="clearAllData()">🗑 Clear all data</button>':'');
+    (isAdmin()?'<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title" style="color:var(--danger)">⚠ Danger zone</p><p style="font-size:13px;color:#666;margin-bottom:1rem">Permanently delete all business data. This cannot be undone. Export a backup first.</p><button class="btn danger" style="font-size:13px;padding:8px 14px" onclick="clearAllData()">🗑 Clear all data</button>':'');
 }
 
 function renderAuth(){
@@ -5171,7 +5174,7 @@ function filterSupDd(val, showAll){
   if(!matches.length){dd.style.display='none';return;}
   dd.innerHTML=matches.map(function(s){
     var badge=s.owedToSupplier>0?'<span style="color:#dc2626;font-size:10px;margin-left:6px">owes '+fmt(s.owedToSupplier)+'</span>':'';
-    return '<div onclick="selectSupDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'"><b>'+s.name+'</b>'+badge+'<div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
+    return '<div onclick="selectSupDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'"><b>'+s.name+'</b>'+badge+'<div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
   }).join('');
   dd.style.display='block';
 }
@@ -5192,9 +5195,9 @@ function filterSupPayDd(val, showAll){
   var suppliers=DB.suppliers||[];
   var q=(val||'').toLowerCase().trim();
   var matches=showAll&&!q?suppliers:suppliers.filter(function(s){return s.name.toLowerCase().indexOf(q)>=0;});
-  var allOpt='<div onclick="selectSupPayDd(\'\',\'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;color:#6b7280" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'">All Suppliers</div>';
+  var allOpt='<div onclick="selectSupPayDd(\'\',\'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;color:#6b7280" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'">All Suppliers</div>';
   dd.innerHTML=allOpt+matches.map(function(s){
-    return '<div onclick="selectSupPayDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'"><b>'+s.name+'</b><div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
+    return '<div onclick="selectSupPayDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'"><b>'+s.name+'</b><div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
   }).join('');
   dd.style.display='block';
 }
@@ -5227,16 +5230,16 @@ function saleCustSearch(val, showAll){
     else if((c.creditBalance||0)>0)badge='<span style="font-size:10px;background:#fef2f2;color:#dc2626;padding:1px 5px;border-radius:3px;margin-left:4px">Owes: '+fmt(c.creditBalance)+'</span>';
     var safeName=c.name.replace(/'/g,"\'").replace(/"/g,'&quot;');
     return '<div onmousedown="event.preventDefault();saleCustSelect(\''+c.id+'\',\''+safeName+'\')"'+
-      ' style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:12px"'+
-      ' onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'\'">'+
-      '<div style="font-weight:600">'+c.name+badge+'</div>'+
-      '<div style="font-size:10px;color:#6b7280;margin-top:1px">'+(c.phone||'No phone')+(c.type?' · '+c.type:'')+'</div>'+
+      ' style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;background:var(--white);color:var(--text1)"'+
+      ' onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">'+
+      '<div style="font-weight:600;color:var(--text1)">'+c.name+badge+'</div>'+
+      '<div style="font-size:10px;color:var(--text3);margin-top:1px">'+(c.phone||'No phone')+(c.type?' · '+c.type:'')+'</div>'+
     '</div>';
   }).join('')+
   // Walk-in option at bottom
   '<div onmousedown="event.preventDefault();setSaleCustType(\'walkin\')"'+
-    ' style="padding:8px 12px;cursor:pointer;font-size:12px;color:#6b7280;font-style:italic;border-top:1px solid #e5e7eb"'+
-    ' onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'\'">'+
+    ' style="padding:8px 12px;cursor:pointer;font-size:12px;color:var(--text3);font-style:italic;border-top:1px solid var(--border);background:var(--white)"'+
+    ' onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">'+
     'Walk-in customer (no account)'+
   '</div>';
 }
@@ -6510,7 +6513,7 @@ function retAddExchangeRow(){
           ' onfocus="retExchSearch(this,\''+rowId+'\',true)"'+
           ' onblur="setTimeout(function(){var d=document.getElementById(\''+rowId+'-dd\');if(d)d.style.display=\'none\';},200)"'+
           ' style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;box-sizing:border-box">'+
-        '<div id="'+rowId+'-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:9999;max-height:180px;overflow-y:auto;margin-top:2px"></div>'+
+        '<div id="'+rowId+'-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--white);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.25);z-index:9999;max-height:180px;overflow-y:auto;margin-top:2px"></div>'+
       '</div>'+
       '<button onclick="var r=document.getElementById(\''+rowId+'\');if(r){r.remove();retUpdateExchangeTotal();}" style="padding:4px 8px;background:#fee2e2;color:#dc2626;border:none;border-radius:5px;font-size:14px;cursor:pointer;font-weight:700;flex-shrink:0">&times;</button>'+
     '</div>'+
@@ -6538,7 +6541,7 @@ function retExchSearch(inp, rowId, showAll){
     var stockLabel=i.qty===0?'Out':''+i.qty+' left';
     var safeName=i.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
     return '<div onmousedown="event.preventDefault();retExchSelectItem(\''+rowId+'\','+i.id+',\''+safeName+'\','+i.sell+','+i.qty+')"'+
-      ' style="padding:7px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;font-size:12px"'+
+      ' style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px"'+
       ' onmouseover="this.style.background=\'#f0fdf4\'" onmouseout="this.style.background=\'\'">'+
       '<div>'+
         '<div style="font-weight:600;color:#111">'+i.name+'</div>'+
@@ -6899,7 +6902,7 @@ function buildSales(){
             ' value="'+(window._saleRegCustId?(function(){var c=DB.customers.find(function(c){return c.id==window._saleRegCustId;});return c?c.name:'';})():'')+'"'+
             ' style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;box-sizing:border-box">'+
           '<input type="hidden" id="s-reg-customer" value="'+(window._saleRegCustId||'')+'">' +
-          '<div id="s-reg-cust-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:9999;max-height:220px;overflow-y:auto;margin-top:2px"></div>'+
+          '<div id="s-reg-cust-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--white);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:9999;max-height:220px;overflow-y:auto;margin-top:2px"></div>'+
         '</div>'+
         '</div>'+
         '<div class="form-group">'+
@@ -7451,13 +7454,13 @@ function eiCustSearch(val, showAll){
     return showAll||!q||c.name.toLowerCase().indexOf(q)>=0||(c.phone&&c.phone.indexOf(q)>=0);
   }).slice(0,20);
   // Always show Walk-in option
-  var walkIn='<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\'Walk-in customer\';document.getElementById(\'ei-custid\').value=\'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:12px;color:#6b7280;font-style:italic" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'\'">Walk-in customer (no account)</div>';
+  var walkIn='<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\'Walk-in customer\';document.getElementById(\'ei-custid\').value=\'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;color:#6b7280;font-style:italic" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'\'">Walk-in customer (no account)</div>';
   if(!matches.length&&!showAll){dd.style.display='none';return;}
   dd.style.display='block';
   dd.innerHTML=walkIn+matches.map(function(c){
     var safeName=c.name.replace(/'/g,"\'").replace(/"/g,'&quot;');
     var bal=c.creditBalance>0?'<span style="color:#dc2626;font-size:10px"> ₦'+Math.round(c.creditBalance).toLocaleString()+' owed</span>':'';
-    return '<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\''+safeName+'\';document.getElementById(\'ei-custid\').value=\''+c.id+'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f3f4f6;font-size:12px" onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'\'">'+
+    return '<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\''+safeName+'\';document.getElementById(\'ei-custid\').value=\''+c.id+'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'#f0f4ff\'" onmouseout="this.style.background=\'\'">'+
       '<div style="font-weight:600">'+c.name+bal+'</div>'+
       '<div style="font-size:10px;color:#6b7280">'+(c.phone||'No phone')+'</div>'+
     '</div>';
@@ -7538,7 +7541,7 @@ function editInvoice(invNum){
               ' onfocus="eiCustSearch(this.value,true)"'+
               ' onblur="setTimeout(function(){var d=document.getElementById(\'ei-cust-dd\');if(d)d.style.display=\'none\';},200)"'+
               ' style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;box-sizing:border-box">'+
-            '<div id="ei-cust-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);z-index:99999;max-height:200px;overflow-y:auto;margin-top:2px"></div>'+
+            '<div id="ei-cust-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--white);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.25);z-index:99999;max-height:200px;overflow-y:auto;margin-top:2px"></div>'+
           '</div>'+
           '<input type="hidden" id="ei-custid" value="'+(s0.custId||'')+'">'+ 
         '</div>'+
@@ -8598,7 +8601,7 @@ function buildPurchases(){
         var pct=totalOrdered>0?Math.round(totalReceived/totalOrdered*100):0;
         var itemRows=g.items.map(function(d){
           var iPct=d.qtyOrdered>0?Math.round((d.qtyReceived||0)/d.qtyOrdered*100):0;
-          return '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 120px 110px;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:13px">'+
+          return '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 120px 110px;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">'+
             '<div style="font-weight:500">'+d.itemName+'</div>'+
             '<div style="text-align:center;color:#6b7280">'+d.qtyOrdered+'</div>'+
             '<div style="text-align:center;color:#15803d;font-weight:600">'+(d.qtyReceived||0)+'</div>'+
@@ -8643,7 +8646,7 @@ function buildPurchases(){
     '<div style="position:relative">'+
       '<input type="text" id="pu-sup-search" autocomplete="off" placeholder="Type to search supplier..." oninput="filterSupDd(this.value)" onfocus="filterSupDd(this.value,true)" onblur="setTimeout(function(){var d=document.getElementById(\'pu-sup-dd\');if(d)d.style.display=\'none\';},200)" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;box-sizing:border-box">'+
       '<input type="hidden" id="pu-supplier" value="">'+
-      '<div id="pu-sup-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:9999;max-height:200px;overflow-y:auto;margin-top:2px"></div>'+
+      '<div id="pu-sup-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--white);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:9999;max-height:200px;overflow-y:auto;margin-top:2px"></div>'+
     '</div></div>'+
     '<div class="form-group"><label>Supplier invoice # <span style="color:var(--danger)">*</span></label><input type="text" id="pu-invnum" placeholder="e.g. SUP-2024-001"></div>'+
     '<div class="form-group"><label>Purchase date <span style="font-size:10px;color:var(--text3);font-weight:400">(blank = today)</span></label><input type="date" id="pu-date" style="font-size:13px"></div></div>'+
@@ -9946,13 +9949,13 @@ function buildPandL(){
           '<tr style="background:#f8fafc"><td style="padding:8px 10px;font-weight:700;color:#374151">REVENUE</td><td></td></tr>'+
           '<tr><td style="padding:6px 10px 6px 20px;color:#374151">Gross Sales</td><td style="padding:6px 10px;text-align:right;font-weight:600">'+fmt(grossRevenue)+'</td></tr>'+
           '<tr><td style="padding:6px 10px 6px 20px;color:#374151">Less: Returns &amp; Refunds</td><td style="padding:6px 10px;text-align:right;color:#dc2626">('+fmt(totalReturns)+')</td></tr>'+
-          '<tr style="border-top:1px solid #e5e7eb"><td style="padding:8px 10px;font-weight:700">Net Revenue</td><td style="padding:8px 10px;text-align:right;font-weight:700">'+fmt(netRevenue)+'</td></tr>'+
+          '<tr style="border-top:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700">Net Revenue</td><td style="padding:8px 10px;text-align:right;font-weight:700">'+fmt(netRevenue)+'</td></tr>'+
           '<tr style="background:#f8fafc"><td style="padding:8px 10px;font-weight:700;color:#374151">COST OF GOODS</td><td></td></tr>'+
           '<tr><td style="padding:6px 10px 6px 20px;color:#374151">Cost of Goods Sold</td><td style="padding:6px 10px;text-align:right;color:#dc2626">('+fmt(cogs)+')</td></tr>'+
-          '<tr style="border-top:1px solid #e5e7eb"><td style="padding:8px 10px;font-weight:700">Gross Profit</td><td style="padding:8px 10px;text-align:right;font-weight:700;color:#0ea5e9">'+fmt(grossProfit)+' <span style="font-size:11px;color:#9ca3af">('+grossMargin+'%)</span></td></tr>'+
+          '<tr style="border-top:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700">Gross Profit</td><td style="padding:8px 10px;text-align:right;font-weight:700;color:#0ea5e9">'+fmt(grossProfit)+' <span style="font-size:11px;color:#9ca3af">('+grossMargin+'%)</span></td></tr>'+
           '<tr style="background:#f8fafc"><td style="padding:8px 10px;font-weight:700;color:#374151">EXPENSES</td><td></td></tr>'+
           expCats.map(function(ec){return '<tr><td style="padding:6px 10px 6px 20px;color:#374151">'+ec[0]+'</td><td style="padding:6px 10px;text-align:right;color:#dc2626">('+fmt(ec[1])+')</td></tr>';}).join('')+
-          '<tr style="border-top:1px solid #e5e7eb"><td style="padding:8px 10px;font-weight:700">Total Expenses</td><td style="padding:8px 10px;text-align:right;font-weight:700;color:#dc2626">('+fmt(totalExpenses)+')</td></tr>'+
+          '<tr style="border-top:1px solid var(--border)"><td style="padding:8px 10px;font-weight:700">Total Expenses</td><td style="padding:8px 10px;text-align:right;font-weight:700;color:#dc2626">('+fmt(totalExpenses)+')</td></tr>'+
           '<tr style="background:'+(netProfit>=0?'#f0fdf4':'#fef2f2')+';border-top:2px solid '+(netProfit>=0?'#86efac':'#fca5a5')+'">'+
             '<td style="padding:10px;font-size:15px;font-weight:800;color:'+profitColor+'">NET PROFIT</td>'+
             '<td style="padding:10px;text-align:right;font-size:15px;font-weight:800;color:'+profitColor+'">'+fmt(netProfit)+' <span style="font-size:11px">('+netMargin+'%)</span></td>'+
@@ -10194,7 +10197,7 @@ function buildSupplierPayments(){
     '<p class="sec-title" style="margin-bottom:10px">Payment history</p>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'+
       '<input type="text" placeholder="Search supplier or reference..." value="'+supPaySearch+'" oninput="supPaySearch=this.value;renderPanel()" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;min-width:200px">'+
-      '<div style="position:relative;display:inline-block"><input type="text" id="sup-pay-filter-search" autocomplete="off" placeholder="Filter by supplier..." oninput="filterSupPayDd(this.value)" onfocus="filterSupPayDd(this.value,true)" onblur="setTimeout(function(){var d=document.getElementById(&apos;sup-pay-filter-dd&apos;);if(d)d.style.display=&apos;none&apos;;},200)" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;min-width:170px" value="'+(supPayFilterSup?(DB.suppliers.find(function(s){return s.id==supPayFilterSup;})||{name:''}).name:'')+'"><input type="hidden" id="sup-pay-filter-sup" value="'+supPayFilterSup+'"><div id="sup-pay-filter-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:9999;max-height:180px;overflow-y:auto;margin-top:2px"></div></div>'+
+      '<div style="position:relative;display:inline-block"><input type="text" id="sup-pay-filter-search" autocomplete="off" placeholder="Filter by supplier..." oninput="filterSupPayDd(this.value)" onfocus="filterSupPayDd(this.value,true)" onblur="setTimeout(function(){var d=document.getElementById(&apos;sup-pay-filter-dd&apos;);if(d)d.style.display=&apos;none&apos;;},200)" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;min-width:170px" value="'+(supPayFilterSup?(DB.suppliers.find(function(s){return s.id==supPayFilterSup;})||{name:''}).name:'')+'"><input type="hidden" id="sup-pay-filter-sup" value="'+supPayFilterSup+'"><div id="sup-pay-filter-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--white);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.25);z-index:9999;max-height:180px;overflow-y:auto;margin-top:2px"></div></div>'+
       '<input type="date" value="'+supPayDateFrom+'" onchange="supPayDateFrom=this.value;renderPanel()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">'+
       '<span style="font-size:12px;color:var(--text3)">to</span>'+
       '<input type="date" value="'+supPayDateTo+'" onchange="supPayDateTo=this.value;renderPanel()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px">'+
@@ -11902,7 +11905,7 @@ function prodReportLiveSearch(val, showAll){
   if(!matches.length){dd.style.display='none';return;}
   dd.innerHTML=matches.map(function(i){
     return '<div onclick="prodReportSelect(\''+i.id+'\',\''+i.name.replace(/'/g,'&#39;')+'\')" '+
-      'style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center" '+
+      'style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center" '+
       'onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'">'+
       '<span><b style="font-size:13px">'+i.name+'</b> <span style="color:#9ca3af;font-size:11px;margin-left:6px">'+( i.cat||'')+'</span></span>'+
       '<span style="color:var(--primary);font-size:12px;font-weight:600;white-space:nowrap;margin-left:8px">'+i.qty+' in stock</span>'+
