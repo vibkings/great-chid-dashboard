@@ -5035,8 +5035,7 @@ function buildInvItemDropdownItems(filter){
     var stockColor=i.qty===0?'#dc2626':i.qty<=i.minQty?'#d97706':'#16a34a';
     var stockBg=i.qty===0?'#fff0f0':i.qty<=i.minQty?'#fffbeb':'#f0fdf4';
     var stockLabel=i.qty===0?'Out of stock':i.qty<=i.minQty?'Low: '+i.qty+' left':'In stock: '+i.qty;
-    var safeName=i.name.replace(/'/g,"\\'").replace(/"/g,'&quot;');
-    return '<div onmousedown="event.preventDefault();selectInvItem(\''+i.id+'\',\''+safeName+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
+    return '<div data-iid="'+i.id+'" data-iname="'+i.name.replace(/"/g,'&quot;')+'" class="inv-dd-row" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
       '<div style="flex:1;min-width:0">'+
         '<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.name+'</div>'+
         '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(i.cat||'Uncategorised')+'</div>'+
@@ -5047,7 +5046,15 @@ function buildInvItemDropdownItems(filter){
       '</div>'+
     '</div>';
   }).join('')+
-  '<div onmousedown="event.preventDefault();selectInvItem(\'__new__\',\'\')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--primary);font-weight:600;border-top:2px solid var(--border)" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">➕ Add new item...</div>';
+  '<div data-iid="__new__" data-iname="" class="inv-dd-row" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--primary);font-weight:600;border-top:2px solid var(--border)" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">➕ Add new item...</div>';
+  // Attach click via JS to handle names with quotes or special chars
+  var ddEl=document.getElementById('inv-item-dropdown');
+  if(ddEl)ddEl.querySelectorAll('.inv-dd-row').forEach(function(el){
+    el.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      selectInvItem(this.getAttribute('data-iid'),this.getAttribute('data-iname').replace(/&quot;/g,'"'));
+    });
+  });
 }
 function showInvItemDropdown(){
   var dd=document.getElementById('inv-item-dropdown');if(dd)dd.style.display='block';
@@ -5087,12 +5094,18 @@ function buildPurchaseItemDropdownItems(filter){
     return !term||i.name.toLowerCase().indexOf(term)>-1||(i.cat||'').toLowerCase().indexOf(term)>-1;
   });
   dd.innerHTML=items.map(function(i){
-    return '<div onclick="selectPurchaseItem(\''+i.id+'\',\''+i.name.replace(/'/g,"\\'")+'\')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
+    return '<div data-id="'+i.id+'" data-name="'+i.name.replace(/"/g,'&quot;')+'" class="pi-dd-item" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">'+
       '<div style="font-weight:600">'+i.name+'</div>'+
       '<div style="font-size:11px;color:var(--text3);margin-top:1px">'+(i.cat||'-')+' · Stock: '+i.qty+'</div>'+
     '</div>';
   }).join('')+
-  '<div onclick="selectPurchaseItem(\'__new__\',\'\')" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--primary);font-weight:600;border-top:2px solid var(--border)" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">➕ Create new item...</div>';
+  '<div data-id="__new__" data-name="" class="pi-dd-item" style="padding:8px 12px;cursor:pointer;font-size:13px;color:var(--primary);font-weight:600;border-top:2px solid var(--border)" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'\'">&#10133; Create new item...</div>';
+  // Attach click via JS to avoid inline quote-escaping issues with item names containing " or '
+  dd.querySelectorAll('.pi-dd-item').forEach(function(el){
+    el.addEventListener('click',function(){
+      selectPurchaseItem(this.getAttribute('data-id'),this.getAttribute('data-name').replace(/&quot;/g,'"'));
+    });
+  });
 }
 function showPurchaseItemDropdown(){
   var dd=document.getElementById('pi-item-dropdown');if(dd)dd.style.display='block';
