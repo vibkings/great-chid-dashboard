@@ -4865,7 +4865,9 @@ function buildInvoiceHTML(inv){
       '@page:not(:first){margin-top:8mm}'+
     '}'+
     '.cont-note{font-size:9px;color:#1a237e;font-weight:700;border-bottom:2px dashed #c0392b;padding-bottom:4px;margin-bottom:6px;text-align:right}'+
+    '.watermark-inv{position:fixed;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);font-size:72px;font-weight:900;color:rgba(192,57,43,0.055);pointer-events:none;white-space:nowrap;z-index:0;letter-spacing:4px;user-select:none}'+
     '<\/style></head><body>'+
+    '<div class="watermark-inv">ORIGINAL INVOICE</div>'+
     // First page header
     headerHTML+
     '<div class="mr">'+
@@ -7107,7 +7109,7 @@ function buildSales(){
       var pendingPRF=(DB.proformas||[]).filter(function(p){return p.status==='pending';});
       if(!pendingPRF.length)return '';
       var rows=pendingPRF.map(function(p){
-        var validUntil=new Date(parseSaleDate(p.date)+(p.validDays||7)*86400000);
+        var validUntil=new Date((new Date(p.date).getTime()||parseSaleDate(p.date))+(p.validDays||7)*86400000);
         var expired=validUntil<new Date();
         var validStr=validUntil.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
         var statusBadge=expired
@@ -11607,7 +11609,7 @@ function saveAsProforma(){
   }
   var validDays=parseInt(prompt('Valid for how many days? (default: 7)','7'))||7;
   var now=new Date();
-  var date=now.toLocaleDateString();
+  var date=now.toISOString().slice(0,10); // ISO format for reliable date math
   var month=now.toISOString().slice(0,7);
   var prfNum=genProformaNum();
   var grandTotal=invoiceItems.reduce(function(a,l){return a+(l.price*l.qty-(l.discAmt||0));},0);
@@ -11635,7 +11637,7 @@ function buildProformas(){
   function statusBadge(p){
     if(p.status==='converted')return '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">CONVERTED</span>';
     if(p.status==='cancelled')return '<span style="background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">CANCELLED</span>';
-    var validUntil=new Date(parseSaleDate(p.date)+(p.validDays||7)*86400000);
+    var validUntil=new Date((new Date(p.date).getTime()||parseSaleDate(p.date))+(p.validDays||7)*86400000);
     var expired=validUntil<new Date();
     return expired
       ?'<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">EXPIRED</span>'
@@ -11643,7 +11645,7 @@ function buildProformas(){
   }
 
   function validUntilStr(p){
-    var d=new Date(parseSaleDate(p.date)+(p.validDays||7)*86400000);
+    var d=new Date((new Date(p.date).getTime()||parseSaleDate(p.date))+(p.validDays||7)*86400000);
     return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
   }
 
@@ -11700,7 +11702,7 @@ function printProforma(prfNum){
   if(!p){alert('Proforma not found.');return;}
   var now=new Date(parseSaleDate(p.date));
   var day=now.getDate(),mon=now.toLocaleString('en-GB',{month:'long'}),yr=now.getFullYear();
-  var validUntil=new Date(parseSaleDate(p.date)+(p.validDays||7)*86400000);
+  var validUntil=new Date((new Date(p.date).getTime()||parseSaleDate(p.date))+(p.validDays||7)*86400000);
   var validStr=validUntil.toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
   var subtotal=p.items.reduce(function(a,i){return a+(i.price*i.qty);},0);
   var discTotal=p.items.reduce(function(a,i){return a+(i.discAmt||0);},0);
@@ -11775,7 +11777,7 @@ function printProforma(prfNum){
     '<div class="not-tax">⚠ THIS IS NOT A TAX INVOICE — FOR QUOTATION PURPOSES ONLY</div>'+
     '<div class="meta">'+
       '<div class="meta-box"><b>Proforma #</b>'+prfNum+'</div>'+
-      '<div class="meta-box"><b>Date Issued</b>'+p.date+'</div>'+
+      '<div class="meta-box"><b>Date Issued</b>'+(new Date(p.date).toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})||p.date)+'</div>'+
       '<div class="meta-box"><b>Customer / Bill To</b>'+(p.custName||'Walk-in customer')+'</div>'+
       '<div class="meta-box"><b>Prepared by</b>'+p.by+'</div>'+
     '</div>'+
@@ -11806,7 +11808,7 @@ function printProforma(prfNum){
 function shareProformaWhatsApp(prfNum){
   var p=(DB.proformas||[]).find(function(x){return x.prfNum==prfNum;});
   if(!p){alert('Proforma not found.');return;}
-  var validUntil=new Date(parseSaleDate(p.date)+(p.validDays||7)*86400000);
+  var validUntil=new Date((new Date(p.date).getTime()||parseSaleDate(p.date))+(p.validDays||7)*86400000);
   var validStr=validUntil.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
   var lines=['📄 *PROFORMA INVOICE*','','*'+prfNum+'*','Date: '+p.date,'Customer: '+(p.custName||'Walk-in'),'','*Items:*'];
   p.items.forEach(function(i,idx){lines.push((idx+1)+'. '+i.name+' ×'+i.qty+' = '+fmt(i.price*i.qty-(i.discAmt||0)));});
