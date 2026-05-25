@@ -11828,6 +11828,36 @@ function markProformaConverted(prfNum,invNum){
 var prodReportItemId='';
 var prodReportSearch='';
 
+function prodReportLiveSearch(val, showAll){
+  prodReportSearch=val;
+  var dd=document.getElementById('prod-report-dd');
+  if(!dd)return;
+  var inventory=DB.inventory||[];
+  var q=(val||'').toLowerCase().trim();
+  var matches=q?inventory.filter(function(i){return i.name.toLowerCase().indexOf(q)>=0;}):
+               showAll?inventory.slice(0,40):[];
+  if(!matches.length){dd.style.display='none';return;}
+  dd.innerHTML=matches.map(function(i){
+    return '<div onclick="prodReportSelect(\''+i.id+'\',\''+i.name.replace(/'/g,'&#39;')+'\')" '+
+      'style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center" '+
+      'onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'\'">'+
+      '<span><b style="font-size:13px">'+i.name+'</b> <span style="color:#9ca3af;font-size:11px;margin-left:6px">'+( i.cat||'')+'</span></span>'+
+      '<span style="color:var(--primary);font-size:12px;font-weight:600;white-space:nowrap;margin-left:8px">'+i.qty+' in stock</span>'+
+    '</div>';
+  }).join('');
+  dd.style.display='block';
+}
+
+function prodReportSelect(id, name){
+  prodReportItemId=id;
+  prodReportSearch=name;
+  var inp=document.getElementById('prod-report-search');
+  if(inp)inp.value=name;
+  var dd=document.getElementById('prod-report-dd');
+  if(dd)dd.style.display='none';
+  renderPanel();
+}
+
 function buildProductReport(){
   if(!canDo('reports'))return '<div class="empty">Access denied.</div>';
   var inventory=DB.inventory||[];
@@ -11837,9 +11867,12 @@ function buildProductReport(){
     '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:20px">'+
       '<p class="sec-title" style="margin:0 0 12px">🔎 Select a Product</p>'+
       '<div style="position:relative;max-width:500px">'+
-        '<input type="text" id="prod-report-search" placeholder="Type product name to search..." value="'+prodReportSearch+'" '+
-          'oninput="prodReportSearch=this.value;prodReportItemId=\'\';renderPanel()" '+
+        '<input type="text" id="prod-report-search" autocomplete="off" placeholder="Type product name to search..." value="'+prodReportSearch+'" '+
+          'oninput="prodReportLiveSearch(this.value)" '+
+          'onfocus="prodReportLiveSearch(this.value,true)" '+
+          'onblur="setTimeout(function(){var d=document.getElementById(\'prod-report-dd\');if(d)d.style.display=\'none\';},200)" '+
           'style="width:100%;padding:10px 14px;border:2px solid var(--primary);border-radius:8px;font-size:14px;box-sizing:border-box">'+
+        '<div id="prod-report-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.12);z-index:9999;max-height:280px;overflow-y:auto;margin-top:3px"></div>'+
       '</div>'+
     '</div>';
 
@@ -11849,33 +11882,14 @@ function buildProductReport(){
     return i.name.toLowerCase().indexOf(prodReportSearch.toLowerCase())>=0;
   });
 
-  if(!prodReportSearch){
+  if(!prodReportSearch&&!prodReportItemId){
     return searchHtml+
       '<div class="empty" style="padding:40px">Type a product name above to generate its full report.</div>';
   }
 
-  if(!prodReportItemId&&filtered.length>1){
-    // Show selection list
-    var listHtml=filtered.map(function(i){
-      return '<div onclick="prodReportItemId=\''+i.id+'\';renderPanel()" '+
-        'style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:var(--white)" '+
-        'onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'var(--white)\'">'+
-        '<span><b>'+i.name+'</b> <span style="color:#9ca3af;font-size:12px">'+( i.cat||'Uncategorised')+'</span></span>'+
-        '<span style="color:var(--primary);font-size:13px;font-weight:600">'+i.qty+' in stock → Click to view</span>'+
-      '</div>';
-    }).join('');
+  if(!prodReportItemId){
     return searchHtml+
-      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
-        '<p class="sec-title" style="margin:0 0 12px">'+filtered.length+' products found — select one:</p>'+
-        listHtml+
-      '</div>';
-  }
-
-  // If only one match and no id yet, auto-select it
-  if(!prodReportItemId&&filtered.length===1)prodReportItemId=filtered[0].id;
-
-  if(!prodReportItemId||filtered.length===0){
-    return searchHtml+'<div class="empty">No product found matching "'+prodReportSearch+'".</div>';
+      '<div class="empty" style="padding:20px">Select a product from the dropdown to load its report.</div>';
   }
 
   var item=inventory.find(function(i){return i.id==prodReportItemId;});
@@ -11955,7 +11969,7 @@ function buildProductReport(){
         '<div style="text-align:right">'+
           '<div style="font-size:24px;font-weight:800;color:var(--primary)">'+item.qty+'</div>'+
           '<div style="font-size:11px;color:#6b7280">Current stock</div>'+
-          '<button onclick="prodReportItemId=\'\';prodReportSearch=\'\';renderPanel()" class="btn sm" style="margin-top:6px;font-size:11px">← Search again</button>'+
+          '<button onclick="prodReportItemId=\'\';prodReportSearch=\'\';renderPanel();setTimeout(function(){var el=document.getElementById(\'prod-report-search\');if(el){el.value=\'\';el.focus();}},100)" class="btn sm" style="margin-top:6px;font-size:11px">← Search again</button>'+
         '</div>'+
       '</div>'+
     '</div>'+
