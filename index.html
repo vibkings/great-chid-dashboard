@@ -2059,14 +2059,15 @@ var TABS=[
   {id:'pandl',label:'Profit & Loss',perm:'finance'},
   {id:'returnstrack',label:'Returns Tracker',perm:'sales'},
   {id:'proformas',label:'Proforma Invoices',perm:'sales'},
+  {id:'productreport',label:'Product Report',perm:'reports'},
   {id:'activitylog',label:'🔍 Activity',perm:'admin'},
   {id:'recyclebin',label:'Recycle Bin',perm:'admin'},
   {id:'settings',label:'Settings',perm:'settings'},
   {id:'users',label:'Users',perm:'users'}
 ];
 
-var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋',supplieroverview:'📋',customeroverview:'👤',inventoryval:'🏷️',pandl:'📊',returnstrack:'↩️',proformas:'📄'};
-var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing',supplieroverview:'Supplier Overview',customeroverview:'Customer Overview',inventoryval:'Inventory Valuation',pandl:'Profit & Loss',returnstrack:'Returns Tracker',proformas:'Proforma Invoices'};
+var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋',supplieroverview:'📋',customeroverview:'👤',inventoryval:'🏷️',pandl:'📊',returnstrack:'↩️',proformas:'📄',productreport:'🔎'};
+var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing',supplieroverview:'Supplier Overview',customeroverview:'Customer Overview',inventoryval:'Inventory Valuation',pandl:'Profit & Loss',returnstrack:'Returns Tracker',proformas:'Proforma Invoices',productreport:'Product Report'};
 var VERSION_NOTES=[
   {ver:'v27',date:'May 2026',title:'Confirmation popups & Recycle Bin',notes:[
     'Confirmation popups — every delete now shows a styled modal instead of plain browser confirm()',
@@ -2361,7 +2362,7 @@ function renderApp(){
   var navHtml='';
   var sections=[
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases','proformas']},
-    {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing','supplieroverview','customeroverview','inventoryval','pandl','returnstrack']},
+    {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing','supplieroverview','customeroverview','inventoryval','pandl','returnstrack','productreport']},
     {label:'Management',tabs:['suppliers','customers','settings','users','activitylog','recyclebin']},
   ];
   // Auto-purge bin items older than 30 days
@@ -2753,7 +2754,7 @@ function filterWhTable(){
 function renderPanel(){
   var scrollY=window.scrollY||window.pageYOffset;
   var p=document.getElementById('panel-root');if(!p)return;
-  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas};
+  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas,productreport:buildProductReport};
   var content=(map[activeTab]||function(){return '';})();
   // Show version notes only on inventory (home) or when explicitly navigating to it
   var vnHtml='';
@@ -11818,6 +11819,298 @@ function cancelProforma(prfNum){
 function markProformaConverted(prfNum,invNum){
   var p=(DB.proformas||[]).find(function(x){return x.prfNum==prfNum;});
   if(p){p.status='converted';p.convertedInvNum=invNum;saveData();}
+}
+/* ══════════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════
+   PRODUCT REPORT
+══════════════════════════════════════════════════════════════ */
+var prodReportItemId='';
+var prodReportSearch='';
+
+function buildProductReport(){
+  if(!canDo('reports'))return '<div class="empty">Access denied.</div>';
+  var inventory=DB.inventory||[];
+
+  // ── Product search/select ────────────────────────────────────
+  var searchHtml=
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:20px">'+
+      '<p class="sec-title" style="margin:0 0 12px">🔎 Select a Product</p>'+
+      '<div style="position:relative;max-width:500px">'+
+        '<input type="text" id="prod-report-search" placeholder="Type product name to search..." value="'+prodReportSearch+'" '+
+          'oninput="prodReportSearch=this.value;prodReportItemId=\'\';renderPanel()" '+
+          'style="width:100%;padding:10px 14px;border:2px solid var(--primary);border-radius:8px;font-size:14px;box-sizing:border-box">'+
+      '</div>'+
+    '</div>';
+
+  // Filter inventory by search
+  var filtered=inventory.filter(function(i){
+    if(!prodReportSearch)return false;
+    return i.name.toLowerCase().indexOf(prodReportSearch.toLowerCase())>=0;
+  });
+
+  if(!prodReportSearch){
+    return searchHtml+
+      '<div class="empty" style="padding:40px">Type a product name above to generate its full report.</div>';
+  }
+
+  if(!prodReportItemId&&filtered.length>1){
+    // Show selection list
+    var listHtml=filtered.map(function(i){
+      return '<div onclick="prodReportItemId=\''+i.id+'\';renderPanel()" '+
+        'style="padding:10px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:var(--white)" '+
+        'onmouseover="this.style.background=\'#f8fafc\'" onmouseout="this.style.background=\'var(--white)\'">'+
+        '<span><b>'+i.name+'</b> <span style="color:#9ca3af;font-size:12px">'+( i.cat||'Uncategorised')+'</span></span>'+
+        '<span style="color:var(--primary);font-size:13px;font-weight:600">'+i.qty+' in stock → Click to view</span>'+
+      '</div>';
+    }).join('');
+    return searchHtml+
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px">'+
+        '<p class="sec-title" style="margin:0 0 12px">'+filtered.length+' products found — select one:</p>'+
+        listHtml+
+      '</div>';
+  }
+
+  // If only one match and no id yet, auto-select it
+  if(!prodReportItemId&&filtered.length===1)prodReportItemId=filtered[0].id;
+
+  if(!prodReportItemId||filtered.length===0){
+    return searchHtml+'<div class="empty">No product found matching "'+prodReportSearch+'".</div>';
+  }
+
+  var item=inventory.find(function(i){return i.id==prodReportItemId;});
+  if(!item)return searchHtml+'<div class="empty">Product not found.</div>';
+
+  // ── Gather all events for this product ──────────────────────
+  var sup=(DB.suppliers||[]).find(function(s){return s.id==item.supId;})||{};
+
+  // PURCHASES
+  var purchaseEvents=[];
+  (DB.purchases||[]).forEach(function(p){
+    (p.items||[]).forEach(function(l){
+      if(String(l.itemId)===String(item.id)||l.name===item.name){
+        purchaseEvents.push({
+          date:p.date,invoiceNum:p.invoiceNum,supName:p.supName,
+          qtyOrdered:l.qtyOrdered||l.qty||0,qtyReceived:l.qtyReceived||l.qty||0,
+          cost:l.cost,total:(l.qtyOrdered||l.qty||0)*l.cost,
+          by:p.by,status:l.qtyPending>0?'Partial':'Complete'
+        });
+      }
+    });
+  });
+
+  // PENDING DELIVERIES (undelivered)
+  var pendingEvents=(DB.pendingDeliveries||[]).filter(function(d){
+    return (String(d.itemId)===String(item.id)||d.itemName===item.name)&&d.status!=='complete';
+  });
+
+  // SALES
+  var salesEvents=[];
+  var saleGroups={};
+  (DB.sales||[]).forEach(function(s){
+    if(String(s.itemId)===String(item.id)||s.name===item.name){
+      var k=s.invoiceNum||s.id;
+      if(!saleGroups[k])saleGroups[k]={date:s.date,invoiceNum:k,custName:s.custName||'Walk-in',qty:0,total:0,salePrice:s.salePrice,payment:s.payment,seller:s.seller};
+      saleGroups[k].qty+=s.qty;
+      saleGroups[k].total+=s.total;
+    }
+  });
+  salesEvents=Object.values(saleGroups).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date);});
+
+  // RETURNS
+  var returnEvents=(DB.salesReturns||[]).filter(function(r){
+    return String(r.itemId)===String(item.id)||r.itemName===item.name;
+  }).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date);});
+
+  // ADJUSTMENTS
+  var adjEvents=(DB.adjLog||[]).filter(function(a){
+    return String(a.itemId)===String(item.id)||a.itemName===item.name;
+  }).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date);});
+
+  // ── KPI calculations ─────────────────────────────────────────
+  var totalPurchased=purchaseEvents.reduce(function(a,p){return a+(p.qtyReceived||0);},0);
+  var totalSold=salesEvents.reduce(function(a,s){return a+s.qty;},0);
+  var totalReturned=returnEvents.reduce(function(a,r){return a+r.qty;},0);
+  var totalRevenue=salesEvents.reduce(function(a,s){return a+s.total;},0);
+  var totalCostSpent=purchaseEvents.reduce(function(a,p){return a+p.total;},0);
+  var totalProfit=salesEvents.reduce(function(a,s){return a+(s.total-(item.cost||0)*s.qty);},0);
+  var netAdj=adjEvents.reduce(function(a,e){return a+(e.change||0);},0);
+
+  // ── Build HTML ───────────────────────────────────────────────
+  var profitColor=totalProfit>=0?'#15803d':'#dc2626';
+
+  var report=
+    // Header
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">'+
+        '<div>'+
+          '<div style="font-size:20px;font-weight:800;color:#1e293b">'+item.name+'</div>'+
+          '<div style="font-size:13px;color:#6b7280;margin-top:3px">'+
+            '<span style="margin-right:12px">📂 '+(item.cat||'Uncategorised')+'</span>'+
+            '<span style="margin-right:12px">🚛 '+(sup.name||'No supplier')+'</span>'+
+            '<span style="margin-right:12px">💰 Cost: '+fmt(item.cost||0)+'</span>'+
+            '<span>🏷️ Sell: '+fmt(item.sell||0)+'</span>'+
+          '</div>'+
+        '</div>'+
+        '<div style="text-align:right">'+
+          '<div style="font-size:24px;font-weight:800;color:var(--primary)">'+item.qty+'</div>'+
+          '<div style="font-size:11px;color:#6b7280">Current stock</div>'+
+          '<button onclick="prodReportItemId=\'\';prodReportSearch=\'\';renderPanel()" class="btn sm" style="margin-top:6px;font-size:11px">← Search again</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+
+    // KPI Cards
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">'+
+      kpiCard('📦','Total Purchased',totalPurchased+' units','','#0ea5e9')+
+      kpiCard('🧾','Total Sold',totalSold+' units','','#6366f1')+
+      kpiCard('↩️','Total Returned',totalReturned+' units','','#f97316')+
+      kpiCard('💰','Total Revenue',fmt(totalRevenue),'','#10b981')+
+      kpiCard('💸','Total Cost Spent',fmt(totalCostSpent),'','#f59e0b')+
+      kpiCard('📈','Total Profit',fmt(totalProfit),'',totalProfit>=0?'#15803d':'#dc2626')+
+      kpiCard('🔧','Stock Adjustments',adjEvents.length+' times','','#8b5cf6')+
+      kpiCard('📊','Net Adj. Change',(netAdj>=0?'+':'')+netAdj+' units','','#94a3b8')+
+    '</div>'+
+
+    // PURCHASES SECTION
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px">'+
+      '<p class="sec-title" style="margin:0 0 12px">🛒 Purchase History ('+purchaseEvents.length+' orders · '+totalPurchased+' units received)</p>'+
+      (purchaseEvents.length?
+        '<div class="tbl-wrap"><table><thead><tr>'+
+          '<th>Date</th><th>Invoice #</th><th>Supplier</th>'+
+          '<th style="text-align:center">Qty Ordered</th><th style="text-align:center">Qty Received</th>'+
+          '<th style="text-align:right">Cost Price</th><th style="text-align:right">Total Cost</th>'+
+          '<th>Status</th><th>By</th>'+
+        '</tr></thead><tbody>'+
+        purchaseEvents.map(function(p){
+          return '<tr>'+
+            '<td>'+p.date+'</td>'+
+            '<td><b>#'+(p.invoiceNum||'—')+'</b></td>'+
+            '<td>'+p.supName+'</td>'+
+            '<td style="text-align:center">'+p.qtyOrdered+'</td>'+
+            '<td style="text-align:center;color:#15803d;font-weight:700">'+p.qtyReceived+'</td>'+
+            '<td style="text-align:right">'+fmt(p.cost)+'</td>'+
+            '<td style="text-align:right;font-weight:600">'+fmt(p.total)+'</td>'+
+            '<td><span style="background:'+(p.status==='Complete'?'#dcfce7':'#fef9c3')+';color:'+(p.status==='Complete'?'#15803d':'#92400e')+';padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">'+p.status+'</span></td>'+
+            '<td style="color:#9ca3af;font-size:11px">'+p.by+'</td>'+
+          '</tr>';
+        }).join('')+
+        '<tfoot><tr style="background:#f8fafc;font-weight:700"><td colspan="3">TOTAL</td>'+
+          '<td style="text-align:center">'+purchaseEvents.reduce(function(a,p){return a+p.qtyOrdered;},0)+'</td>'+
+          '<td style="text-align:center;color:#15803d">'+totalPurchased+'</td>'+
+          '<td></td><td style="text-align:right;color:#f59e0b">'+fmt(totalCostSpent)+'</td><td colspan="2"></td>'+
+        '</tr></tfoot></table></div>'
+      :'<div class="empty">No purchase records found for this product.</div>')+
+      (pendingEvents.length?
+        '<div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-top:10px">'+
+          '<b style="color:#92400e">📦 '+pendingEvents.length+' pending delivery(ies):</b> '+
+          pendingEvents.map(function(d){return d.qtyPending+' units from '+d.supName+' (Invoice #'+d.invoiceNum+')';}).join(', ')+
+        '</div>':'')+
+    '</div>'+
+
+    // SALES SECTION
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px">'+
+      '<p class="sec-title" style="margin:0 0 12px">🧾 Sales History ('+salesEvents.length+' invoices · '+totalSold+' units sold)</p>'+
+      (salesEvents.length?
+        '<div class="tbl-wrap"><table><thead><tr>'+
+          '<th>Date</th><th>Invoice #</th><th>Customer</th>'+
+          '<th style="text-align:center">Qty</th><th style="text-align:right">Sell Price</th>'+
+          '<th style="text-align:right">Revenue</th><th style="text-align:right">Profit</th>'+
+          '<th>Pay Type</th><th>Seller</th>'+
+        '</tr></thead><tbody>'+
+        salesEvents.map(function(s){
+          var profit=s.total-(item.cost||0)*s.qty;
+          var ptBadge=s.payment==='credit'?'<span style="background:#fef2f2;color:#dc2626;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CREDIT</span>':
+            s.payment==='part'?'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">PART</span>':
+            '<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">PAID</span>';
+          return '<tr>'+
+            '<td>'+s.date+'</td>'+
+            '<td><b>'+s.invoiceNum+'</b></td>'+
+            '<td>'+s.custName+'</td>'+
+            '<td style="text-align:center;font-weight:700">'+s.qty+'</td>'+
+            '<td style="text-align:right">'+fmt(s.salePrice||0)+'</td>'+
+            '<td style="text-align:right;color:#6366f1;font-weight:600">'+fmt(s.total)+'</td>'+
+            '<td style="text-align:right;color:'+(profit>=0?'#15803d':'#dc2626')+';font-weight:600">'+fmt(profit)+'</td>'+
+            '<td>'+ptBadge+'</td>'+
+            '<td style="color:#9ca3af;font-size:11px">'+s.seller+'</td>'+
+          '</tr>';
+        }).join('')+
+        '<tfoot><tr style="background:#f8fafc;font-weight:700"><td colspan="3">TOTAL</td>'+
+          '<td style="text-align:center">'+totalSold+'</td><td></td>'+
+          '<td style="text-align:right;color:#6366f1">'+fmt(totalRevenue)+'</td>'+
+          '<td style="text-align:right;color:'+profitColor+'">'+fmt(totalProfit)+'</td>'+
+          '<td colspan="2"></td>'+
+        '</tr></tfoot></table></div>'
+      :'<div class="empty">No sales records found for this product.</div>')+
+    '</div>'+
+
+    // RETURNS SECTION
+    (returnEvents.length?
+      '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px">'+
+        '<p class="sec-title" style="margin:0 0 12px">↩️ Returns ('+returnEvents.length+' returns · '+totalReturned+' units)</p>'+
+        '<div class="tbl-wrap"><table><thead><tr>'+
+          '<th>Date</th><th>Invoice #</th><th>Customer</th>'+
+          '<th style="text-align:center">Qty</th><th style="text-align:right">Refund</th>'+
+          '<th>Reason</th><th>Type</th><th>By</th>'+
+        '</tr></thead><tbody>'+
+        returnEvents.map(function(r){
+          var rtBadge={cash:'<span style="background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CASH</span>',credit:'<span style="background:#eff6ff;color:#1d4ed8;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CREDIT</span>',exchange:'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">EXCHANGE</span>'};
+          return '<tr>'+
+            '<td>'+r.date+'</td>'+
+            '<td><b>#'+(r.invoiceNum||'—')+'</b></td>'+
+            '<td>'+r.custName+'</td>'+
+            '<td style="text-align:center;font-weight:700;color:#dc2626">'+r.qty+'</td>'+
+            '<td style="text-align:right;color:#dc2626;font-weight:600">'+fmt(r.refundAmt||0)+'</td>'+
+            '<td style="color:#6b7280;font-size:11px">'+(r.reason||'—')+'</td>'+
+            '<td>'+(rtBadge[r.refundType]||rtBadge.cash)+'</td>'+
+            '<td style="color:#9ca3af;font-size:11px">'+r.by+'</td>'+
+          '</tr>';
+        }).join('')+
+        '</tbody></table></div>'+
+      '</div>':'')+
+
+    // ADJUSTMENTS SECTION
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px">'+
+      '<p class="sec-title" style="margin:0 0 12px">🔧 Stock Adjustments ('+adjEvents.length+' entries)</p>'+
+      (adjEvents.length?
+        '<div class="tbl-wrap"><table><thead><tr>'+
+          '<th>Date</th><th>Type</th><th>Reason</th>'+
+          '<th style="text-align:center">Before</th>'+
+          '<th style="text-align:center">Change</th>'+
+          '<th style="text-align:center">After</th>'+
+          '<th>By</th>'+
+        '</tr></thead><tbody>'+
+        adjEvents.map(function(a){
+          var typeColor=a.type==='add'?'#15803d':a.type==='remove'?'#dc2626':'#7c3aed';
+          var typeLabel=a.type==='add'?'➕ Add':a.type==='remove'?'➖ Remove':a.type==='count'?'🔢 Count':'🔄 Edit';
+          return '<tr>'+
+            '<td>'+a.date+'</td>'+
+            '<td><span style="color:'+typeColor+';font-weight:700;font-size:12px">'+typeLabel+'</span></td>'+
+            '<td style="font-size:12px;color:#374151">'+a.reason+'</td>'+
+            '<td style="text-align:center;color:#6b7280">'+a.before+'</td>'+
+            '<td style="text-align:center;font-weight:700;color:'+(a.change>=0?'#15803d':'#dc2626')+'">'+(a.change>=0?'+':'')+a.change+'</td>'+
+            '<td style="text-align:center;font-weight:700">'+a.after+'</td>'+
+            '<td style="color:#9ca3af;font-size:11px">'+a.by+'</td>'+
+          '</tr>';
+        }).join('')+
+        '</tbody></table></div>'
+      :'<div class="empty">No stock adjustments recorded for this product.</div>')+
+    '</div>'+
+
+    // STOCK MOVEMENT SUMMARY
+    '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px">'+
+      '<p class="sec-title" style="margin:0 0 12px">📊 Stock Movement Summary</p>'+
+      '<table style="width:100%;font-size:13px"><colgroup><col style="width:60%"><col style="width:40%"></colgroup><tbody>'+
+        '<tr style="background:#f8fafc"><td style="padding:8px 10px;color:#374151">Opening stock (estimated)</td><td style="padding:8px 10px;text-align:right;font-weight:600">'+Math.max(0,item.qty-totalPurchased+totalSold-totalReturned-netAdj)+' units</td></tr>'+
+        '<tr><td style="padding:6px 10px;color:#0ea5e9">+ Total Received (purchases)</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#0ea5e9">+ '+totalPurchased+'</td></tr>'+
+        '<tr><td style="padding:6px 10px;color:#6366f1">− Total Sold</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#6366f1">− '+totalSold+'</td></tr>'+
+        '<tr><td style="padding:6px 10px;color:#f97316">+ Total Returned by customers</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#f97316">+ '+totalReturned+'</td></tr>'+
+        '<tr><td style="padding:6px 10px;color:#8b5cf6">'+(netAdj>=0?'+':'')+'Net stock adjustments</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#8b5cf6">'+(netAdj>=0?'+':'')+netAdj+'</td></tr>'+
+        '<tr style="background:#f0fdf4;border-top:2px solid #86efac"><td style="padding:10px;font-weight:700;color:#15803d">Current Stock</td><td style="padding:10px;text-align:right;font-weight:800;color:#15803d;font-size:16px">'+item.qty+' units</td></tr>'+
+      '</tbody></table>'+
+    '</div>';
+
+  return searchHtml+report;
 }
 /* ══════════════════════════════════════════════════════════════ */
 
