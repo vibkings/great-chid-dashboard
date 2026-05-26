@@ -4815,12 +4815,12 @@ function buildInvoiceHTML(inv){
       (inv.changeGiven>0?
         '<div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #eee;margin-top:2px">'+
           '<div style="padding:4px 8px;background:var(--warning-bg)">'+
-            '<div class="pay-label" style="color:#92400e">Amount received ('+( inv.payMode==='transfer'?'Transfer':inv.payMode==='pos'?'POS':'Cash')+')</div>'+
-            '<div class="pay-val" style="color:#92400e;font-size:12px">'+fmt(inv.grandTotal+inv.changeGiven)+'</div>'+
+            '<div class="pay-label" style="color:#92400e">Amount tendered ('+(inv.payMode==='transfer'?'Transfer':inv.payMode==='pos'?'POS':'Cash')+')</div>'+
+            '<div class="pay-val" style="color:#92400e;font-size:12px">'+fmt((inv.amtTendered||inv.grandTotal+inv.changeGiven))+'</div>'+
           '</div>'+
-          '<div style="padding:4px 8px;background:#fef2f2">'+
-            '<div class="pay-label" style="color:#dc2626">💵 Change given (Cash)</div>'+
-            '<div class="pay-val" style="color:#dc2626;font-size:12px">-'+fmt(inv.changeGiven)+'</div>'+
+          '<div style="padding:4px 8px;background:'+(inv.changeDisposition==='credit'?'var(--primary-bg)':'#fef2f2')+'">'+
+            '<div class="pay-label" style="color:'+(inv.changeDisposition==='credit'?'#1d4ed8':'#dc2626')+'">'+(inv.changeDisposition==='credit'?'🏦 Added to account':'💵 Change given (Cash)')+'</div>'+
+            '<div class="pay-val" style="color:'+(inv.changeDisposition==='credit'?'#1d4ed8':'#dc2626')+';font-size:12px">'+(inv.changeDisposition==='credit'?'+':'-')+fmt(inv.changeGiven)+'</div>'+
           '</div>'+
         '</div>'
       :'')+
@@ -5745,6 +5745,8 @@ function submitInvoice(){
       payment:payment,payMode:payMode,bankId:bankId,posId:posId,
       dueDate:dueDate||null,
       changeGiven:changeGiven>0?changeGiven:null,
+      amtTendered:amtTendered>0?amtTendered:null,
+      changeDisposition:changeGiven>0?changeDisposition:null,
       splitPayment:splitPayment||null,
       custId:custId,custName:custName,printName:printName,custAddr:custAddr,
       custType:saleCustomerType,date:date,month:month,
@@ -5761,15 +5763,21 @@ function submitInvoice(){
   // Check if staff entered an "amount received" (for cash/transfer/pos with outstanding balance)
   var amtReceivedEl=document.getElementById('s-amt-received');
   var amtReceived=amtReceivedEl?parseFloat(amtReceivedEl.value)||0:0;
-  // Check change given back to customer
+  // Check change given back (auto-calculated from tendered amount)
   var changeAmtEl=document.getElementById('s-change-amt');
+  var tenderedEl=document.getElementById('s-change-tendered');
+  var changeDispEl=document.getElementById('s-change-disp-val');
   var changeGiven=changeAmtEl?parseFloat(changeAmtEl.value)||0:0;
-  // If change given, actual received = grandTotal + changeGiven
-  if(changeGiven>0&&payment!=='part'&&payment!=='credit'&&payment!=='deposit'&&payment!=='split'){
-    cashReceived=grandTotal+changeGiven; // customer paid grandTotal+change
+  var amtTendered=tenderedEl?parseFloat(tenderedEl.value)||0:0;
+  var changeDisposition=changeDispEl?changeDispEl.value:'cash'; // 'cash' or 'credit'
+  // If tendered, actual received = tendered amount
+  if(amtTendered>0&&payment!=='part'&&payment!=='credit'&&payment!=='deposit'&&payment!=='split'){
+    cashReceived=amtTendered;
+  } else if(changeGiven>0&&payment!=='part'&&payment!=='credit'&&payment!=='deposit'&&payment!=='split'){
+    cashReceived=grandTotal+changeGiven;
   }
   if(amtReceived>grandTotal&&payment!=='part'&&payment!=='credit'&&payment!=='deposit'&&payment!=='split'){
-    cashReceived=amtReceived; // record actual cash received
+    cashReceived=amtReceived;
   }
   // creditAmount = how much the customer still owes us after this payment
   // If partPayment > grandTotal → negative = we owe them (overpayment / store credit)
@@ -5786,7 +5794,19 @@ function submitInvoice(){
       DB.cashflow.push({id:uid(),desc:'Invoice #'+invNum+(invoiceDiscAmt>0?' [disc: '+fmt(invoiceDiscAmt)+']':'')+'  - '+custName,amount:cashReceived,type:'in',cat:'Sales',payMode:payMode==='credit'?'cash':payMode,bankId:bankId,posId:posId,date:date,month:month});
       // If change was given back to customer, record as cash out
       if(changeGiven>0){
-        DB.cashflow.push({id:uid(),desc:'Change given — Invoice #'+invNum+' - '+custName,amount:changeGiven,type:'out',cat:'Change',payMode:'cash',date:date,month:month,by:DB.currentUser.name,isChange:true});
+        if(changeDisposition==='credit'&&custId){
+          // Add overpayment to customer's deposit balance
+          var depCust=DB.customers.find(function(c){return c.id==custId;});
+          if(depCust){
+            if(!DB.deposits)DB.deposits=[];
+            DB.deposits.push({id:uid(),custId:custId,custName:depCust.name,amount:changeGiven,payMode:payMode,note:'Overpayment credit from Invoice #'+invNum,date:date,month:month,by:DB.currentUser.name});
+            // No cash out — money stays in till, just recorded as customer deposit liability
+            logActivity('Overpayment credited','₦'+changeGiven.toLocaleString()+' overpayment from Invoice #'+invNum+' added to '+depCust.name+' account');
+          }
+        } else {
+          // Cash change given back
+          DB.cashflow.push({id:uid(),desc:'Change given — Invoice #'+invNum+' - '+custName,amount:changeGiven,type:'out',cat:'Change',payMode:'cash',date:date,month:month,by:DB.currentUser.name,isChange:true});
+        }
       }
     }
   }
@@ -6307,21 +6327,55 @@ function onAmtReceivedChange(){
     hint.textContent='';
   }
 }
-function onChangeAmtInput(){
-  var changeEl=document.getElementById('s-change-amt');
+function onTenderedInput(){
+  var tenderedEl=document.getElementById('s-change-tendered');
+  var changeAmtEl=document.getElementById('s-change-amt');
   var hint=document.getElementById('s-change-hint');
-  var change=parseFloat(changeEl?changeEl.value:0)||0;
+  var dispDiv=document.getElementById('s-change-disposition');
+  var dispCreditLabel=document.getElementById('s-disp-credit-label');
+  var tendered=parseFloat(tenderedEl?tenderedEl.value:0)||0;
+  var sub=invoiceItems.reduce(function(a,l){return a+(l.price*l.qty-(l.discAmt||0));},0);
   if(!hint)return;
-  if(change>0){
-    var sub=invoiceItems.reduce(function(a,l){return a+(l.price*l.qty-(l.discAmt||0));},0);
-    var amtRec=parseFloat((document.getElementById('s-amt-received')||{}).value)||0;
-    var received=amtRec>0?amtRec:sub+change;
-    hint.textContent='Customer paid '+fmt(received)+' → you give back '+fmt(change)+' cash change. Net: '+fmt(received-change);
-    hint.style.color='#15803d';
+  if(tendered>0){
+    var change=tendered>=sub?tendered-sub:0;
+    if(changeAmtEl)changeAmtEl.value=change>0?change:'';
+    hint.style.display='block';
+    hint.style.background=change>0?'var(--warning-bg)':'var(--success-bg)';
+    hint.style.border='1px solid '+(change>0?'#fde68a':'#86efac');
+    document.getElementById('s-hint-total').textContent=fmt(sub);
+    document.getElementById('s-hint-tendered').textContent=fmt(tendered);
+    var changeEl=document.getElementById('s-hint-change');
+    if(change>0){
+      changeEl.textContent=fmt(change);
+      changeEl.style.color='#dc2626';
+      // Show disposition options only if change > 0
+      if(dispDiv)dispDiv.style.display='block';
+      // Show "Add to account" option only for registered customers
+      var isReg=saleCustomerType==='registered';
+      var custId2=isReg&&document.getElementById('s-reg-customer')?document.getElementById('s-reg-customer').value:'';
+      if(dispCreditLabel)dispCreditLabel.style.display=isReg&&custId2?'flex':'none';
+    } else if(tendered===sub){
+      changeEl.textContent='₦0 — Exact amount! ✅';
+      changeEl.style.color='#15803d';
+      if(dispDiv)dispDiv.style.display='none';
+    } else {
+      changeEl.textContent='⚠️ Short by '+fmt(sub-tendered);
+      changeEl.style.color='#dc2626';
+      if(dispDiv)dispDiv.style.display='none';
+    }
   } else {
-    hint.textContent='';
+    hint.style.display='none';
+    if(changeAmtEl)changeAmtEl.value='';
+    if(dispDiv)dispDiv.style.display='none';
   }
 }
+
+function onDispChange(){
+  var sel=document.querySelector('input[name="s-change-disp"]:checked');
+  var hidden=document.getElementById('s-change-disp-val');
+  if(hidden&&sel)hidden.value=sel.value;
+}
+
 function onSplitModeChange(){
   var m1=document.getElementById('s-split-mode1');
   var m2=document.getElementById('s-split-mode2');
@@ -7125,9 +7179,26 @@ function buildSales(){
       '</div>'+
       '<div class="form-group" id="s-amt-received-wrap" style="display:none"><label>Amount received (₦) <span style="font-size:11px;color:#6b7280;font-weight:400">— optional, if customer paid more</span></label><input type="number" id="s-amt-received" placeholder="Leave blank if exact" min="0" oninput="onAmtReceivedChange()"></div>'+
       '<div class="form-group" id="s-change-wrap" style="display:none">'+
-        '<label>💵 Change given back (₦) <span style="font-size:11px;color:#6b7280;font-weight:400">— cash returned to customer</span></label>'+
-        '<input type="number" id="s-change-amt" placeholder="0" min="0" oninput="onChangeAmtInput()">'+
-        '<div id="s-change-hint" style="font-size:11px;margin-top:3px;color:#15803d;font-weight:600"></div>'+
+        '<label>💰 Amount tendered by customer (₦)</label>'+
+        '<input type="number" id="s-change-tendered" placeholder="e.g. 70000" min="0" oninput="onTenderedInput()">'+
+        '<div id="s-change-hint" style="font-size:12px;margin-top:6px;display:none;border-radius:8px;padding:8px 12px">'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span>Invoice total:</span><span id="s-hint-total" style="font-weight:700"></span></div>'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span>Amount tendered:</span><span id="s-hint-tendered" style="font-weight:700;color:#0369a1"></span></div>'+
+          '<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:4px;margin-top:4px"><span style="font-weight:700">💵 Change to give back:</span><span id="s-hint-change" style="font-weight:800;font-size:14px;color:#dc2626"></span></div>'+
+          '<div id="s-change-disposition" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:8px">'+
+            '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">What to do with overpayment?</div>'+
+            '<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;border:1px solid var(--border);margin-bottom:6px;font-size:13px">'+
+              '<input type="radio" name="s-change-disp" id="s-disp-cash" value="cash" checked onchange="onDispChange()">'+
+              '💵 <span><b>Give cash change</b> — hand back the money</span>'+
+            '</label>'+
+            '<label id="s-disp-credit-label" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;border:1px solid var(--border);font-size:13px">'+
+              '<input type="radio" name="s-change-disp" id="s-disp-credit" value="credit" onchange="onDispChange()">'+
+              '🏦 <span><b>Add to customer account</b> — store as deposit for next visit</span>'+
+            '</label>'+
+          '</div>'+
+        '</div>'+
+        '<input type="hidden" id="s-change-amt">'+
+        '<input type="hidden" id="s-change-disp-val" value="cash">'+
       '</div>'+
     '</div>'+
     '<div id="s-split-wrap" style="display:none;background:var(--primary-bg);border:1px solid #b6d4fe;border-radius:8px;padding:12px;margin-bottom:10px">'+
