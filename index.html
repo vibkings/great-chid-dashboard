@@ -1498,10 +1498,11 @@ function buildClosingReport(){
   var depTotal=depToday.reduce(function(a,d){return a+d.amount;},0);
   // Expenses today
   // Separate expenses from supplier/purchase payments
-  var expToday=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&dateInRange(c.date,closingDate,closingDate);});
+  var expToday=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&dateInRange(c.date,closingDate,closingDate);});
   var expTotal=expToday.reduce(function(a,e){return a+e.amount;},0);
   // Supplier payments today
   var suppPayToday=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,closingDate,closingDate);});
+  var changeToday=DB.cashflow.filter(function(c){return c.isChange&&c.type==='out'&&dateInRange(c.date,closingDate,closingDate);}).reduce(function(a,c){return a+c.amount;},0);
   var suppPayTotal=suppPayToday.reduce(function(a,e){return a+e.amount;},0);
   // Expense breakdown by payment mode
   var expCash=expToday.filter(function(e){return !e.payMode||e.payMode==='cash';}).reduce(function(a,e){return a+e.amount;},0);
@@ -1550,7 +1551,7 @@ function buildClosingReport(){
   var balCash=cash-expCash;
   var balTransfer=transfer-expTransfer;
   var balPos=pos-expPos;
-  var balTotal=(cash+pos+transfer+cpTotal+depTotal+exchBalTotal)-(expTotal+retTotal);
+  var balTotal=(cash+pos+transfer+cpTotal+depTotal+exchBalTotal)-(expTotal+retTotal)-changeToday;
   // By staff
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
@@ -1634,8 +1635,9 @@ function buildClosingReport(){
         (cpTotal>0?'<tr><td style="font-weight:600">✅ Credit Payments</td><td style="text-align:right;color:#15803d">'+fmt(cpTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#15803d">'+fmt(cpTotal)+'</td></tr>':'')+
         (exchBalTotal>0?'<tr><td style="font-weight:600">🔄 Exchange Balance</td><td style="text-align:right;color:#0891b2">'+fmt(exchBalTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0891b2">'+fmt(exchBalTotal)+'</td></tr>':'')+
         (depTotal>0?'<tr><td style="font-weight:600">📥 Deposits</td><td style="text-align:right;color:#0369a1">'+fmt(depTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0369a1">'+fmt(depTotal)+'</td></tr>':'')+
-        (suppPayTotal>0?'<tr style="background:#fff8f0"><td style="font-weight:600;color:#92400e">🚛 Supplier Payments</td><td style="text-align:right;color:#92400e;font-size:11px;font-style:italic">see detail below</td><td style="text-align:right;color:#9ca3af;font-size:11px">—</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(suppPayTotal)+'</td></tr>':'')+
-        (retTotal>0?'<tr style="background:#fff5f5"><td style="font-weight:600;color:#c0392b">↩ Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">- '+fmt(retTotal)+'</td><td style="text-align:right;font-weight:700;color:#c0392b">- '+fmt(retTotal)+'</td></tr>':'')+
+        (suppPayTotal>0?'<tr style="background:var(--warning-bg)"><td style="font-weight:600;color:#92400e">🚛 Supplier Payments</td><td style="text-align:right;color:#92400e;font-size:11px;font-style:italic">see detail below</td><td style="text-align:right;color:#9ca3af;font-size:11px">—</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(suppPayTotal)+'</td></tr>':'')+
+        (retTotal>0?'<tr style="background:var(--danger-bg)"><td style="font-weight:600;color:#c0392b">↩ Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">- '+fmt(retTotal)+'</td><td style="text-align:right;font-weight:700;color:#c0392b">- '+fmt(retTotal)+'</td></tr>':'')+
+        (changeToday>0?'<tr style="background:var(--warning-bg)"><td style="font-weight:600;color:#92400e">💵 Change Given (Cash)</td><td style="text-align:right;color:#92400e">Cash out</td><td style="text-align:right;color:#92400e">- '+fmt(changeToday)+'</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(changeToday)+'</td></tr>':'')+
         '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(cash+pos+transfer+cpTotal+depTotal+exchBalTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+retTotal>0?'- '+fmt(expTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal)+'</td></tr>'+
         '</tbody></table>'+
       '</div>'+
@@ -1702,7 +1704,7 @@ function printClosingReport(){
   });
   var cpTotal=(DB.creditPayments||[]).filter(function(p){return dateInRange(p.date,closingDate,closingDate);}).reduce(function(a,p){return a+p.amount;},0);
   var depTotal=(DB.deposits||[]).filter(function(d){return d.amount>0&&dateInRange(d.date,closingDate,closingDate);}).reduce(function(a,d){return a+d.amount;},0);
-  var expToday2=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&dateInRange(c.date,closingDate,closingDate);});
+  var expToday2=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&dateInRange(c.date,closingDate,closingDate);});
   var expTotal=expToday2.reduce(function(a,e){return a+e.amount;},0);
   var suppPayToday2=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,closingDate,closingDate);});
   var suppPayTotal2=suppPayToday2.reduce(function(a,e){return a+e.amount;},0);
@@ -2207,7 +2209,7 @@ function sendDailySummaryWhatsApp(){
   var totalPaid=totalRev-creditOwed;
   var cpToday=(DB.creditPayments||[]).filter(function(p){return p.payMode!=='writeoff'&&dateInRange(p.date,new Date().toISOString().slice(0,10),new Date().toISOString().slice(0,10));}).reduce(function(a,p){return a+p.amount;},0);
   var _todayIso=new Date().toISOString().slice(0,10);
-  var expenses=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&dateInRange(c.date,_todayIso,_todayIso);}).reduce(function(a,e){return a+e.amount;},0);
+  var expenses=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&dateInRange(c.date,_todayIso,_todayIso);}).reduce(function(a,e){return a+e.amount;},0);
   var suppPayments=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,_todayIso,_todayIso);}).reduce(function(a,e){return a+e.amount;},0);
 
   var msg=
@@ -4810,6 +4812,18 @@ function buildInvoiceHTML(inv){
           :'')+
         '</div>'
       :'')+
+      (inv.changeGiven>0?
+        '<div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #eee;margin-top:2px">'+
+          '<div style="padding:4px 8px;background:var(--warning-bg)">'+
+            '<div class="pay-label" style="color:#92400e">Amount received ('+( inv.payMode==='transfer'?'Transfer':inv.payMode==='pos'?'POS':'Cash')+')</div>'+
+            '<div class="pay-val" style="color:#92400e;font-size:12px">'+fmt(inv.grandTotal+inv.changeGiven)+'</div>'+
+          '</div>'+
+          '<div style="padding:4px 8px;background:#fef2f2">'+
+            '<div class="pay-label" style="color:#dc2626">💵 Change given (Cash)</div>'+
+            '<div class="pay-val" style="color:#dc2626;font-size:12px">-'+fmt(inv.changeGiven)+'</div>'+
+          '</div>'+
+        '</div>'
+      :'')+
       (inv.invoiceDiscAmt>0?
         '<div style="padding:4px 8px;background:var(--danger-bg);border-bottom:1px solid #ccc">'+
           '<div class="pay-label" style="color:#c0392b">Discount given</div>'+
@@ -5730,6 +5744,7 @@ function submitInvoice(){
       total:itemTotal,profit:itemProfit,
       payment:payment,payMode:payMode,bankId:bankId,posId:posId,
       dueDate:dueDate||null,
+      changeGiven:changeGiven>0?changeGiven:null,
       splitPayment:splitPayment||null,
       custId:custId,custName:custName,printName:printName,custAddr:custAddr,
       custType:saleCustomerType,date:date,month:month,
@@ -5746,6 +5761,13 @@ function submitInvoice(){
   // Check if staff entered an "amount received" (for cash/transfer/pos with outstanding balance)
   var amtReceivedEl=document.getElementById('s-amt-received');
   var amtReceived=amtReceivedEl?parseFloat(amtReceivedEl.value)||0:0;
+  // Check change given back to customer
+  var changeAmtEl=document.getElementById('s-change-amt');
+  var changeGiven=changeAmtEl?parseFloat(changeAmtEl.value)||0:0;
+  // If change given, actual received = grandTotal + changeGiven
+  if(changeGiven>0&&payment!=='part'&&payment!=='credit'&&payment!=='deposit'&&payment!=='split'){
+    cashReceived=grandTotal+changeGiven; // customer paid grandTotal+change
+  }
   if(amtReceived>grandTotal&&payment!=='part'&&payment!=='credit'&&payment!=='deposit'&&payment!=='split'){
     cashReceived=amtReceived; // record actual cash received
   }
@@ -5762,6 +5784,10 @@ function submitInvoice(){
       // Deposit invoices: cashflow is handled by deposit-applied + topup entries below
       // Skip initial push for deposit to avoid double-counting
       DB.cashflow.push({id:uid(),desc:'Invoice #'+invNum+(invoiceDiscAmt>0?' [disc: '+fmt(invoiceDiscAmt)+']':'')+'  - '+custName,amount:cashReceived,type:'in',cat:'Sales',payMode:payMode==='credit'?'cash':payMode,bankId:bankId,posId:posId,date:date,month:month});
+      // If change was given back to customer, record as cash out
+      if(changeGiven>0){
+        DB.cashflow.push({id:uid(),desc:'Change given — Invoice #'+invNum+' - '+custName,amount:changeGiven,type:'out',cat:'Change',payMode:'cash',date:date,month:month,by:DB.currentUser.name,isChange:true});
+      }
     }
   }
   // Update registered customer
@@ -6225,6 +6251,7 @@ function onPaymentTypeChange(){
   }
   // Show "Amount received" field when customer has outstanding credit balance and payment is cash/pos/transfer
   var amtRecWrap=document.getElementById('s-amt-received-wrap');
+  var changeWrap=document.getElementById('s-change-wrap');
   if(amtRecWrap){
     var ptv=payType?payType.value:'';
     var custId2=saleCustomerType==='walkin'?'':(document.getElementById('s-reg-customer')?document.getElementById('s-reg-customer').value:'');
@@ -6236,6 +6263,14 @@ function onPaymentTypeChange(){
       var lbl=amtRecWrap.querySelector('label');
       if(lbl)lbl.innerHTML='Amount received (₦) <span style="font-size:11px;color:#e67e22;font-weight:600">— customer owes '+fmt(custDebt)+' opening/credit balance</span>';
     }
+  }
+  // Show change given field for transfer/cash/pos (overpayment with change)
+  if(changeWrap){
+    var ptv2=payType?payType.value:'';
+    var showChange=ptv2==='cash'||ptv2==='transfer'||ptv2==='pos'||ptv2===''||(!ptv2);
+    var isCredit=ptv2==='credit'||ptv2==='part'||ptv2==='deposit';
+    changeWrap.style.display=(!isCredit&&showChange)?'block':'none';
+    if(isCredit){var ca=document.getElementById('s-change-amt');if(ca)ca.value='';}
   }
 } // end onPaymentTypeChange
 function onAmtReceivedChange(){
@@ -6268,6 +6303,21 @@ function onAmtReceivedChange(){
     } else {
       hint.textContent='';
     }
+  } else {
+    hint.textContent='';
+  }
+}
+function onChangeAmtInput(){
+  var changeEl=document.getElementById('s-change-amt');
+  var hint=document.getElementById('s-change-hint');
+  var change=parseFloat(changeEl?changeEl.value:0)||0;
+  if(!hint)return;
+  if(change>0){
+    var sub=invoiceItems.reduce(function(a,l){return a+(l.price*l.qty-(l.discAmt||0));},0);
+    var amtRec=parseFloat((document.getElementById('s-amt-received')||{}).value)||0;
+    var received=amtRec>0?amtRec:sub+change;
+    hint.textContent='Customer paid '+fmt(received)+' → you give back '+fmt(change)+' cash change. Net: '+fmt(received-change);
+    hint.style.color='#15803d';
   } else {
     hint.textContent='';
   }
@@ -7074,6 +7124,11 @@ function buildSales(){
         '<div style="font-size:11px;color:#6b7280;margin-top:3px">Leave blank if no deadline. Shown on invoice and customer profile.</div>'+
       '</div>'+
       '<div class="form-group" id="s-amt-received-wrap" style="display:none"><label>Amount received (₦) <span style="font-size:11px;color:#6b7280;font-weight:400">— optional, if customer paid more</span></label><input type="number" id="s-amt-received" placeholder="Leave blank if exact" min="0" oninput="onAmtReceivedChange()"></div>'+
+      '<div class="form-group" id="s-change-wrap" style="display:none">'+
+        '<label>💵 Change given back (₦) <span style="font-size:11px;color:#6b7280;font-weight:400">— cash returned to customer</span></label>'+
+        '<input type="number" id="s-change-amt" placeholder="0" min="0" oninput="onChangeAmtInput()">'+
+        '<div id="s-change-hint" style="font-size:11px;margin-top:3px;color:#15803d;font-weight:600"></div>'+
+      '</div>'+
     '</div>'+
     '<div id="s-split-wrap" style="display:none;background:var(--primary-bg);border:1px solid #b6d4fe;border-radius:8px;padding:12px;margin-bottom:10px">'+
       '<div style="font-size:12px;font-weight:700;color:#0d6efd;margin-bottom:10px">&#128260; Split payment &#8212; enter amount for each mode</div>'+
@@ -9847,7 +9902,7 @@ function buildPandL(){
   var netRevenue=grossRevenue-totalReturns;
 
   // ── Expenses (non-restock cashflow out) ─────────────────────
-  var expLines=(DB.cashflow||[]).filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&dateInRange(c.date,from,to);});
+  var expLines=(DB.cashflow||[]).filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&dateInRange(c.date,from,to);});
   var totalExpenses=expLines.reduce(function(a,e){return a+e.amount;},0);
 
   // ── Supplier payments (restock) ──────────────────────────────
