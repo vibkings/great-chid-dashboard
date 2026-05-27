@@ -1302,6 +1302,8 @@ function clearAllData() {
 
 function uid(){return Date.now()+Math.floor(Math.random()*99999);}
 function fmt(n){return '₦'+Math.round(n).toLocaleString();}
+// ── XSS sanitiser — wrap ALL user-typed values before inserting into innerHTML ──
+function esc(s){return s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 
 // ── Pagination helpers ────────────────────────────────────────
 var PAGE_SIZE=50;
@@ -1583,7 +1585,7 @@ function buildClosingReport(){
   // Invoice rows
   var invRows=invList.map(function(g,i){
     var payBadge=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':g.payment==='part'?'<span class="badge low">Part</span>':g.payment==='split'?'<span class="badge" style="background:#6f42c1;color:#fff">Split</span>':g.payMode==='pos'?'<span class="badge" style="background:#0891b2;color:#fff">POS</span>':g.payMode==='transfer'?'<span class="badge" style="background:#0d6efd;color:#fff">Transfer</span>':'<span class="badge ok">Cash</span>';
-    return '<tr><td>'+(i+1)+'</td><td style="font-weight:700">'+g.invoiceNum+'</td><td>'+g.custName+'</td><td>'+payBadge+'</td><td style="text-align:right">'+fmt(g.total)+'</td><td style="text-align:right;color:#15803d">'+fmt(g.profit)+'</td><td style="font-size:11px">'+payModeLabel(g)+'</td><td>'+g.seller+'</td></tr>';
+    return '<tr><td>'+(i+1)+'</td><td style="font-weight:700">'+g.invoiceNum+'</td><td>'+esc(g.custName)+'</td><td>'+payBadge+'</td><td style="text-align:right">'+fmt(g.total)+'</td><td style="text-align:right;color:#15803d">'+fmt(g.profit)+'</td><td style="font-size:11px">'+payModeLabel(g)+'</td><td>'+esc(g.seller)+'</td></tr>';
   }).join('');
 
   var grandCashIn=totalPaid+cpTotal+depTotal;
@@ -1747,7 +1749,7 @@ function printClosingReport(){
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
   var staffRows=Object.keys(byStaff).map(function(s){var st=byStaff[s];return '<tr><td>'+s+'</td><td>'+st.count+'</td><td>'+fmt(st.total)+'</td><td>'+fmt(st.profit)+'</td></tr>';}).join('');
-  var invRows=invList.map(function(g,i){return '<tr><td>'+(i+1)+'</td><td>'+g.invoiceNum+'</td><td>'+g.custName+'</td><td>'+g.payment+'</td><td>'+fmt(g.total)+'</td><td>'+fmt(g.profit)+'</td><td>'+payModeLabel(g)+'</td><td>'+g.seller+'</td></tr>';}).join('');
+  var invRows=invList.map(function(g,i){return '<tr><td>'+(i+1)+'</td><td>'+g.invoiceNum+'</td><td>'+esc(g.custName)+'</td><td>'+g.payment+'</td><td>'+fmt(g.total)+'</td><td>'+fmt(g.profit)+'</td><td>'+payModeLabel(g)+'</td><td>'+esc(g.seller)+'</td></tr>';}).join('');
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Closing Report</title>'+
     '<style>@page{size:A4;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px}'+
     '.h{text-align:center;border-bottom:2px solid #1a237e;padding-bottom:8px;margin-bottom:12px}'+
@@ -1820,7 +1822,7 @@ function buildActivityLog(){
     return '<tr>'+
       '<td style="font-size:10px;color:#999">'+a.date+' '+a.time+'</td>'+
       '<td><span style="background:'+col+';color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap">'+a.action+'</span></td>'+
-      '<td style="font-size:12px">'+a.detail+'</td>'+
+      '<td style="font-size:12px">'+esc(a.detail)+'</td>'+
       '<td style="font-size:11px;color:#555">'+a.extra+'</td>'+
       '<td style="font-weight:600;color:#1a237e">'+a.user+'</td>'+
     '</tr>';
@@ -1927,8 +1929,8 @@ function payModeLabel(s){
   if(s.payment==='part') return 'Part — '+(s.payMode==='pos'?'POS':s.payMode==='transfer'?'Transfer':'Cash');
   return 'Cash';
 }
-function bankOpts(){return DB.banks.map(function(b){return '<option value="'+b.id+'">'+b.name+(b.acct?'  -  '+b.acct:'')+'</option>';}).join('');}
-function posOpts(){return DB.posTerminals.map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');}
+function bankOpts(){return DB.banks.map(function(b){return '<option value="'+b.id+'">'+esc(b.name)+(b.acct?'  -  '+b.acct:'')+'</option>';}).join('');}
+function posOpts(){return DB.posTerminals.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');}
 
 function togglePaySubFields(val,prefix){
   var bankWrap=document.getElementById(prefix+'-bank-wrap');
@@ -1946,7 +1948,7 @@ function removeBank(id){
     type:'warning',
     title:'Remove bank?',
     msg:'This bank will be removed from payment options.',
-    detail:b?'🏦 '+b.name+(b.acct?' · '+b.acct:''):'Bank',
+    detail:b?'🏦 '+esc(b.name)+(b.acct?' · '+b.acct:''):'Bank',
     confirmLabel:'Remove',
     cancelLabel:'Cancel'
   },function(){
@@ -1961,7 +1963,7 @@ function removePos(id){
     type:'warning',
     title:'Remove POS terminal?',
     msg:'This terminal will be removed from payment options.',
-    detail:p?'📱 '+p.name+(p.tid?' ('+p.tid+')':''):'Terminal',
+    detail:p?'📱 '+esc(p.name)+(p.tid?' ('+p.tid+')':''):'Terminal',
     confirmLabel:'Remove',
     cancelLabel:'Cancel'
   },function(){
@@ -1972,8 +1974,8 @@ function removePos(id){
 
 function buildSettings(){
   if(!canDo('settings'))return '<div class="empty">Access denied.</div>';
-  var bankRows=DB.banks.length?DB.banks.map(function(b){return '<tr><td>'+b.name+'</td><td>'+(b.acct||' - ')+'</td><td>'+(isAdmin()?'<button class="btn danger" onclick="removeBank('+b.id+')">Remove</button>':' - ')+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">No banks added.</td></tr>';
-  var posRows=DB.posTerminals.length?DB.posTerminals.map(function(p){return '<tr><td>'+p.name+'</td><td>'+(p.tid||' - ')+'</td><td>'+(isAdmin()?'<button class="btn danger" onclick="removePos('+p.id+')">Remove</button>':' - ')+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">No POS terminals added.</td></tr>';
+  var bankRows=DB.banks.length?DB.banks.map(function(b){return '<tr><td>'+esc(b.name)+'</td><td>'+(b.acct||' - ')+'</td><td>'+(isAdmin()?'<button class="btn danger" onclick="removeBank('+b.id+')">Remove</button>':' - ')+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">No banks added.</td></tr>';
+  var posRows=DB.posTerminals.length?DB.posTerminals.map(function(p){return '<tr><td>'+esc(p.name)+'</td><td>'+(p.tid||' - ')+'</td><td>'+(isAdmin()?'<button class="btn danger" onclick="removePos('+p.id+')">Remove</button>':' - ')+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">No POS terminals added.</td></tr>';
 
   // Data stats
   var savedRaw=null;try{savedRaw=localStorage.getItem(STORAGE_KEY);}catch(e){}
@@ -2451,7 +2453,7 @@ function renderApp(){
       '<div class="sidebar-bottom">'+
         '<div class="user-block" onclick="switchTab(\'users\')" title="Edit your profile">'+
           '<div class="user-avatar">'+initials(u.name)+'</div>'+
-          '<div class="user-info"><div class="user-name">'+u.name+'</div><div class="user-role">'+(isAdmin()?'Administrator':'Staff')+'</div></div>'+
+          '<div class="user-info"><div class="user-name">'+esc(u.name)+'</div><div class="user-role">'+(isAdmin()?'Administrator':'Staff')+'</div></div>'+
           '<span style="font-size:11px;color:var(--text3)">✏️</span>'+
         '</div>'+
       '</div>'+
@@ -2542,7 +2544,7 @@ function showTransferModal(direction){
       var disabled=i.qty<=0;
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);opacity:'+(disabled?'0.5':'1')+'">'+
         '<div style="flex:1">'+
-          '<div style="font-size:13px;font-weight:600">'+i.name+'</div>'+
+          '<div style="font-size:13px;font-weight:600">'+esc(i.name)+'</div>'+
           '<div style="font-size:11px;color:var(--text3)">'+(i.cat||'No category')+' &nbsp;·&nbsp; Available: <b style="color:'+(disabled?'var(--danger)':'var(--success)')+'">'+i.qty+'</b></div>'+
         '</div>'+
         '<input type="number" id="tr-qty-'+i.id+'" placeholder="0" min="0" max="'+i.qty+'" '+(disabled?'disabled title="No stock available"':'')+' style="width:70px;font-size:13px;text-align:center;border-radius:var(--radius-sm);border:1px solid var(--border);padding:5px;'+(disabled?'background:var(--surface2);':'')+'">'+
@@ -2606,7 +2608,7 @@ function processTransfer(direction){
 // ============================================================
 function showAddWarehouseStockModal(){
   var old=document.getElementById('wh-add-modal');if(old)old.remove();
-  var invOpts=DB.inventory.map(function(i){return '<option value="'+i.id+'">'+i.name+(i.cat?' ('+i.cat+')':'')+'</option>';}).join('');
+  var invOpts=DB.inventory.map(function(i){return '<option value="'+i.id+'">'+esc(i.name)+(i.cat?' ('+i.cat+')':'')+'</option>';}).join('');
   var m=document.createElement('div');
   m.id='wh-add-modal';
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem';
@@ -2658,7 +2660,7 @@ function filterWhaItems(term){
   dd.innerHTML=items.slice(0,50).map(function(i){
     var inWh=DB.warehouse.find(function(w){return w.id===i.id;});
     return '<div onclick="selectWhaItem('+i.id+')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f3f5;display:flex;justify-content:space-between;align-items:center" onmouseover="this.style.background=\'var(--primary-bg)\'" onmouseout="this.style.background=\'var(--white)\'">'+
-      '<span><b>'+i.name+'</b>'+(i.cat?' <span style="font-size:10px;color:#888">'+i.cat+'</span>':'')+'</span>'+
+      '<span><b>'+esc(i.name)+'</b>'+(i.cat?' <span style="font-size:10px;color:#888">'+i.cat+'</span>':'')+'</span>'+
       '<span style="font-size:11px;color:'+(inWh?'#15803d':'#6c757d')+';white-space:nowrap;margin-left:10px">'+(inWh?'In warehouse: '+inWh.qty:'Not in warehouse')+'</span>'+
     '</div>';
   }).join('');
@@ -2708,7 +2710,7 @@ function saveAddWarehouseStock(){
 function editWhMinQty(itemId){
   var item=DB.warehouse.find(function(i){return i.id==itemId;});
   if(!item){alert('Item not found.');return;}
-  var val=prompt('Set minimum quantity for '+item.name+' (current: '+item.minQty+'):',item.minQty);
+  var val=prompt('Set minimum quantity for '+esc(item.name)+' (current: '+item.minQty+'):',item.minQty);
   if(val===null)return;
   var num=parseInt(val);
   if(isNaN(num)||num<0){alert('Please enter a valid number (0 or more).');return;}
@@ -2728,7 +2730,7 @@ function buildWarehouse(){
   var rows=filteredWh.length?filteredWh.map(function(i){
     var status=i.qty===0?'<span class="badge out">Out</span>':i.qty<=i.minQty?'<span class="badge low">Low</span>':'<span class="badge ok">OK</span>';
     return '<tr data-wh-name="'+i.name.toLowerCase()+'" data-wh-cat="'+(i.cat||'').toLowerCase()+'">'+
-      '<td>'+i.name+'</td><td>'+(i.cat||'-')+'</td><td>'+i.qty+'</td>'+
+      '<td>'+esc(i.name)+'</td><td>'+(i.cat||'-')+'</td><td>'+i.qty+'</td>'+
       '<td><div style="display:flex;align-items:center;gap:5px">'+i.minQty+
         '<button onclick="editWhMinQty(\''+i.id+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;color:#6c757d;padding:1px 4px" title="Edit min qty">✏️</button>'+
       '</div></td>'+
@@ -2850,7 +2852,7 @@ function removeItem(id){
     type:'danger',
     title:'Delete inventory item?',
     msg:'This item will be moved to the Recycle Bin. You can restore it within 30 days.',
-    detail:'📦 '+item.name+' — Qty: '+item.qty+' · Cost: '+fmt(item.cost||0),
+    detail:'📦 '+esc(item.name)+' — Qty: '+item.qty+' · Cost: '+fmt(item.cost||0),
     confirmLabel:'🗑️ Move to bin',
     cancelLabel:'Cancel'
   },function(){
@@ -2951,7 +2953,7 @@ function filterSupplierCards(term){
 function toggleInvDetails(dropId){
   var el=document.getElementById(dropId);if(!el)return;var isOpen=el.style.display!=="none";document.querySelectorAll("[id^=\"inv-det-\"]").forEach(function(d){d.style.display="none";});el.style.display=isOpen?"none":"block";
 }
-function openEditModal(id){if(!isAdmin()&&!canDo('invedit')){alert('You do not have permission to edit inventory items.');return;}var i=DB.inventory.find(function(x){return x.id==id;});if(!i)return;var so=DB.suppliers.map(function(s){return "<option value=\""+s.id+"\">"+(s.id==i.supId?" selected":"")+s.name+"<\/option>";}).join("");var catOpts=getCatOpts(i.cat||"");var m=document.getElementById("inv-edit-modal");if(!m){m=document.createElement("div");m.id="inv-edit-modal";document.body.appendChild(m);}m.innerHTML="<div style=\"position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem\" onclick=\"if(event.target===this)closeEditModal()\"><div style=\"background:var(--white);border-radius:var(--radius-lg);padding:1.5rem;width:100%;max-width:560px;box-shadow:var(--shadow-lg)\"><div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem\"><div style=\"font-size:15px;font-weight:700\">&#9998; Edit Item<\/div><button onclick=\"closeEditModal()\" style=\"background:none;border:none;font-size:20px;cursor:pointer\">&times;<\/button><\/div><div class=\"fg c2\" style=\"margin-bottom:.75rem\"><div class=\"form-group\"><label>Item Name<\/label><input type=\"text\" id=\"em-name\" value=\""+i.name+"\"><\/div><div class=\"form-group\"><label>Category<\/label><select id=\"em-cat\" onchange=\"handleCatChange(this.value,&apos;em-cat-new&apos;)\">"+catOpts+"<\/select><input type=\"text\" id=\"em-cat-new\" placeholder=\"New category\" style=\"display:none;margin-top:4px\"><\/div><\/div><div class=\"fg c2\" style=\"margin-bottom:.75rem\"><div class=\"form-group\"><label>Supplier<\/label><select id=\"em-sup\"><option value=\"\">None<\/option>"+so+"<\/select><\/div><div class=\"form-group\"><label>Min Qty<\/label><input type=\"number\" id=\"em-min\" value=\""+i.minQty+"\" min=\"0\"><\/div><\/div><div class=\"fg c2\" style=\"margin-bottom:1.25rem\"><div class=\"form-group\"><label>Cost (&#x20A6;)<\/label><input type=\"number\" id=\"em-cost\" value=\""+i.cost+"\" min=\"0\"><\/div><div class=\"form-group\"><label>Sell (&#x20A6;)<\/label><input type=\"number\" id=\"em-sell\" value=\""+i.sell+"\" min=\"0\"><\/div><\/div><div style=\"display:flex;gap:8px;justify-content:flex-end\"><button class=\"btn\" onclick=\"closeEditModal()\">Cancel<\/button><button class=\"btn primary\" onclick=\"saveEditModal("+id+")\">&#10003; Save Changes<\/button><\/div><\/div><\/div>";m.style.display="block";}
+function openEditModal(id){if(!isAdmin()&&!canDo('invedit')){alert('You do not have permission to edit inventory items.');return;}var i=DB.inventory.find(function(x){return x.id==id;});if(!i)return;var so=DB.suppliers.map(function(s){return "<option value=\""+s.id+"\">"+(s.id==i.supId?" selected":"")+esc(s.name)+"<\/option>";}).join("");var catOpts=getCatOpts(i.cat||"");var m=document.getElementById("inv-edit-modal");if(!m){m=document.createElement("div");m.id="inv-edit-modal";document.body.appendChild(m);}m.innerHTML="<div style=\"position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem\" onclick=\"if(event.target===this)closeEditModal()\"><div style=\"background:var(--white);border-radius:var(--radius-lg);padding:1.5rem;width:100%;max-width:560px;box-shadow:var(--shadow-lg)\"><div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem\"><div style=\"font-size:15px;font-weight:700\">&#9998; Edit Item<\/div><button onclick=\"closeEditModal()\" style=\"background:none;border:none;font-size:20px;cursor:pointer\">&times;<\/button><\/div><div class=\"fg c2\" style=\"margin-bottom:.75rem\"><div class=\"form-group\"><label>Item Name<\/label><input type=\"text\" id=\"em-name\" value=\""+esc(i.name)+"\"><\/div><div class=\"form-group\"><label>Category<\/label><select id=\"em-cat\" onchange=\"handleCatChange(this.value,&apos;em-cat-new&apos;)\">"+catOpts+"<\/select><input type=\"text\" id=\"em-cat-new\" placeholder=\"New category\" style=\"display:none;margin-top:4px\"><\/div><\/div><div class=\"fg c2\" style=\"margin-bottom:.75rem\"><div class=\"form-group\"><label>Supplier<\/label><select id=\"em-sup\"><option value=\"\">None<\/option>"+so+"<\/select><\/div><div class=\"form-group\"><label>Min Qty<\/label><input type=\"number\" id=\"em-min\" value=\""+i.minQty+"\" min=\"0\"><\/div><\/div><div class=\"fg c2\" style=\"margin-bottom:1.25rem\"><div class=\"form-group\"><label>Cost (&#x20A6;)<\/label><input type=\"number\" id=\"em-cost\" value=\""+i.cost+"\" min=\"0\"><\/div><div class=\"form-group\"><label>Sell (&#x20A6;)<\/label><input type=\"number\" id=\"em-sell\" value=\""+i.sell+"\" min=\"0\"><\/div><\/div><div style=\"display:flex;gap:8px;justify-content:flex-end\"><button class=\"btn\" onclick=\"closeEditModal()\">Cancel<\/button><button class=\"btn primary\" onclick=\"saveEditModal("+id+")\">&#10003; Save Changes<\/button><\/div><\/div><\/div>";m.style.display="block";}
 function closeEditModal(){var m=document.getElementById("inv-edit-modal");if(m)m.style.display="none";}
 function saveEditModal(id){if(!isAdmin()&&!canDo('invedit')){alert('You do not have permission to edit inventory items. Contact your admin.');return;}var item=DB.inventory.find(function(i){return i.id==id;});if(!item)return;var name=document.getElementById("em-name").value.trim();var catSel=document.getElementById("em-cat").value;var catNew=document.getElementById("em-cat-new").value.trim();var cat=catSel==="__new__"?catNew:catSel;var supId=document.getElementById("em-sup").value;var minQty=parseInt(document.getElementById("em-min").value)||1;var cost=parseFloat(document.getElementById("em-cost").value)||0;var sell=parseFloat(document.getElementById("em-sell").value)||0;if(!name){alert("Item name is required.");return;}if(cost<=0){alert("Cost price is required.");return;}if(sell<=0){alert("Selling price is required.");return;}if(sell<cost){alert("Selling price cannot be less than cost price.");return;}if(catSel==="__new__"&&!catNew){alert("Enter a new category name.");return;}if(catSel==="__new__"&&catNew&&!DB.categories.includes(catNew)){DB.categories.push(catNew);}item.name=name;item.cat=cat;item.supId=supId;item.minQty=minQty;item.cost=cost;item.sell=sell;saveData();closeEditModal();renderApp();}
 function showImportModal(){
@@ -3218,7 +3220,7 @@ function buildInventory(){
         var lp=r.lastPurch;
         var shortage=i.minQty-i.qty;
         return '<tr>'+
-          '<td style="font-weight:600">'+i.name+'</td>'+
+          '<td style="font-weight:600">'+esc(i.name)+'</td>'+
           '<td style="text-align:center;color:'+( i.qty===0?'#dc2626':'#d97706')+';font-weight:700">'+i.qty+'</td>'+
           '<td style="text-align:center">'+i.minQty+'</td>'+
           '<td style="text-align:center;color:#7c3aed;font-weight:700">'+shortage+'</td>'+
@@ -3287,7 +3289,7 @@ function buildInventory(){
     alertGroup('Low stock — Running low',lowItems,'warning','🟡')+
     alertGroup('No cost price set — Cannot be sold',noCostItems,'danger','⚠️')+
     alertGroup('Selling below cost price — Fix prices',belowCostItems,'danger','⚠️');
-  var supOpts=DB.suppliers.map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('');
+  var supOpts=DB.suppliers.map(function(s){return '<option value="'+s.id+'">'+esc(s.name)+'</option>';}).join('');
   var _allInvRows=DB.inventory.length?DB.inventory.map(function(i){
     var margin=i.sell>0&&i.cost>0?Math.round(((i.sell-i.cost)/i.sell)*100):0;
     var priceFlag=(!i.cost||i.cost<=0)?'<span class="badge out" title="No cost price set">⚠ No cost</span>':i.sell<i.cost?'<span class="badge out" title="Selling below cost">⚠ Below cost</span>':'';
@@ -3302,7 +3304,7 @@ function buildInventory(){
       (canEdit?'<button class="btn sm" style="color:var(--primary);border-color:#b6d4fe;font-size:11px;padding:3px 8px" onclick="openEditModal('+i.id+')">&#9998; Edit</button>':'')+
       (canDel?'<button class="btn danger sm" onclick="removeItem('+i.id+')">Del</button>':'')+
       '</div>':' - ';
-    return '<tr data-name="'+i.name.replace(/"/g,'&quot;')+'" data-cat="'+(i.cat||'').replace(/"/g,'&quot;')+'" data-sup="'+getSupName(i.supId).replace(/"/g,'&quot;')+'"><td>'+i.name+'</td><td>'+(i.cat||' - ')+'</td><td>'+getSupName(i.supId)+'</td><td>'+i.qty+'</td><td>'+i.minQty+'</td><td>'+costDisplay+'</td><td>'+sellDisplay+'</td><td>'+(i.cost>0?margin+'%':' - ')+'</td><td>'+fmt(i.qty*i.cost)+'</td><td>'+status+'</td><td>'+actionBtns+'</td></tr>';
+    return '<tr data-name="'+i.name.replace(/"/g,'&quot;')+'" data-cat="'+(i.cat||'').replace(/"/g,'&quot;')+'" data-sup="'+getSupName(i.supId).replace(/"/g,'&quot;')+'"><td>'+esc(i.name)+'</td><td>'+(i.cat||' - ')+'</td><td>'+getSupName(i.supId)+'</td><td>'+i.qty+'</td><td>'+i.minQty+'</td><td>'+costDisplay+'</td><td>'+sellDisplay+'</td><td>'+(i.cost>0?margin+'%':' - ')+'</td><td>'+fmt(i.qty*i.cost)+'</td><td>'+status+'</td><td>'+actionBtns+'</td></tr>';
   }):[];
   var _invPage=window._invPage||0;
   if(_invPage>0&&_allInvRows.length<=_invPage*PAGE_SIZE){_invPage=0;window._invPage=0;}
@@ -3347,7 +3349,7 @@ function printStockCountSheet(){
   var items=cat?DB.inventory.filter(function(i){return (i.cat||'Uncategorised')===cat;}):DB.inventory;
   if(!items.length){alert('No items to print.');return;}
   var rows=items.map(function(i,idx){
-    return '<tr><td style="text-align:center">'+(idx+1)+'</td><td>'+i.name+'</td><td>'+(i.cat||'-')+'</td><td style="text-align:center">______</td><td style="text-align:center">______</td><td>____________</td></tr>';
+    return '<tr><td style="text-align:center">'+(idx+1)+'</td><td>'+esc(i.name)+'</td><td>'+(i.cat||'-')+'</td><td style="text-align:center">______</td><td style="text-align:center">______</td><td>____________</td></tr>';
   }).join('');
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Stock Count Sheet</title>'+
     '<style>@page{size:A4;margin:12mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px}'+
@@ -3451,7 +3453,7 @@ function filterAdjItemDropdown(term){
     var stockColor=i.qty===0?'#dc3545':i.qty<=i.minQty?'#856404':'#198754';
     return '<div onclick="selectAdjItem('+i.id+')" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid #f1f3f5;display:flex;justify-content:space-between;align-items:center" '+
       'onmouseover="this.style.background=\'var(--primary-bg)\'" onmouseout="this.style.background=\'var(--white)\'">'+
-      '<span><b>'+i.name+'</b>'+(i.cat?' <span style="font-size:10px;color:#888">· '+i.cat+'</span>':'')+'</span>'+
+      '<span><b>'+esc(i.name)+'</b>'+(i.cat?' <span style="font-size:10px;color:#888">· '+i.cat+'</span>':'')+'</span>'+
       '<span style="font-size:11px;font-weight:700;color:'+stockColor+';white-space:nowrap;margin-left:10px">'+i.qty+' in stock</span>'+
     '</div>';
   }).join('');
@@ -3619,7 +3621,7 @@ function buildStockMgmt(){
     var catItems=activeCountCat?DB.inventory.filter(function(i){return (i.cat||'Uncategorised')===activeCountCat;}):[];
     var countRows=catItems.map(function(i){
       return '<tr>'+
-        '<td><b>'+i.name+'</b></td>'+
+        '<td><b>'+esc(i.name)+'</b></td>'+
         '<td style="text-align:center">'+i.qty+'</td>'+
         '<td><input class="inline-edit" type="number" min="0" placeholder="Enter count" id="cc-'+i.id+'" style="width:110px"></td>'+
         '<td id="ccs-'+i.id+'"><span class="count-status pending">Not entered</span></td>'+
@@ -3662,9 +3664,9 @@ function buildStockMgmt(){
         '</div>'
       :'<p style="color:#888;font-size:13px">Add items first.</p>')+
     '</div><p class="sec-title">Count history</p><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>By</th><th>Category</th><th>Items</th><th>Result</th><th></th></tr></thead><tbody>'+hist+'</tbody></table></div>';}
-    else{var r2=countSession.map(function(c){return '<tr><td>'+c.name+'</td><td>'+c.systemQty+'</td><td><input class="inline-edit" type="number" min="0" placeholder="Count" oninput="updateCountVal('+c.id+',this.value)"></td><td id="cst-'+c.id+'"><span class="count-status pending">Pending</span></td></tr>';}).join('');content='<div class="alert">Stock count in progress  -  enter counted qty.</div><div class="tbl-wrap"><table><thead><tr><th>Item</th><th>System qty</th><th>Counted qty</th><th>Status</th></tr></thead><tbody>'+r2+'</tbody></table></div><div style="display:flex;gap:8px"><button class="btn primary" onclick="saveCount()">Save & apply</button><button class="btn danger" onclick="cancelCount()">Cancel</button></div>';}
+    else{var r2=countSession.map(function(c){return '<tr><td>'+esc(c.name)+'</td><td>'+c.systemQty+'</td><td><input class="inline-edit" type="number" min="0" placeholder="Count" oninput="updateCountVal('+c.id+',this.value)"></td><td id="cst-'+c.id+'"><span class="count-status pending">Pending</span></td></tr>';}).join('');content='<div class="alert">Stock count in progress  -  enter counted qty.</div><div class="tbl-wrap"><table><thead><tr><th>Item</th><th>System qty</th><th>Counted qty</th><th>Status</th></tr></thead><tbody>'+r2+'</tbody></table></div><div style="display:flex;gap:8px"><button class="btn primary" onclick="saveCount()">Save & apply</button><button class="btn danger" onclick="cancelCount()">Cancel</button></div>';}
   } else if(activeStockSub==='adjustment'){
-    var io=DB.inventory.map(function(i){return '<option value="'+i.id+'">'+i.name+' ('+i.qty+')</option>';}).join('');
+    var io=DB.inventory.map(function(i){return '<option value="'+i.id+'">'+esc(i.name)+' ('+i.qty+')</option>';}).join('');
     // Filter adj log
     var adjSearch=window._adjSearch||'';
     var adjTypeF=window._adjTypeF||'';
@@ -3682,10 +3684,10 @@ function buildStockMgmt(){
     var lr=filteredAdj.length?filteredAdj.slice().reverse().map(function(l){
       return '<tr>'+
         '<td>'+l.date+'</td>'+
-        '<td><b>'+l.itemName+'</b></td>'+
+        '<td><b>'+esc(l.itemName)+'</b></td>'+
         '<td style="font-weight:700;color:'+(l.change>0?'#16a34a':'#dc2626')+'">'+(l.change>0?'+ ':'- ')+Math.abs(l.change)+'</td>'+
         '<td>'+l.before+' → '+l.after+'</td>'+
-        '<td style="font-size:11px">'+l.reason+'</td>'+
+        '<td style="font-size:11px">'+esc(l.reason)+'</td>'+
         '<td>'+(l.type==='count'?'<span class="badge info">Count</span>':l.change>0?'<span class="badge ok">Add</span>':'<span class="badge low">Reduce</span>')+'</td>'+
         '<td>'+l.by+'</td>'+
       '</tr>';
@@ -3733,7 +3735,7 @@ function buildStockMgmt(){
       '</div>'+
       '<div class="tbl-wrap"><table id="adj-log-table"><thead><tr><th>Date</th><th>Item</th><th>Change</th><th>Before→After</th><th>Reason</th><th>Type</th><th>By</th></tr></thead><tbody>'+lr+'</tbody></table></div>';
   } else {
-    content=DB.inventory.length?'<p class="sec-title">Edit products</p>'+DB.inventory.map(function(i){var so=DB.suppliers.map(function(s){return '<option value="'+s.id+'"'+(s.id==i.supId?' selected':'')+'>'+s.name+'</option>';}).join('');return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b>'+i.name+'</b>'+(i.qty===0?'<span class="badge out">Out</span>':i.qty<=i.minQty?'<span class="badge low">'+i.qty+' left</span>':'<span class="badge ok">'+i.qty+' in stock</span>')+'</div><div class="fg" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto"><div class="form-group"><label>Name</label><input type="text" id="pe-name-'+i.id+'" value="'+i.name+'"></div><div class="form-group"><label>Category</label><input type="text" id="pe-cat-'+i.id+'" value="'+(i.cat||'')+'"></div><div class="form-group"><label>Supplier</label><select id="pe-sup-'+i.id+'"><option value="">None</option>'+so+'</select></div><div class="form-group"><label>Cost (₦)</label><input type="number" id="pe-cost-'+i.id+'" value="'+i.cost+'"></div><div class="form-group"><label>Sell (₦)</label><input type="number" id="pe-sell-'+i.id+'" value="'+i.sell+'"></div><div class="form-group"><label>Min qty</label><input type="number" id="pe-min-'+i.id+'" value="'+i.minQty+'"></div><div class="form-group"><label>&nbsp;</label><button class="btn success" onclick="saveEdit('+i.id+')">Save</button></div></div></div>';}).join(''):'<div class="empty">No products yet.</div>';
+    content=DB.inventory.length?'<p class="sec-title">Edit products</p>'+DB.inventory.map(function(i){var so=DB.suppliers.map(function(s){return '<option value="'+s.id+'"'+(s.id==i.supId?' selected':'')+'>'+esc(s.name)+'</option>';}).join('');return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><b>'+esc(i.name)+'</b>'+(i.qty===0?'<span class="badge out">Out</span>':i.qty<=i.minQty?'<span class="badge low">'+i.qty+' left</span>':'<span class="badge ok">'+i.qty+' in stock</span>')+'</div><div class="fg" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr auto"><div class="form-group"><label>Name</label><input type="text" id="pe-name-'+i.id+'" value="'+esc(i.name)+'"></div><div class="form-group"><label>Category</label><input type="text" id="pe-cat-'+i.id+'" value="'+(i.cat||'')+'"></div><div class="form-group"><label>Supplier</label><select id="pe-sup-'+i.id+'"><option value="">None</option>'+so+'</select></div><div class="form-group"><label>Cost (₦)</label><input type="number" id="pe-cost-'+i.id+'" value="'+i.cost+'"></div><div class="form-group"><label>Sell (₦)</label><input type="number" id="pe-sell-'+i.id+'" value="'+i.sell+'"></div><div class="form-group"><label>Min qty</label><input type="number" id="pe-min-'+i.id+'" value="'+i.minQty+'"></div><div class="form-group"><label>&nbsp;</label><button class="btn success" onclick="saveEdit('+i.id+')">Save</button></div></div></div>';}).join(''):'<div class="empty">No products yet.</div>';
   }
   return nav+content;
 }
@@ -3754,7 +3756,7 @@ function removeCustomer(id){
     type:'danger',
     title:'Delete customer?',
     msg:'The customer will be moved to the Recycle Bin.',
-    detail:'👥 '+c.name+(c.phone?' · '+c.phone:'')+(c.biz?' · '+c.biz:''),
+    detail:'👥 '+esc(c.name)+(c.phone?' · '+c.phone:'')+(c.biz?' · '+c.biz:''),
     confirmLabel:'🗑️ Move to bin',
     cancelLabel:'Cancel'
   },function(){
@@ -3803,7 +3805,7 @@ function buildMessagingPanel(){
     var checked=msgSelectedCusts.indexOf(c.id)!==-1;
     return '<tr style="cursor:pointer" onclick="toggleMsgCust(\''+c.id+'\')">'+
       '<td style="width:36px;text-align:center"><input type="checkbox" '+(checked?'checked':'')+' onclick="event.stopPropagation();toggleMsgCust(\''+c.id+'\')" style="width:15px;height:15px"></td>'+
-      '<td style="font-weight:600">'+c.name+'</td><td>'+c.phone+'</td><td>'+(c.biz||'—')+'</td>'+
+      '<td style="font-weight:600">'+esc(c.name)+'</td><td>'+esc(c.phone)+'</td><td>'+(c.biz||'—')+'</td>'+
       '<td style="color:'+(c.creditBalance>0?'#c0392b':'#15803d')+'">'+(c.creditBalance>0?fmt(c.creditBalance):'₦0')+'</td>'+
     '</tr>';
   }).join('');
@@ -3930,7 +3932,7 @@ async function sendTwilioWhatsApp(){
   }
   var sent=results.filter(function(r){return r.status.startsWith('✅');}).length;
   if(statusEl)statusEl.textContent='Done — '+sent+' sent, '+(results.length-sent)+' failed.';
-  if(resultsEl)resultsEl.innerHTML='<div style="font-size:12px;font-weight:700;margin-bottom:6px">Delivery report:</div><div class="tbl-wrap" style="max-height:200px;overflow-y:auto"><table><thead><tr><th>Customer</th><th>Phone</th><th>Status</th></tr></thead><tbody>'+results.map(function(r){return '<tr><td>'+r.name+'</td><td>'+r.phone+'</td><td>'+r.status+'</td></tr>';}).join('')+'</tbody></table></div>';
+  if(resultsEl)resultsEl.innerHTML='<div style="font-size:12px;font-weight:700;margin-bottom:6px">Delivery report:</div><div class="tbl-wrap" style="max-height:200px;overflow-y:auto"><table><thead><tr><th>Customer</th><th>Phone</th><th>Status</th></tr></thead><tbody>'+results.map(function(r){return '<tr><td>'+esc(r.name)+'</td><td>'+r.phone+'</td><td>'+r.status+'</td></tr>';}).join('')+'</tbody></table></div>';
 }
 
 async function sendTermiiSMS(){
@@ -3962,7 +3964,7 @@ async function sendTermiiSMS(){
   }
   var sent=results.filter(function(r){return r.status.startsWith('✅');}).length;
   if(statusEl)statusEl.textContent='Done — '+sent+' sent, '+(results.length-sent)+' failed.';
-  if(resultsEl)resultsEl.innerHTML='<div style="font-size:12px;font-weight:700;margin-bottom:6px">Delivery report:</div><div class="tbl-wrap" style="max-height:200px;overflow-y:auto"><table><thead><tr><th>Customer</th><th>Phone</th><th>Status</th></tr></thead><tbody>'+results.map(function(r){return '<tr><td>'+r.name+'</td><td>'+r.phone+'</td><td>'+r.status+'</td></tr>';}).join('')+'</tbody></table></div>';
+  if(resultsEl)resultsEl.innerHTML='<div style="font-size:12px;font-weight:700;margin-bottom:6px">Delivery report:</div><div class="tbl-wrap" style="max-height:200px;overflow-y:auto"><table><thead><tr><th>Customer</th><th>Phone</th><th>Status</th></tr></thead><tbody>'+results.map(function(r){return '<tr><td>'+esc(r.name)+'</td><td>'+r.phone+'</td><td>'+r.status+'</td></tr>';}).join('')+'</tbody></table></div>';
 }
 
 function sendWhatsAppMessages(){msgChannel==='termii'?sendTermiiSMS():sendTwilioWhatsApp();}
@@ -4091,7 +4093,7 @@ function buildCustomers(){
           var _col=_diff<0?'#dc2626':_diff<=7?'#f59e0b':'#15803d';
           dueDateCell='<span style="color:'+_col+';font-weight:600;font-size:11px">'+_due.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+(_diff<0?' ⚠️':_diff===0?' 🔔':'')+'</span>';
         }
-        return '<tr><td><b>'+g.invoiceNum+'</b></td><td>'+g.date+'</td><td style="font-size:11px;max-width:200px">'+itemList+'</td><td style="text-align:right"><b>'+fmt(g.total)+'</b></td><td style="text-align:right;color:#16a34a">'+fmt(g.profit)+'</td><td>'+payModeLabel(g)+'</td><td>'+pt+'</td><td>'+dueDateCell+'</td><td>'+g.seller+'</td>'+
+        return '<tr><td><b>'+g.invoiceNum+'</b></td><td>'+g.date+'</td><td style="font-size:11px;max-width:200px">'+itemList+'</td><td style="text-align:right"><b>'+fmt(g.total)+'</b></td><td style="text-align:right;color:#16a34a">'+fmt(g.profit)+'</td><td>'+payModeLabel(g)+'</td><td>'+pt+'</td><td>'+dueDateCell+'</td><td>'+esc(g.seller)+'</td>'+
           '<td style="white-space:nowrap">'+
             '<button class="btn sm" style="color:#0d6efd;border-color:#93c5fd;font-size:11px" onclick="viewInvoiceDetail(\''+k+'\')">View</button> '+
             '<button class="btn sm" style="color:#1a237e;border-color:#93c5fd;font-size:11px" onclick="printCustomerInvoice(\''+k+'\','+cust.id+')">Print ↗</button> '+
@@ -4119,7 +4121,7 @@ function buildCustomers(){
         return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
           '<div style="font-size:11px;font-weight:700;color:var(--text3);width:14px">'+(idx+1)+'</div>'+
           '<div style="flex:1;min-width:0">'+
-            '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.name+'</div>'+
+            '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(item.name)+'</div>'+
             '<div style="height:5px;background:var(--surface3);border-radius:3px;margin-top:3px"><div style="width:'+pct+'%;height:100%;background:var(--primary);border-radius:3px"></div></div>'+
           '</div>'+
           '<div style="text-align:right;flex-shrink:0">'+
@@ -4176,7 +4178,7 @@ function buildCustomers(){
       content='<div class="card">'+
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:8px">'+
         '<div style="display:flex;align-items:center;gap:12px"><div class="avatar" style="background:'+ac[0]+';color:'+ac[1]+'">'+initials(cust.name)+'</div>'+
-        '<div><div style="font-size:16px;font-weight:600">'+cust.name+'</div>'+
+        '<div><div style="font-size:16px;font-weight:600">'+esc(cust.name)+'</div>'+
         '<div style="font-size:12px;color:#666;margin-top:2px">'+(cust.biz?cust.biz+' · ':'')+tb+' · '+balanceLabel+'</div></div></div>'+
         '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
         '<button class="btn sm" onclick="showDepositModal('+cust.id+')" style="color:#15803d;border-color:#86efac;font-weight:700">💰 Add deposit</button>'+
@@ -4217,7 +4219,7 @@ function buildCustomers(){
         }())+
         '</div>'+
         creditBar+
-        (cust.notes?'<div style="margin-top:8px;padding:8px 10px;background:var(--white);border-radius:8px;font-size:13px;color:#666">'+cust.notes+'</div>':'')+
+        (cust.notes?'<div style="margin-top:8px;padding:8px 10px;background:var(--white);border-radius:8px;font-size:13px;color:#666">'+esc(cust.notes)+'</div>':'')+
         '</div>'+
         (theyOweUs?'<div style="background:var(--danger-bg);border:2px solid #fca5a5;border-radius:10px;padding:14px 16px;margin-top:1rem">'+
           '<div style="font-size:13px;font-weight:700;color:#dc2626;margin-bottom:10px">💳 Record credit payment — owes '+fmt(creditBalance)+'</div>'+
@@ -4391,12 +4393,12 @@ function buildCustomers(){
             return '<tr>'+
               '<td>'+r.date+'</td>'+
               '<td><b>#'+(r.invoiceNum||r.invoiceId||'—')+'</b></td>'+
-              '<td>'+r.itemName+'</td>'+
+              '<td>'+esc(r.itemName)+'</td>'+
               '<td style="text-align:center">'+r.qty+'</td>'+
               '<td style="text-align:right;color:#dc2626;font-weight:700">'+fmt(r.refundAmt||0)+'</td>'+
               '<td style="color:#6b7280;font-size:11px">'+(r.reason||'—')+'</td>'+
               '<td>'+(retTypeBadge[r.refundType]||retTypeBadge['cash'])+'</td>'+
-              '<td style="color:#9ca3af;font-size:11px">'+r.by+'</td>'+
+              '<td style="color:#9ca3af;font-size:11px">'+esc(r.by)+'</td>'+
             '</tr>';
           }).join('');
           return '<p class="sec-title" style="margin-top:1rem">↩️ Returns & Refunds</p>'+
@@ -4424,7 +4426,7 @@ function buildCustomers(){
         ?'<span class="badge info" style="background:#dbeafe;color:#1e40af;border:1px solid #93c5fd">You owe '+fmt(Math.abs(cb))+'</span>'
         :cb>0?'<span class="badge owing">Owes '+fmt(cb)+'</span>'
         :'<span class="badge ok">Clear</span>';
-      return '<tr data-cust-name="'+c.name.toLowerCase()+'" data-cust-phone="'+(c.phone||'').toLowerCase()+'" data-cust-biz="'+(c.biz||'').toLowerCase()+'"><td><div style="display:flex;align-items:center;gap:8px"><div class="avatar" style="width:30px;height:30px;font-size:11px;background:'+ac2[0]+';color:'+ac2[1]+'">'+initials(c.name)+'</div>'+c.name+'</div></td>'+
+      return '<tr data-cust-name="'+c.name.toLowerCase()+'" data-cust-phone="'+(c.phone||'').toLowerCase()+'" data-cust-biz="'+(c.biz||'').toLowerCase()+'"><td><div style="display:flex;align-items:center;gap:8px"><div class="avatar" style="width:30px;height:30px;font-size:11px;background:'+ac2[0]+';color:'+ac2[1]+'">'+initials(c.name)+'</div>'+esc(c.name)+'</div></td>'+
         '<td>'+(c.phone||' - ')+'</td><td>'+(c.biz||' - ')+'</td><td>'+tb2+'</td>'+
         '<td>'+c.totalPurchases+'</td><td>'+fmt(c.totalSpent)+'</td>'+
         '<td>'+(cl>0?fmt(cl):'No limit')+'</td>'+
@@ -4660,7 +4662,7 @@ function printCustomerStatement(custId){
       '<div style="font-size:9px;color:#555;margin-top:2px">Printed: '+new Date().toLocaleString()+'</div>'+
     '</div>'+
     '<div class="cust-box">'+
-      '<div><b>Customer:</b> '+cust.name+'</div>'+
+      '<div><b>Customer:</b> '+esc(cust.name)+'</div>'+
       '<div><b>Phone:</b> '+(cust.phone||'—')+'</div>'+
       '<div><b>Business:</b> '+(cust.biz||'—')+'</div>'+
       '<div><b>Credit limit:</b> '+(cust.creditLimit>0?fmt(cust.creditLimit):'No limit')+'</div>'+
@@ -4687,7 +4689,7 @@ function printCustomerInvoice(invNum,custId){
   if(!invSales.length){alert('Invoice not found.');return;}
   var s0=invSales[0];
   var d=new Date(s0.date);var day=isNaN(d.getTime())?new Date().getDate():d.getDate();var mon=isNaN(d.getTime())?new Date().getMonth()+1:d.getMonth()+1;var yr=isNaN(d.getTime())?new Date().getFullYear():d.getFullYear();
-  var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+s.name+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
+  var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(s.name)+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var emptyRows='';var minRI=Math.max(12,invSales.length);for(var i=invSales.length;i<minRI;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
   // Date-aware: only count invoices/payments that existed at the time of this invoice
@@ -4859,7 +4861,7 @@ function buildInvoiceHTML(inv){
         '</div>':'')+
       '<div style="padding:4px 8px;background:#f9f9f9">'+
         '<div class="pay-label">Served by</div>'+
-        '<div class="pay-val">'+inv.seller+'</div>'+
+        '<div class="pay-val">'+esc(inv.seller)+'</div>'+
       '</div>'+
     '</div>'+
     (inv.hasPendingItems?'<div style="margin:4px 0 6px;background:var(--warning-bg);border:1.5px solid #ffc107;border-radius:5px;padding:6px 10px;font-size:9px;color:#856404">'+
@@ -4968,7 +4970,7 @@ function printCustomerReport(custId){
   var custSales=DB.sales.filter(function(s){return s.custId==custId;});
   var invGroups={};custSales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invGroups[k])invGroups[k]={invoiceNum:k,date:s.date,items:[],total:0,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,seller:s.seller,_s:s};invGroups[k].items.push(s);invGroups[k].total+=s.total;});
   var invKeys=Object.keys(invGroups).sort();
-  var rows=invKeys.map(function(k){var g=invGroups[k];var items=g.items.map(function(s){return s.name+' ×'+s.qty;}).join(', ');var custPayLabel=g.payment==='credit'?'Credit':g.payment==='split'?'Split':g.payment==='part'?'Part':g.payment==='deposit'?'Deposit':g.payMode==='pos'?'POS':g.payMode==='transfer'?'Transfer':'Cash';return '<tr><td>'+g.invoiceNum+'</td><td>'+g.date+'</td><td>'+items+'</td><td style="text-align:right">'+fmt(g.total)+'</td><td>'+custPayLabel+' / '+payModeLabel(g)+'</td><td>'+g.seller+'</td></tr>';}).join('');
+  var rows=invKeys.map(function(k){var g=invGroups[k];var items=g.items.map(function(s){return s.name+' ×'+s.qty;}).join(', ');var custPayLabel=g.payment==='credit'?'Credit':g.payment==='split'?'Split':g.payment==='part'?'Part':g.payment==='deposit'?'Deposit':g.payMode==='pos'?'POS':g.payMode==='transfer'?'Transfer':'Cash';return '<tr><td>'+g.invoiceNum+'</td><td>'+g.date+'</td><td>'+items+'</td><td style="text-align:right">'+fmt(g.total)+'</td><td>'+custPayLabel+' / '+payModeLabel(g)+'</td><td>'+esc(g.seller)+'</td></tr>';}).join('');
   var grandTotal=custSales.reduce(function(a,s){return a+s.total;},0);
   var custDeposits=(DB.deposits||[]).filter(function(d){return String(d.custId)===String(custId);});
   var depositTotal=custDeposits.reduce(function(a,d){return a+d.amount;},0);
@@ -4980,7 +4982,7 @@ function printCustomerReport(custId){
       '<td>'+(d.note||'-')+'</td>'+
       '<td>'+d.by+'</td></tr>';
   }).join(''):'<tr><td colspan="5" style="text-align:center;color:#999">No deposits recorded.</td></tr>';
-  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Customer Report - '+cust.name+'</title>'+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Customer Report - '+esc(cust.name)+'</title>'+
     '<style>@page{size:A4;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px}'+
     '.h{border-bottom:3px solid #c0392b;padding-bottom:8px;margin-bottom:12px;display:flex;align-items:center;gap:10px}'+
     '.logo-wrap{flex-shrink:0;width:72px;height:80px}'+
@@ -5022,7 +5024,7 @@ function printCustomerReport(custId){
     '</div>'+
     '<div style="background:var(--white);border:1px solid #e0e0e0;border-radius:6px;padding:10px;margin-bottom:8px;font-size:11px;color:#555">Printed: '+new Date().toLocaleString()+'</div>'+
     '<div style="background:var(--white);border:1px solid #e0e0e0;border-radius:6px;padding:10px;margin-bottom:12px;font-size:11px">'+
-    '<b>'+cust.name+'</b>'+(cust.biz?' | '+cust.biz:'')+' | '+(cust.phone||'No phone')+(cust.address?' | '+cust.address:'')+
+    '<b>'+esc(cust.name)+'</b>'+(cust.biz?' | '+cust.biz:'')+' | '+(cust.phone||'No phone')+(cust.address?' | '+cust.address:'')+
     '<br>Total purchases: '+invKeys.length+' invoices | Total spent: '+fmt(grandTotal)+' | Credit owed: '+fmt(cust.creditBalance||0)+' | Deposit balance: <b style="color:#1a6b3a">'+fmt(depositTotal)+'</b>'+
     '</div>'+
     '<table><thead><tr><th>Invoice #</th><th>Date</th><th>Items</th><th>Total</th><th>Payment</th><th>Seller</th></tr></thead><tbody>'+
@@ -5103,7 +5105,7 @@ function buildInvItemDropdownItems(filter){
     var stockLabel=i.qty===0?'Out of stock':i.qty<=i.minQty?'Low: '+i.qty+' left':'In stock: '+i.qty;
     return '<div data-iid="'+i.id+'" data-iname="'+i.name.replace(/"/g,'&quot;')+'" class="inv-dd-row" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">'+
       '<div style="flex:1;min-width:0">'+
-        '<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+i.name+'</div>'+
+        '<div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(i.name)+'</div>'+
         '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+(i.cat||'Uncategorised')+'</div>'+
       '</div>'+
       '<div style="text-align:right;flex-shrink:0">'+
@@ -5161,7 +5163,7 @@ function buildPurchaseItemDropdownItems(filter){
   });
   dd.innerHTML=items.map(function(i){
     return '<div data-id="'+i.id+'" data-name="'+i.name.replace(/"/g,'&quot;')+'" class="pi-dd-item" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">'+
-      '<div style="font-weight:600">'+i.name+'</div>'+
+      '<div style="font-weight:600">'+esc(i.name)+'</div>'+
       '<div style="font-size:11px;color:var(--text3);margin-top:1px">'+(i.cat||'-')+' · Stock: '+i.qty+'</div>'+
     '</div>';
   }).join('')+
@@ -5225,7 +5227,7 @@ function filterSupDd(val, showAll){
   if(!matches.length){dd.style.display='none';return;}
   dd.innerHTML=matches.map(function(s){
     var badge=s.owedToSupplier>0?'<span style="color:#dc2626;font-size:10px;margin-left:6px">owes '+fmt(s.owedToSupplier)+'</span>':'';
-    return '<div onclick="selectSupDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'"><b>'+s.name+'</b>'+badge+'<div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
+    return '<div onclick="selectSupDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'"><b>'+esc(s.name)+'</b>'+badge+'<div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
   }).join('');
   dd.style.display='block';
 }
@@ -5248,7 +5250,7 @@ function filterSupPayDd(val, showAll){
   var matches=showAll&&!q?suppliers:suppliers.filter(function(s){return s.name.toLowerCase().indexOf(q)>=0;});
   var allOpt='<div onclick="selectSupPayDd(\'\',\'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;color:#6b7280" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">All Suppliers</div>';
   dd.innerHTML=allOpt+matches.map(function(s){
-    return '<div onclick="selectSupPayDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'"><b>'+s.name+'</b><div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
+    return '<div onclick="selectSupPayDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'"><b>'+esc(s.name)+'</b><div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
   }).join('');
   dd.style.display='block';
 }
@@ -5283,7 +5285,7 @@ function saleCustSearch(val, showAll){
     return '<div onmousedown="event.preventDefault();saleCustSelect(\''+c.id+'\',\''+safeName+'\')"'+
       ' style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;background:var(--white);color:var(--text1)"'+
       ' onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">'+
-      '<div style="font-weight:600;color:var(--text1)">'+c.name+badge+'</div>'+
+      '<div style="font-weight:600;color:var(--text1)">'+esc(c.name)+badge+'</div>'+
       '<div style="font-size:10px;color:var(--text3);margin-top:1px">'+(c.phone||'No phone')+(c.type?' · '+c.type:'')+'</div>'+
     '</div>';
   }).join('')+
@@ -5337,7 +5339,7 @@ function addInvoiceItem(){
   }
   // Enforce cost price exists
   if(!item.cost||item.cost<=0){
-    alert('❌ Cannot sell "'+item.name+'"  -  this item has no cost price set.\n\nPlease go to Stock Management → Product Editing and set the cost price first before selling this item.');
+    alert('❌ Cannot sell "'+esc(item.name)+'"  -  this item has no cost price set.\n\nPlease go to Stock Management → Product Editing and set the cost price first before selling this item.');
     return;
   }
   if(qty<=0){alert('Enter a valid quantity.');return;}
@@ -5345,7 +5347,7 @@ function addInvoiceItem(){
   // Block selling below cost price (no per-item discount anymore  -  checked at invoice level)
   if(price<item.cost){
     var shortfall=item.cost-price;
-    alert('❌ Selling price is below cost price!\n\nItem: '+item.name+'\nCost price: '+fmt(item.cost)+'\nYour selling price: '+fmt(price)+'\nShortfall per unit: '+fmt(shortfall)+'\n\nYou cannot sell below cost price. Please increase the selling price.');
+    alert('❌ Selling price is below cost price!\n\nItem: '+esc(item.name)+'\nCost price: '+fmt(item.cost)+'\nYour selling price: '+fmt(price)+'\nShortfall per unit: '+fmt(shortfall)+'\n\nYou cannot sell below cost price. Please increase the selling price.');
     return;
   }
   var subtotal=price*qty;
@@ -5380,7 +5382,7 @@ function renderInvoiceItems(){
       :'<span style="color:#16a34a;font-weight:700">'+willSupply+'</span><br><span style="font-size:10px;color:#16a34a">✅ Full</span>';
     return '<tr>'+
       '<td>'+(i+1)+'</td>'+
-      '<td><b>'+l.name+'</b></td>'+
+      '<td><b>'+esc(l.name)+'</b></td>'+
       '<td style="text-align:center;font-weight:700">'+l.qty+'</td>'+
       '<td style="text-align:center">'+supplyCell+'</td>'+
       '<td style="text-align:right">'+fmt(l.price)+'</td>'+
@@ -5495,14 +5497,14 @@ function showDepositTopupDialog(cust,depBal,invoiceTotal,shortfall,creditLimit,c
   overlay.id='dep-topup-overlay';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
   var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
-  var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
+  var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
   var creditOpt=creditLimit>0&&availableCredit>=shortfall?'<option value="credit">Add to credit balance</option>':'';
   overlay.innerHTML=
     '<div style="background:var(--white);border-radius:14px;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden">'+
       '<div style="background:#f59e0b;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
         '<div>'+
           '<div style="font-size:15px;font-weight:800;color:#fff">Deposit Shortfall</div>'+
-          '<div style="font-size:11px;color:rgba(255,255,255,.9);margin-top:2px">'+cust.name+' - deposit not enough to cover invoice</div>'+
+          '<div style="font-size:11px;color:rgba(255,255,255,.9);margin-top:2px">'+esc(cust.name)+' - deposit not enough to cover invoice</div>'+
         '</div>'+
         '<button onclick="document.getElementById(\'dep-topup-overlay\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
       '</div>'+
@@ -6002,7 +6004,7 @@ function printInvoice(inv){
     var qtyCell=hasPartial
       ?'<span style="color:#16a34a;font-weight:700">'+suppliedQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pendingQty+' pending</span>'
       :''+l.qty;
-    return '<tr><td class="center">'+(i+1)+'</td><td>'+l.name+'</td><td class="center">'+qtyCell+'</td><td class="right">'+fmt(l.price)+'</td>'+
+    return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(l.name)+'</td><td class="center">'+qtyCell+'</td><td class="right">'+fmt(l.price)+'</td>'+
            '<td class="right" style="background:var(--danger-bg);color:#c0392b">'+(l.discAmt>0?'-'+fmt(l.discAmt):'')+'</td>'+
            '<td class="right"><b>'+fmt(l.total)+'</b></td></tr>';
   }).join('');
@@ -6068,7 +6070,7 @@ function doPrint(mode, inv) {
       var suppliedQty=l.suppliedQty!==undefined?l.suppliedQty:l.qty;
       var pendingQty=l.pendingQty!==undefined?l.pendingQty:0;
       var qtyCell=hasPartial?'<span style="color:#16a34a;font-weight:700">'+suppliedQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pendingQty+' pending</span>':''+l.qty;
-      return '<tr><td class="center">'+(i+1)+'</td><td>'+l.name+'</td><td class="center">'+qtyCell+'</td><td class="right">'+fmt(l.price)+'</td>'+
+      return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(l.name)+'</td><td class="center">'+qtyCell+'</td><td class="right">'+fmt(l.price)+'</td>'+
              '<td class="right" style="background:var(--danger-bg);color:#c0392b">'+(l.discAmt>0?'-'+fmt(l.discAmt):'')+'</td>'+
              '<td class="right"><b>'+fmt(l.total)+'</b></td></tr>';
     }).join('');
@@ -6116,7 +6118,7 @@ function buildThermalHTML(inv){
     var hasPartial=(l.suppliedQty!==undefined&&l.pendingQty>0);
     var qtyStr=hasPartial?(l.suppliedQty||0)+' of '+l.qty:l.qty;
     return '<tr>'+
-      '<td style="padding:2px 0;font-size:11px">'+(i+1)+'. '+l.name+(hasPartial?'<br><span style="font-size:9px;color:#888">'+l.pendingQty+' pending</span>':'')+'</td>'+
+      '<td style="padding:2px 0;font-size:11px">'+(i+1)+'. '+esc(l.name)+(hasPartial?'<br><span style="font-size:9px;color:#888">'+l.pendingQty+' pending</span>':'')+'</td>'+
       '<td style="text-align:center;padding:2px 3px;font-size:11px">'+qtyStr+'</td>'+
       '<td style="text-align:right;padding:2px 0;font-size:11px">'+fmt(l.price)+'</td>'+
       '<td style="text-align:right;padding:2px 0;font-size:11px;font-weight:700">'+fmt(l.total)+'</td>'+
@@ -6180,7 +6182,7 @@ function buildThermalHTML(inv){
       '<span class="lbl">Payment</span><span class="val">'+payLabel+'</span>'+
     '</div>'+
     '<div style="display:flex;justify-content:space-between;font-size:10px;margin-top:2px">'+
-      '<span class="lbl">Served by</span><span class="val">'+inv.seller+'</span>'+
+      '<span class="lbl">Served by</span><span class="val">'+esc(inv.seller)+'</span>'+
     '</div>'+
     // Supply stamp
     '<div class="stamp">'+
@@ -6225,7 +6227,7 @@ function printSaleLedger(){
     '<div class="title">Sales — '+periodLabel+'</div>'+
     '<table><thead><tr><th>Date</th><th>Invoice #</th><th>Item</th><th>Customer</th><th>Qty</th><th>Price</th><th>Discount</th><th>Total</th><th>Profit</th><th>Payment</th><th>Seller</th></tr></thead><tbody>'+
     (filteredSales.length?filteredSales.map(function(s){
-      return '<tr><td>'+s.date+'</td><td>'+(s.invoiceNum||' - ')+'</td><td>'+s.name+'</td><td>'+(s.printName||s.custName)+'</td><td style="text-align:center">'+s.qty+'</td><td style="text-align:right">'+fmt(s.salePrice)+'</td><td style="text-align:right">'+(s.discAmt>0?fmt(s.discAmt):' - ')+'</td><td style="text-align:right"><b>'+fmt(s.total)+'</b></td><td style="text-align:right">'+fmt(s.profit)+'</td><td>'+payModeLabel(s)+'</td><td>'+s.seller+'</td></tr>';
+      return '<tr><td>'+s.date+'</td><td>'+(s.invoiceNum||' - ')+'</td><td>'+esc(s.name)+'</td><td>'+(s.printName||s.custName)+'</td><td style="text-align:center">'+s.qty+'</td><td style="text-align:right">'+fmt(s.salePrice)+'</td><td style="text-align:right">'+(s.discAmt>0?fmt(s.discAmt):' - ')+'</td><td style="text-align:right"><b>'+fmt(s.total)+'</b></td><td style="text-align:right">'+fmt(s.profit)+'</td><td>'+payModeLabel(s)+'</td><td>'+esc(s.seller)+'</td></tr>';
     }).join(''):'<tr><td colspan="11" style="text-align:center;padding:12px;color:#888">No sales found for this period.</td></tr>')+
     '<tr class="total-row"><td colspan="7">TOTALS ('+filteredSales.length+' record(s))</td>'+
     '<td style="text-align:right">'+fmt(filteredSales.reduce(function(a,s){return a+s.total;},0))+'</td>'+
@@ -6528,7 +6530,7 @@ function showReturnModal(invoiceId){
     return '<div style="border-bottom:1px solid var(--border);padding:10px 0">'+
       '<div style="display:flex;align-items:flex-start;gap:10px">'+
         '<div style="flex:1">'+
-          '<div style="font-size:13px;font-weight:600;color:var(--dark)">'+s.name+'</div>'+
+          '<div style="font-size:13px;font-weight:600;color:var(--dark)">'+esc(s.name)+'</div>'+
           '<div style="font-size:11px;color:var(--text3);margin-top:2px">Sold: '+s.qty+' @ '+fmt(unitPrice)+' &nbsp;·&nbsp; Already returned: '+prev+' &nbsp;·&nbsp; Max: '+maxReturn+'</div>'+
         '</div>'+
         '<div style="display:flex;gap:8px;align-items:center">'+
@@ -6685,7 +6687,7 @@ function retExchSearch(inp, rowId, showAll){
       ' style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:12px"'+
       ' onmouseover="this.style.background=\'#f0fdf4\'" onmouseout="this.style.background=\'var(--white)\'">'+
       '<div>'+
-        '<div style="font-weight:600;color:#111">'+i.name+'</div>'+
+        '<div style="font-weight:600;color:#111">'+esc(i.name)+'</div>'+
         '<div style="font-size:10px;color:#6b7280">'+(i.cat||'')+'</div>'+
       '</div>'+
       '<div style="text-align:right;flex-shrink:0;margin-left:8px">'+
@@ -6813,7 +6815,7 @@ function processReturn(invoiceId){
     if(qty<=0)return;
     var prev=DB.salesReturns.filter(function(r){return r.invoiceId===invoiceId&&r.itemId===s.id;}).reduce(function(a,r){return a+r.qty;},0);
     var max=s.qty-prev;
-    if(qty>max){alert('Cannot return more than '+max+' for "'+s.name+'".');return;}
+    if(qty>max){alert('Cannot return more than '+max+' for "'+esc(s.name)+'".');return;}
     // Use adjusted price if entered, else fall back to original unit price
     var priceInp=document.getElementById('ret-price-'+s.id);
     var adjPrice=priceInp&&priceInp.value?parseFloat(priceInp.value):0;
@@ -6969,7 +6971,7 @@ function buildSales(){
         var pct=total>0?Math.round((supplied/total)*100):0;
         var bc=pct===0?'#dc2626':pct<100?'#f59e0b':'#16a34a';
         return '<tr style="background:var(--surface2)">'+
-          '<td style="padding-left:24px;font-size:12px">'+s.name+'</td>'+
+          '<td style="padding-left:24px;font-size:12px">'+esc(s.name)+'</td>'+
           '<td style="text-align:center">'+total+'</td>'+
           '<td style="text-align:center;color:#16a34a;font-weight:700">'+supplied+'</td>'+
           '<td style="text-align:center;color:#dc2626;font-weight:700">'+pending+'</td>'+
@@ -6979,7 +6981,7 @@ function buildSales(){
       }).join('');
       return '<tr style="background:var(--warning-bg)">'+
         '<td><b style="color:var(--warning-text)">Inv #'+g.invoiceNum+'</b></td>'+
-        '<td colspan="4" style="color:var(--warning-text);font-weight:700;font-size:12px">'+g.custName+' &middot; '+g.date+'</td>'+
+        '<td colspan="4" style="color:var(--warning-text);font-weight:700;font-size:12px">'+esc(g.custName)+' &middot; '+g.date+'</td>'+
         '<td><button class="btn sm" onclick="supplyAllNow(\''+g.invoiceNum+'\')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">&#128230; Supply all</button></td>'+
       '</tr>'+iRows;
     }).join('');
@@ -7009,7 +7011,7 @@ function buildSales(){
     if(g.payMode==='transfer'){transS+=g.total;return;}
     cashS+=g.total;
   });
-  var io=DB.inventory.filter(function(i){return i.qty>0;}).map(function(i){return '<option value="'+i.id+'">'+i.name+' ('+i.qty+')</option>';}).join('');
+  var io=DB.inventory.filter(function(i){return i.qty>0;}).map(function(i){return '<option value="'+i.id+'">'+esc(i.name)+' ('+i.qty+')</option>';}).join('');
   var rco=DB.customers.map(function(c){
     var cl=c.creditLimit||0,cb=c.creditBalance||0,avail=cl>0?Math.max(0,cl-cb):0;
     var atLimit=cl>0&&cb>=cl;
@@ -7146,7 +7148,7 @@ function buildSales(){
       '>'+
       '<td>'+g.date+'</td>'+
       '<td><b>'+g.invoiceNum+'</b>'+supplyBadge+'</td>'+
-      '<td>'+g.custName+'</td>'+
+      '<td>'+esc(g.custName)+'</td>'+
       '<td>'+pt+'</td>'+
       '<td style="font-size:12px">'+firstItem+'</td>'+
       '<td style="text-align:right"><b>'+fmt(g.total)+'</b></td>'+
@@ -7158,7 +7160,7 @@ function buildSales(){
         if(db<=0)return '<span style="color:#ccc">—</span>';
         return '<span style="color:#15803d;font-weight:700">'+fmt(db)+'</span>';
       }())+'</td>'+
-      '<td>'+g.seller+'</td>'+
+      '<td>'+esc(g.seller)+'</td>'+
       '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+
         '<button class="btn sm" onclick="viewInvoiceDetail(\''+k+'\')" style="color:var(--primary);border-color:#b6d4fe;font-size:11px">View</button>'+
         '<button class="btn sm" onclick="reprintInvoice(\''+k+'\')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">Print</button>'+
@@ -7377,7 +7379,7 @@ function buildSales(){
           '<td>'+(g.custName||'Walk-in customer')+'</td>'+
           '<td style="font-size:12px">'+itemSummary+'</td>'+
           '<td>'+badge+'</td>'+
-          '<td style="font-size:11px;max-width:120px">'+g.reason+'</td>'+
+          '<td style="font-size:11px;max-width:120px">'+esc(g.reason)+'</td>'+
           '<td style="text-align:right;color:var(--danger);font-weight:700">'+fmt(g.refundAmt)+'</td>'+
           '<td>'+g.by+'</td>'+
           '<td style="white-space:nowrap">'+
@@ -7414,7 +7416,7 @@ function viewReturnDetail(gKey){
   var retItemRows=g.items.map(function(r){
     var adjNote=r.adjPrice?'<span style="font-size:10px;color:#f59e0b;margin-left:4px">(adj. ₦'+Math.round(r.adjPrice).toLocaleString()+')</span>':'';
     return '<tr>'+
-      '<td style="padding:7px 10px;font-weight:600">'+r.itemName+'</td>'+
+      '<td style="padding:7px 10px;font-weight:600">'+esc(r.itemName)+'</td>'+
       '<td style="padding:7px 10px;text-align:center">'+r.qty+'</td>'+
       '<td style="padding:7px 10px;text-align:right">'+fmt(r.origUnitPrice||0)+''+adjNote+'</td>'+
       '<td style="padding:7px 10px;text-align:right;color:#dc2626;font-weight:700">'+fmt(r.refundAmt)+'</td>'+
@@ -7469,7 +7471,7 @@ function viewReturnDetail(gKey){
         '</div>'+
         // Reason
         '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400e">'+
-          '<b>Reason:</b> '+g.reason+
+          '<b>Reason:</b> '+esc(g.reason)+
         '</div>'+
         // Returned items
         '<div style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin-bottom:6px">↩ Returned Items</div>'+
@@ -7542,7 +7544,7 @@ function printReturnRecord(gKey){
   var retItemRows=g.items.map(function(r,i){
     return '<tr>'+
       '<td>'+(i+1)+'</td>'+
-      '<td>'+r.itemName+'</td>'+
+      '<td>'+esc(r.itemName)+'</td>'+
       '<td style="text-align:center">'+r.qty+'</td>'+
       '<td style="text-align:right">₦'+Math.round(r.origUnitPrice||0).toLocaleString()+(r.adjPrice?' *':'')+'</td>'+
       '<td style="text-align:right;font-weight:700">₦'+Math.round(r.refundAmt).toLocaleString()+'</td>'+
@@ -7593,7 +7595,7 @@ function printReturnRecord(gKey){
       '<div class="info-cell"><div class="info-label">Customer</div><div class="info-val">'+(g.custName||'Walk-in')+'</div></div>'+
       '<div class="info-cell"><div class="info-label">Return Method</div><div class="info-val" style="color:#dc3545">'+refundTypeLabel+'</div></div>'+
     '</div>'+
-    '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:4px;padding:7px 10px;margin-bottom:10px;font-size:11px"><b>Reason:</b> '+g.reason+'</div>'+
+    '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:4px;padding:7px 10px;margin-bottom:10px;font-size:11px"><b>Reason:</b> '+esc(g.reason)+'</div>'+
     '<div style="font-weight:700;font-size:11px;color:#dc3545;border-bottom:1px solid #dc3545;padding-bottom:4px;margin-bottom:4px">RETURNED ITEMS</div>'+
     '<table><thead><tr><th>#</th><th style="text-align:left">Item</th><th>Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Refund Amt</th></tr></thead>'+
     '<tbody>'+retItemRows+'</tbody>'+
@@ -7628,7 +7630,7 @@ function eiCustSearch(val, showAll){
     var safeName=c.name.replace(/'/g,"\'").replace(/"/g,'&quot;');
     var bal=c.creditBalance>0?'<span style="color:#dc2626;font-size:10px"> ₦'+Math.round(c.creditBalance).toLocaleString()+' owed</span>':'';
     return '<div onmousedown="event.preventDefault();document.getElementById(\'ei-custname\').value=\''+safeName+'\';document.getElementById(\'ei-custid\').value=\''+c.id+'\';document.getElementById(\'ei-cust-dd\').style.display=\'none\';" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px" onmouseover="this.style.background=\'var(--primary-bg)\'" onmouseout="this.style.background=\'var(--white)\'">'+
-      '<div style="font-weight:600">'+c.name+bal+'</div>'+
+      '<div style="font-weight:600">'+esc(c.name)+bal+'</div>'+
       '<div style="font-size:10px;color:#6b7280">'+(c.phone||'No phone')+'</div>'+
     '</div>';
   }).join('');
@@ -7682,7 +7684,7 @@ function editInvoice(invNum){
   // Build editable rows per line item
   var itemRows=invSales.map(function(s,i){
     return '<tr>'+
-      '<td style="padding:6px">'+s.name+'</td>'+
+      '<td style="padding:6px">'+esc(s.name)+'</td>'+
       '<td style="padding:6px"><input type="number" id="ei-qty-'+i+'" value="'+s.qty+'" min="1" style="width:70px;padding:4px;border:1px solid #cbd5e1;border-radius:4px"></td>'+
       '<td style="padding:6px"><input type="number" id="ei-price-'+i+'" value="'+s.salePrice+'" min="0" style="width:100px;padding:4px;border:1px solid #cbd5e1;border-radius:4px"></td>'+
       '<td style="padding:6px"><input type="number" id="ei-disc-'+i+'" value="'+(s.discAmt||0)+'" min="0" style="width:80px;padding:4px;border:1px solid #cbd5e1;border-radius:4px"></td>'+
@@ -7741,7 +7743,7 @@ function editInvoice(invNum){
           '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">POS terminal</label>'+
           '<select id="ei-posid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select POS --</option>'+
-            (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(String(p.id)===String(s0.posId)?' selected':'')+'>'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
+            (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(String(p.id)===String(s0.posId)?' selected':'')+'>'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
         '<div id="ei-partamt-wrap" style="display:'+(s0.payment==='part'?'block':'none')+'">'+
@@ -7767,7 +7769,7 @@ function editInvoice(invNum){
           '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">POS terminal</label>'+
           '<select id="ei-partposid" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">'+
             '<option value="">-- Select POS --</option>'+
-            (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(s0.payment==='part'&&String(p.id)===String(s0.posId)?' selected':'')+'>'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
+            (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(s0.payment==='part'&&String(p.id)===String(s0.posId)?' selected':'')+'>'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
       '</div>'+
@@ -7924,7 +7926,7 @@ function viewInvoiceDetail(invNum){
   var rows=invSales.map(function(s,i){
     return '<tr>'+
       '<td style="text-align:center">'+(i+1)+'</td>'+
-      '<td><b>'+s.name+'</b></td>'+
+      '<td><b>'+esc(s.name)+'</b></td>'+
       '<td style="text-align:center">'+s.qty+'</td>'+
       '<td style="text-align:right">'+fmt(s.salePrice)+'</td>'+
       '<td style="text-align:right">'+(s.discAmt>0?'<span style="color:#dc3545">-'+fmt(s.discAmt)+'</span>':'—')+'</td>'+
@@ -8070,7 +8072,7 @@ function reprintInvoice(invNum){
   var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum;});
   if(!invSales.length){alert('Invoice not found.');return;}
   var s0=invSales[0];var d=new Date(s0.date),day=d.getDate(),mon=d.getMonth()+1,yr=d.getFullYear();
-  var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+s.name+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
+  var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(s.name)+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var subtotalAll=invSales.reduce(function(a,s){return a+(s.salePrice*s.qty);},0);
   var invoiceDiscAmt=subtotalAll-grandTotal;
@@ -8204,7 +8206,7 @@ function renderPurchaseItems(){
     var pendingBadge=l.qtyPending>0?'<span class="badge low" style="font-size:10px;margin-left:3px">'+l.qtyPending+' pending</span>':'';
     return '<tr>'+
       '<td>'+(i+1)+'</td>'+
-      '<td>'+l.name+' '+badge+pendingBadge+'</td>'+
+      '<td>'+esc(l.name)+' '+badge+pendingBadge+'</td>'+
       '<td style="text-align:center;font-weight:600">'+l.qtyOrdered+'</td>'+
       '<td style="text-align:center;color:var(--success);font-weight:600">'+l.qtyReceived+'</td>'+
       '<td style="text-align:center;color:'+(l.qtyPending>0?'var(--danger)':'var(--text3)')+'">'+
@@ -8378,7 +8380,7 @@ function deletePurchase(id){
     type:'danger',
     title:'Delete purchase record?',
     msg:'This purchase will be moved to the Recycle Bin. Note: Stock already added to inventory is NOT reversed.',
-    detail:'🛒 '+p.supName+' · Invoice #'+(p.invoiceNum||'-')+' · '+fmt(p.grandTotal),
+    detail:'🛒 '+esc(p.supName)+' · Invoice #'+(p.invoiceNum||'-')+' · '+fmt(p.grandTotal),
     confirmLabel:'🗑️ Move to bin',
     cancelLabel:'Cancel'
   },function(){
@@ -8389,7 +8391,7 @@ function deletePurchase(id){
 }
 function printPurchaseRecord(id){
   var pu=DB.purchases.find(function(p){return p.id==id;});if(!pu)return;
-  var rows=pu.items.map(function(l,i){return '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+l.name+'</td><td style="text-align:center">'+(l.qtyOrdered||l.qty||0)+'</td><td style="text-align:right">'+fmt(l.cost)+'</td><td style="text-align:right"><b>'+fmt(l.total)+'</b></td></tr>';}).join('');
+  var rows=pu.items.map(function(l,i){return '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+esc(l.name)+'</td><td style="text-align:center">'+(l.qtyOrdered||l.qty||0)+'</td><td style="text-align:right">'+fmt(l.cost)+'</td><td style="text-align:right"><b>'+fmt(l.total)+'</b></td></tr>';}).join('');
   var payModeStr=pu.payMode==='pos'?'POS terminal':pu.payMode==='transfer'?'Bank transfer'+(pu.bankId?' ('+getBankName(pu.bankId)+')':''):'Cash';
   var payTypeStr=pu.payType==='credit'?'Credit (full amount owed to supplier)':pu.payType==='part'?'Part payment (cash now + credit later)':'Cash (fully paid)';
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Purchase Record</title>'+
@@ -8556,8 +8558,8 @@ function receiveDelivery(deliveryId){
 
   var remaining=d.qtyPending;
   var qtyToReceive=parseInt(prompt(
-    'Receive delivery for: '+d.itemName+
-    '\nSupplier: '+d.supName+
+    'Receive delivery for: '+esc(d.itemName)+
+    '\nSupplier: '+esc(d.supName)+
     '\nPending qty: '+remaining+
     '\n\nHow many units are you receiving now?'
     ,remaining));
@@ -8609,13 +8611,13 @@ function receiveDelivery(deliveryId){
   }
 
   logActivity('Delivery received',
-    d.itemName+' × '+qtyToReceive+' received from '+d.supName+' — Invoice #'+d.invoiceNum+
+    d.itemName+' × '+qtyToReceive+' received from '+esc(d.supName)+' — Invoice #'+d.invoiceNum+
     (d.qtyPending<=0?' (Fully delivered)':' ('+d.qtyPending+' still pending)'),
     'purchase');
 
   saveData();
   renderPanel();
-  showToast('✅ '+qtyToReceive+' units of '+d.itemName+' added to stock.'+(d.qtyPending<=0?' Delivery complete!':' '+d.qtyPending+' still pending.'));
+  showToast('✅ '+qtyToReceive+' units of '+esc(d.itemName)+' added to stock.'+(d.qtyPending<=0?' Delivery complete!':' '+d.qtyPending+' still pending.'));
 }
 
 function buildPurchases(){
@@ -8710,7 +8712,7 @@ function buildPurchases(){
     '</div>';
   }
 
-  var supOpts=DB.suppliers.map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('');
+  var supOpts=DB.suppliers.map(function(s){return '<option value="'+s.id+'">'+esc(s.name)+'</option>';}).join('');
   var bankSubField=DB.banks.length?'<div class="form-group" id="pu-bank-wrap" style="display:none"><label>Which bank? <span style="color:var(--danger)">*</span></label><select id="pu-bankid"><option value="">Select bank...</option>'+bankOpts()+'</select></div>':'';
   var posSubField=DB.posTerminals.length?'<div class="form-group" id="pu-pos-wrap" style="display:none"><label>Which POS terminal? <span style="color:var(--danger)">*</span></label><select id="pu-posid"><option value="">Select terminal...</option>'+posOpts()+'</select></div>':'';
   var _allPuRows=DB.purchases.slice().reverse().filter(function(p){
@@ -8728,12 +8730,12 @@ function buildPurchases(){
     return '<tr>'+
       '<td>'+p.date+'</td>'+
       '<td><b>'+(p.invoiceNum||'-')+'</b></td>'+
-      '<td>'+p.supName+'</td>'+
+      '<td>'+esc(p.supName)+'</td>'+
       '<td style="font-size:11px">'+p.items.map(function(l){return l.name+' x'+(l.qtyReceived||l.qty);}).join(', ')+'</td>'+
       '<td style="text-align:center">'+totalItems+'</td>'+
       '<td style="text-align:right"><b>'+fmt(p.grandTotal)+'</b></td>'+
       '<td>'+payBadge+'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+puModeLabel+'</div></td>'+
-      '<td>'+p.by+'</td>'+
+      '<td>'+esc(p.by)+'</td>'+
       '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+
         '<button class="btn sm" onclick="printPurchaseRecord('+p.id+')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">&#128438; Print</button>'+
         '<button class="btn sm" onclick="openPurchaseReturnModal('+p.id+')" style="color:#dc2626;border-color:#fca5a5;font-size:11px">&#8617; Return</button>'+
@@ -8764,7 +8766,7 @@ function buildPurchases(){
       '</div>'+
       '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Supplier</th><th>Invoice</th><th style="text-align:center">Qty Received</th></tr></thead><tbody>'+
       missingInv.map(function(d){
-        return '<tr><td><b>'+d.itemName+'</b></td><td>'+d.supName+'</td><td>#'+(d.invoiceNum||'—')+'</td><td style="text-align:center;font-weight:700;color:#dc2626">'+d.qtyReceived+'</td></tr>';
+        return '<tr><td><b>'+esc(d.itemName)+'</b></td><td>'+esc(d.supName)+'</td><td>#'+(d.invoiceNum||'—')+'</td><td style="text-align:center;font-weight:700;color:#dc2626">'+d.qtyReceived+'</td></tr>';
       }).join('')+
       '</tbody></table></div>'+
     '</div>':'';
@@ -8788,7 +8790,7 @@ function buildPurchases(){
         var itemRows=g.items.map(function(d){
           var iPct=d.qtyOrdered>0?Math.round((d.qtyReceived||0)/d.qtyOrdered*100):0;
           return '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 120px 110px;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">'+
-            '<div style="font-weight:500">'+d.itemName+'</div>'+
+            '<div style="font-weight:500">'+esc(d.itemName)+'</div>'+
             '<div style="text-align:center;color:#6b7280">'+d.qtyOrdered+'</div>'+
             '<div style="text-align:center;color:#15803d;font-weight:600">'+(d.qtyReceived||0)+'</div>'+
             '<div style="text-align:center;color:#dc2626;font-weight:700">'+d.qtyPending+'</div>'+
@@ -8805,7 +8807,7 @@ function buildPurchases(){
           '<div style="background:var(--warning-bg);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
             '<div>'+
               '<span style="font-weight:700;color:#92400e">Invoice #'+g.invoiceNum+'</span>'+
-              '<span style="color:#6b7280;font-size:12px;margin-left:10px">'+g.supName+'</span>'+
+              '<span style="color:#6b7280;font-size:12px;margin-left:10px">'+esc(g.supName)+'</span>'+
               '<span style="color:#9ca3af;font-size:11px;margin-left:10px">'+g.dateOrdered+'</span>'+
             '</div>'+
             '<div style="display:flex;align-items:center;gap:10px">'+
@@ -8901,7 +8903,7 @@ function openPurchaseReturnModal(purchId){
   var itemRows=pu.items.map(function(l,i){
     var maxQty=l.qtyReceived||l.qtyOrdered||l.qty||0;
     return '<tr>'+
-      '<td style="padding:6px 8px;font-size:12px">'+l.name+'</td>'+
+      '<td style="padding:6px 8px;font-size:12px">'+esc(l.name)+'</td>'+
       '<td style="padding:6px 8px;text-align:center;font-size:11px;color:#6b7280">'+maxQty+'</td>'+
       '<td style="padding:6px 8px;text-align:center">'+
         '<input type="number" id="pur-qty-'+i+'" min="0" max="'+maxQty+'" value="0" '+
@@ -9030,12 +9032,12 @@ function processPurchaseReturn(purchId){
     if(returnType==='credit'){
       // Reduce what we owe the supplier
       sup.owedToSupplier=Math.max(0,(sup.owedToSupplier||0)-totalValue);
-      DB.cashflow.push({id:uid(),desc:'Purchase return credit — '+sup.name+' Invoice #'+(pu.invoiceNum||'-'),
+      DB.cashflow.push({id:uid(),desc:'Purchase return credit — '+esc(sup.name)+' Invoice #'+(pu.invoiceNum||'-'),
         amount:totalValue,type:'in',cat:'Purchase Return',payMode:'credit',date:date,month:month});
     } else if(returnType==='refund'){
       // Supplier refunds us
       sup.owedToSupplier=Math.max(0,(sup.owedToSupplier||0)-totalValue);
-      DB.cashflow.push({id:uid(),desc:'Purchase return refund — '+sup.name+' Invoice #'+(pu.invoiceNum||'-'),
+      DB.cashflow.push({id:uid(),desc:'Purchase return refund — '+esc(sup.name)+' Invoice #'+(pu.invoiceNum||'-'),
         amount:totalValue,type:'in',cat:'Purchase Return',payMode:'cash',date:date,month:month});
     }
     // Exchange: no immediate credit — goods to be received
@@ -9068,10 +9070,10 @@ function processPurchaseReturn(purchId){
 function markPurchReturnReceived(retId){
   var r=(DB.purchaseReturns||[]).find(function(x){return x.id===retId;});
   if(!r){alert('Return record not found.');return;}
-  if(!confirm('Mark exchange goods as RECEIVED from '+r.supName+'?\n\nExpected: '+r.exchangeDesc))return;
+  if(!confirm('Mark exchange goods as RECEIVED from '+esc(r.supName)+'?\n\nExpected: '+r.exchangeDesc))return;
   r.exchangeStatus='received';
   r.receivedDate=new Date().toLocaleDateString();
-  logActivity('Exchange received','Replacement goods received from '+r.supName+' — Return of Invoice #'+r.purchaseInvoice,'exchange');
+  logActivity('Exchange received','Replacement goods received from '+esc(r.supName)+' — Return of Invoice #'+r.purchaseInvoice,'exchange');
   saveData();renderApp();
   showToast('Exchange marked as received from '+r.supName);
 }
@@ -9099,7 +9101,7 @@ function buildPurchaseReturnsSection(){
       '<td style="text-align:right;font-weight:700;color:#dc2626">'+fmt(r.totalValue)+'</td>'+
       '<td>'+(r.reason||'-')+'</td>'+
       '<td>'+exchStatus+'</td>'+
-      '<td>'+r.by+'</td>'+
+      '<td>'+esc(r.by)+'</td>'+
     '</tr>';
   }).join('');
   return '<p class="sec-title" style="margin-top:1.5rem;color:#dc2626">&#8617; Purchase Returns ('+DB.purchaseReturns.length+')</p>'+
@@ -9465,7 +9467,7 @@ function buildSupplierOverview(){
       ?'<button class="btn sm" style="color:#15803d;border-color:#86efac;font-size:11px" onclick="paySupplier('+r.id+')">💳 Pay</button> '
       :'';
     return '<tr>'+
-      '<td><b>'+r.name+'</b></td>'+
+      '<td><b>'+esc(r.name)+'</b></td>'+
       '<td>'+r.phone+'</td>'+
       '<td style="text-align:right">'+fmt(r.totalPurchased)+'</td>'+
       '<td style="text-align:right;color:#15803d">'+fmt(r.totalPaid)+'</td>'+
@@ -9486,7 +9488,7 @@ function buildSupplierOverview(){
     var colors=['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b'];
     return '<div style="margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
-        '<span style="font-weight:600;color:#374151">'+r.name+'</span>'+
+        '<span style="font-weight:600;color:#374151">'+esc(r.name)+'</span>'+
         '<span style="color:#6b7280">'+fmt(r.totalPurchased)+'</span>'+
       '</div>'+
       '<div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden">'+
@@ -9545,7 +9547,7 @@ function buildSupplierOverview(){
     var icon=modeIcons[p.payMode]||'💰';
     return '<tr>'+
       '<td>'+(parseDate(p.date)?parseDate(p.date).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—')+'</td>'+
-      '<td><b>'+p.supName+'</b></td>'+
+      '<td><b>'+esc(p.supName)+'</b></td>'+
       '<td>'+icon+' '+(p.payMode||'—')+'</td>'+
       '<td style="text-align:right;color:#15803d;font-weight:700">'+fmt(p.amount)+'</td>'+
       '<td style="color:#9ca3af;font-size:12px">'+(p.note||'—')+'</td>'+
@@ -9702,7 +9704,7 @@ function buildCustomerOverview(){
       ?'<button class="btn sm" style="color:#dc2626;border-color:#fca5a5;font-size:11px" onclick="switchTab(\'creditcust\')">💳 Collect</button>'
       :'';
     return '<tr>'+
-      '<td><b>'+r.name+'</b></td>'+
+      '<td><b>'+esc(r.name)+'</b></td>'+
       '<td>'+r.phone+'</td>'+
       '<td style="font-size:11px;color:#6b7280">'+typeLabel+'</td>'+
       '<td style="text-align:right">'+fmt(r.totalSpent)+'</td>'+
@@ -9723,7 +9725,7 @@ function buildCustomerOverview(){
     var pct=maxVal>0?Math.round(r.totalSpent/maxVal*100):0;
     return '<div style="margin-bottom:10px">'+
       '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'+
-        '<span style="font-weight:600;color:#374151">'+r.name+'</span>'+
+        '<span style="font-weight:600;color:#374151">'+esc(r.name)+'</span>'+
         '<span style="color:#6b7280">'+fmt(r.totalSpent)+'</span>'+
       '</div>'+
       '<div style="background:var(--surface2);border-radius:6px;height:10px;overflow:hidden">'+
@@ -9764,7 +9766,7 @@ function buildCustomerOverview(){
     var lastP=r.lastPurchase?r.lastPurchase.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
     var pct=r.totalSpent>0?Math.round(r.creditBalance/r.totalSpent*100):0;
     return '<tr>'+
-      '<td><b>'+r.name+'</b></td>'+
+      '<td><b>'+esc(r.name)+'</b></td>'+
       '<td>'+r.phone+'</td>'+
       '<td style="text-align:right">'+fmt(r.totalSpent)+'</td>'+
       '<td style="text-align:right;color:#dc2626;font-weight:700">'+fmt(r.creditBalance)+'</td>'+
@@ -10287,7 +10289,7 @@ function buildReturnsTracker(){
       '<td>'+dateStr+'</td>'+
       '<td><b>#'+(r.invoiceNum||r.invoiceId||'—')+'</b></td>'+
       '<td>'+(r.custName||'Walk-in')+'</td>'+
-      '<td>'+r.itemName+'</td>'+
+      '<td>'+esc(r.itemName)+'</td>'+
       '<td style="text-align:center">'+r.qty+'</td>'+
       '<td style="text-align:right;color:#dc2626;font-weight:700">'+fmt(r.refundAmt||0)+'</td>'+
       '<td style="color:#6b7280;font-size:12px">'+(r.reason||'—')+'</td>'+
@@ -10366,7 +10368,7 @@ function buildSupplierPayments(){
 
   // Supplier selector options
   var supOpts='<option value="">All suppliers</option>'+
-    DB.suppliers.map(function(s){return '<option value="'+s.id+'"'+(supPayFilterSup==s.id?' selected':'')+'>'+s.name+(s.owedToSupplier>0?' (owes '+fmt(s.owedToSupplier)+')':'')+'</option>';}).join('');
+    DB.suppliers.map(function(s){return '<option value="'+s.id+'"'+(supPayFilterSup==s.id?' selected':'')+'>'+esc(s.name)+(s.owedToSupplier>0?' (owes '+fmt(s.owedToSupplier)+')':'')+'</option>';}).join('');
 
   // Filter payments
   var filtered=(DB.supplierPayments||[]).filter(function(p){
@@ -10387,7 +10389,7 @@ function buildSupplierPayments(){
     return '<div class="card" style="border-left:4px solid #c0392b">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'+
         '<div>'+
-          '<div style="font-size:14px;font-weight:700">'+s.name+'</div>'+
+          '<div style="font-size:14px;font-weight:700">'+esc(s.name)+'</div>'+
           '<div style="font-size:11px;color:var(--text3)">'+(s.contact||'')+(s.phone?' · '+s.phone:'')+'</div>'+
         '</div>'+
         '<button onclick="paySupplier('+s.id+')" style="padding:7px 14px;background:#15803d;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">💳 Pay now</button>'+
@@ -10408,11 +10410,11 @@ function buildSupplierPayments(){
   var rows=filtered.map(function(p,i){
     return '<tr>'+
       '<td>'+p.date+'</td>'+
-      '<td style="font-weight:700">'+p.supName+'</td>'+
+      '<td style="font-weight:700">'+esc(p.supName)+'</td>'+
       '<td style="text-align:right;font-weight:700;color:#15803d">'+fmt(p.amount)+'</td>'+
       '<td>'+p.mode+'</td>'+
       '<td>'+(p.note||'—')+'</td>'+
-      '<td>'+p.by+'</td>'+
+      '<td>'+esc(p.by)+'</td>'+
     '</tr>';
   }).join('');
 
@@ -10457,7 +10459,7 @@ function printSupplierPaymentsReport(){
   }).slice().reverse();
   var total=filtered.reduce(function(a,p){return a+p.amount;},0);
   var dateRange=(supPayDateFrom||supPayDateTo)?(supPayDateFrom||'...')+' to '+(supPayDateTo||'...'):'All time';
-  var rows=filtered.map(function(p,i){return '<tr><td>'+(i+1)+'</td><td>'+p.date+'</td><td style="font-weight:700">'+p.supName+'</td><td style="text-align:right;color:green;font-weight:700">'+fmt(p.amount)+'</td><td>'+p.mode+'</td><td>'+(p.note||'—')+'</td><td>'+p.by+'</td></tr>';}).join('');
+  var rows=filtered.map(function(p,i){return '<tr><td>'+(i+1)+'</td><td>'+p.date+'</td><td style="font-weight:700">'+esc(p.supName)+'</td><td style="text-align:right;color:green;font-weight:700">'+fmt(p.amount)+'</td><td>'+p.mode+'</td><td>'+(p.note||'—')+'</td><td>'+esc(p.by)+'</td></tr>';}).join('');
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Supplier Payments</title>'+
     '<style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px}'+
     '.h{text-align:center;border-bottom:2px solid #15803d;padding-bottom:6px;margin-bottom:10px}'+
@@ -10487,7 +10489,7 @@ function buildSuppliers(){
     return s.name.toLowerCase().indexOf(t)>-1||(s.contact||'').toLowerCase().indexOf(t)>-1;
   }).map(function(s){
     return '<tr>'+
-      '<td><b>'+s.name+'</b></td>'+
+      '<td><b>'+esc(s.name)+'</b></td>'+
       '<td>'+(s.contact||'-')+'</td>'+
       '<td>'+(s.phone||'-')+'</td>'+
       '<td>'+(s.address||'-')+'</td>'+
@@ -10522,14 +10524,14 @@ function paySupplier(supId){
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
 
   var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
-  var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
+  var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
 
   overlay.innerHTML=
     '<div style="background:var(--white);border-radius:14px;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden">'+
       '<div style="background:#15803d;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
         '<div>'+
           '<div style="font-size:15px;font-weight:800;color:#fff">&#128179; Pay Supplier</div>'+
-          '<div style="font-size:11px;color:rgba(255,255,255,.85);margin-top:2px">'+sup.name+' &nbsp;&middot;&nbsp; Owed: '+fmt(sup.owedToSupplier||0)+'</div>'+
+          '<div style="font-size:11px;color:rgba(255,255,255,.85);margin-top:2px">'+esc(sup.name)+' &nbsp;&middot;&nbsp; Owed: '+fmt(sup.owedToSupplier||0)+'</div>'+
         '</div>'+
         '<button onclick="document.getElementById(\'sup-pay-form-overlay\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
       '</div>'+
@@ -10609,15 +10611,15 @@ function saveSupplierPayment(supId){
     note:note,date:dateVal,month:month,by:DB.currentUser.name});
 
   // Record in cashflow as supplier payment outflow
-  DB.cashflow.push({id:uid(),desc:'Supplier payment — '+sup.name+(note?' ('+note+')':''),
+  DB.cashflow.push({id:uid(),desc:'Supplier payment — '+esc(sup.name)+(note?' ('+note+')':''),
     amount:amt,type:'out',cat:'Restock',payMode:mode,bankId:bankId||null,posId:posId||null,
     date:dateVal,month:month});
 
   sup.owedToSupplier=Math.max(0,(sup.owedToSupplier||0)-amt);
-  logActivity('Supplier payment','Paid '+fmt(amt)+' to '+sup.name+' via '+modeLabel+'. Remaining: '+fmt(sup.owedToSupplier),mode);
+  logActivity('Supplier payment','Paid '+fmt(amt)+' to '+esc(sup.name)+' via '+modeLabel+'. Remaining: '+fmt(sup.owedToSupplier),mode);
   document.getElementById('sup-pay-form-overlay').remove();
   saveData();renderApp();
-  showToast('Payment of '+fmt(amt)+' recorded for '+sup.name+'. Remaining: '+fmt(sup.owedToSupplier));
+  showToast('Payment of '+fmt(amt)+' recorded for '+esc(sup.name)+'. Remaining: '+fmt(sup.owedToSupplier));
 }
 
 function viewSupplierPayments(supId){
@@ -10630,12 +10632,12 @@ function viewSupplierPayments(supId){
   overlay.id='sup-pay-modal';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
   var rows=payments.length?payments.slice().reverse().map(function(p){
-    return '<tr><td>'+p.date+'</td><td style="font-weight:700;color:#15803d">'+fmt(p.amount)+'</td><td>'+p.mode+'</td><td>'+(p.note||'—')+'</td><td>'+p.by+'</td></tr>';
+    return '<tr><td>'+p.date+'</td><td style="font-weight:700;color:#15803d">'+fmt(p.amount)+'</td><td>'+p.mode+'</td><td>'+(p.note||'—')+'</td><td>'+esc(p.by)+'</td></tr>';
   }).join(''):'<tr><td colspan="5" style="text-align:center;color:#999">No payments recorded yet</td></tr>';
   overlay.innerHTML=
     '<div style="background:var(--surface,#fff);border-radius:14px;padding:24px;max-width:580px;width:90%;max-height:80vh;overflow-y:auto">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
-        '<div style="font-size:15px;font-weight:700">Payment history — '+sup.name+'</div>'+
+        '<div style="font-size:15px;font-weight:700">Payment history — '+esc(sup.name)+'</div>'+
         '<button onclick="document.getElementById(\'sup-pay-modal\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer">&times;</button>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">'+
@@ -10668,7 +10670,7 @@ function removeSupplier(id){
     type:'danger',
     title:'Remove supplier?',
     msg:'The supplier will be moved to the Recycle Bin.',
-    detail:'🚛 '+s.name+(s.phone?' · '+s.phone:''),
+    detail:'🚛 '+esc(s.name)+(s.phone?' · '+s.phone:''),
     confirmLabel:'🗑️ Move to bin',
     cancelLabel:'Cancel'
   },function(){
@@ -10689,7 +10691,7 @@ function buildCreditCust(){
     var pct100=c.creditLimit>0?Math.min(100,Math.round(((c.creditBalance||0)/c.creditLimit)*100)):0;
     var barColor=pct100>=100?'var(--danger)':pct100>=75?'var(--warning)':'var(--success)';
     return '<tr>'+
-      '<td><b>'+c.name+'</b>'+(c.biz?'<div style="font-size:10.5px;color:var(--text3)">'+c.biz+'</div>':'')+'</td>'+
+      '<td><b>'+esc(c.name)+'</b>'+(c.biz?'<div style="font-size:10.5px;color:var(--text3)">'+esc(c.biz)+'</div>':'')+'</td>'+
       '<td>'+(c.phone||'-')+'</td>'+
       '<td style="text-align:right">'+fmt(c.creditLimit||0)+'</td>'+
       '<td style="text-align:right;color:var(--danger)"><b>'+fmt(c.creditBalance||0)+'</b></td>'+
@@ -10708,7 +10710,7 @@ function clearCredit(id){
     type:'warning',
     title:'Clear credit balance?',
     msg:'This will mark all outstanding credit as cleared for this customer.',
-    detail:'👥 '+c.name+' — Owed: '+fmt(c.creditBalance||0),
+    detail:'👥 '+esc(c.name)+' — Owed: '+fmt(c.creditBalance||0),
     confirmLabel:'✓ Clear debt',
     cancelLabel:'Cancel'
   },function(){
@@ -10791,7 +10793,7 @@ function buildReports(){
       var costBarW=i.costTotal>0?Math.round((i.costTotal/maxVal)*100):0;
       var marginColor=margin>=30?'#16a34a':margin>=15?'#d97706':'#dc2626';
       return '<tr>'+
-        '<td style="font-weight:600;font-size:12px">'+(idx+1)+'. '+i.name+'</td>'+
+        '<td style="font-weight:600;font-size:12px">'+(idx+1)+'. '+esc(i.name)+'</td>'+
         '<td style="text-align:right;color:#1a237e">'+fmt(i.costTotal)+'<div style="height:4px;background:#e5e7eb;border-radius:2px;margin-top:3px"><div style="width:'+costBarW+'%;height:100%;background:#1a237e;border-radius:2px"></div></div></td>'+
         '<td style="text-align:right;color:#c0392b">'+fmt(i.revTotal)+'<div style="height:4px;background:#e5e7eb;border-radius:2px;margin-top:3px"><div style="width:'+barW+'%;height:100%;background:#c0392b;border-radius:2px"></div></div></td>'+
         '<td style="text-align:right;color:'+(i.profit>=0?'#16a34a':'#dc2626')+';font-weight:700">'+fmt(i.profit)+'</td>'+
@@ -10986,7 +10988,7 @@ function buildReports(){
     var retGrandTotal=retList.reduce(function(a,g){return a+g.totalRefund;},0);
     var retRows=retList.map(function(g,i){
       var rb=g.refundType==='cash'?'<span style="color:#15803d;font-weight:700">Cash refund</span>':g.refundType==='credit'?'<span style="color:#1a237e;font-weight:700">Store credit</span>':'Exchange';
-      return '<tr><td>'+(i+1)+'</td><td>'+g.date+'</td><td style="font-weight:700">'+g.invoiceNum+'</td><td>'+g.custName+'</td><td style="font-size:11px">'+g.items.join(', ')+'</td><td style="text-align:right;font-weight:700;color:#c0392b">'+fmt(g.totalRefund)+'</td><td>'+rb+'</td><td>'+g.by+'</td></tr>';
+      return '<tr><td>'+(i+1)+'</td><td>'+g.date+'</td><td style="font-weight:700">'+g.invoiceNum+'</td><td>'+esc(g.custName)+'</td><td style="font-size:11px">'+g.items.join(', ')+'</td><td style="text-align:right;font-weight:700;color:#c0392b">'+fmt(g.totalRefund)+'</td><td>'+rb+'</td><td>'+g.by+'</td></tr>';
     }).join('');
     var retTabBtns=
       '<button class="btn sm" onclick="reportTab=\'all\';renderPanel()">All sales</button> '+
@@ -11044,14 +11046,14 @@ function buildReports(){
         '<td>'+(i+1)+'</td>'+
         '<td>'+g.date+'</td>'+
         '<td style="font-weight:700">'+g.invoiceNum+'</td>'+
-        '<td>'+g.custName+'</td>'+
+        '<td>'+esc(g.custName)+'</td>'+
         '<td style="text-align:center">'+g.itemCount+'</td>'+
         '<td style="text-align:right;font-weight:700">'+fmt(g.total)+'</td>'+
         '<td style="text-align:right;color:#15803d;font-weight:700">'+fmt(amtPaid)+(overpaid>0?' <span style=\"font-size:10px;color:#0369a1\">(+'+fmt(overpaid)+' over)</span>':'')+'</td>'+
         '<td style="text-align:right;color:'+(balDue>0?'#c0392b':'#15803d')+'">'+(balDue>0?fmt(balDue):'\u2713')+'</td>'+
         '<td style="text-align:right">'+fmt(g.profit)+'</td>'+
         '<td>'+payModeLabel(g)+'</td>'+
-        '<td>'+g.seller+'</td>'+
+        '<td>'+esc(g.seller)+'</td>'+
       '</tr>';
     }).join('');
     var piPrintBtn='<button class="btn sm" onclick="printPaidInvReport()" style="color:#0369a1;border-color:#93c5fd">&#128438; Print report</button>';
@@ -11089,7 +11091,7 @@ function buildReports(){
     return '<tr>'+
       '<td>'+s.date+'</td>'+
       '<td>'+(s.invoiceNum||'-')+'</td>'+
-      '<td>'+s.name+'</td>'+
+      '<td>'+esc(s.name)+'</td>'+
       '<td>'+(s.printName||s.custName)+'</td>'+
       '<td style="text-align:center">'+s.qty+'</td>'+
       '<td style="text-align:right">'+fmt(s.salePrice)+'</td>'+
@@ -11097,7 +11099,7 @@ function buildReports(){
       '<td style="text-align:right"><b>'+fmt(s.total)+'</b></td>'+
       '<td style="text-align:right">'+fmt(s.profit)+'</td>'+
       '<td>'+payModeLabel(s)+'</td>'+
-      '<td>'+s.seller+'</td>'+
+      '<td>'+esc(s.seller)+'</td>'+
     '</tr>';
   }).join('');
   var printBtn='<button class="btn sm" onclick="printReport()" style="color:#1a237e;border-color:#93c5fd">&#128438; Print report</button>';
@@ -11132,7 +11134,7 @@ function printReport(){
   });
   var totalRev=filtered.reduce(function(a,s){return a+s.total;},0);
   var totalProfit=filtered.reduce(function(a,s){return a+s.profit;},0);
-  var rows=filtered.slice().reverse().map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+s.date+'</td><td>'+(s.invoiceNum||'-')+'</td><td>'+s.name+'</td><td>'+(s.printName||s.custName)+'</td><td style="text-align:center">'+s.qty+'</td><td style="text-align:right">'+fmt(s.total)+'</td><td style="text-align:right">'+fmt(s.profit)+'</td><td>'+payModeLabel(s)+'</td><td>'+s.seller+'</td></tr>';}).join('');
+  var rows=filtered.slice().reverse().map(function(s,i){return '<tr><td>'+(i+1)+'</td><td>'+s.date+'</td><td>'+(s.invoiceNum||'-')+'</td><td>'+esc(s.name)+'</td><td>'+(s.printName||s.custName)+'</td><td style="text-align:center">'+s.qty+'</td><td style="text-align:right">'+fmt(s.total)+'</td><td style="text-align:right">'+fmt(s.profit)+'</td><td>'+payModeLabel(s)+'</td><td>'+esc(s.seller)+'</td></tr>';}).join('');
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sales Report</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:10px}.h{text-align:center;border-bottom:2px solid #c0392b;padding-bottom:6px;margin-bottom:10px}.co{font-size:16px;font-weight:900;color:#c0392b}.co2{font-size:16px;font-weight:900;color:#1a237e}table{width:100%;border-collapse:collapse}th{background:#1a237e;color:#fff;padding:4px 6px;font-size:9px;text-align:left}td{border:1px solid #ddd;padding:3px 6px}.tr td{font-weight:700;background:var(--surface2);border-top:2px solid #1a237e}</style></head><body>'+
     '<div class="h"><div class="co">GREAT CHID ELECTRO (NIG.)</div><div class="co2">GLOBAL DOORS LTD</div><div style="font-size:10px;margin-top:4px">Sales Report — Printed: '+new Date().toLocaleString()+'</div></div>'+
     '<table><thead><tr><th>#</th><th>Date</th><th>Inv#</th><th>Item</th><th>Customer</th><th>Qty</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+
@@ -11171,14 +11173,14 @@ function printPaidInvReport(){
       '<td>'+(i+1)+'</td>'+
       '<td>'+g.date+'</td>'+
       '<td style="font-weight:700">'+g.invoiceNum+'</td>'+
-      '<td>'+g.custName+'</td>'+
+      '<td>'+esc(g.custName)+'</td>'+
       '<td style="text-align:center">'+g.itemCount+'</td>'+
       '<td style="text-align:right;font-weight:700">'+fmt(g.total)+'</td>'+
       '<td style="text-align:right;color:green;font-weight:700">'+fmt(amtPaid)+(overpaid>0?' (+'+fmt(overpaid)+')':'')+'</td>'+
       '<td style="text-align:right;color:'+(balDue>0?'#c0392b':'green')+'">'+(balDue>0?fmt(balDue):'✓')+'</td>'+
       '<td style="text-align:right">'+fmt(g.profit)+'</td>'+
       '<td>'+payModeLabel(g)+'</td>'+
-      '<td>'+g.seller+'</td>'+
+      '<td>'+esc(g.seller)+'</td>'+
     '</tr>';
   }).join('');
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Paid Invoice Report</title>'+
@@ -11310,7 +11312,7 @@ function printReturnsReport(){
       '<td>'+(i+1)+'</td>'+
       '<td>'+g.date+'</td>'+
       '<td style="font-weight:700">'+g.invoiceNum+'</td>'+
-      '<td>'+g.custName+'</td>'+
+      '<td>'+esc(g.custName)+'</td>'+
       '<td style="font-size:10px">'+g.items.join(', ')+'</td>'+
       '<td style="text-align:right;font-weight:700;color:#c0392b">'+fmt(g.totalRefund)+'</td>'+
       '<td>'+(g.refundType==='cash'?'Cash refund':g.refundType==='credit'?'Store credit':'Exchange')+'</td>'+
@@ -11372,7 +11374,7 @@ function buildUsers(){
     '</div>';
   }).join('');
   var profileSection='<div class="card"><p style="font-size:14px;font-weight:700;margin-bottom:1rem">&#128100; My profile</p>'+
-    '<div class="fg c2"><div class="form-group"><label>Full name</label><input type="text" id="up-name" value="'+u.name+'"></div>'+
+    '<div class="fg c2"><div class="form-group"><label>Full name</label><input type="text" id="up-name" value="'+esc(u.name)+'"></div>'+
     '<div class="form-group"><label>Username</label><input type="text" id="up-user" value="'+u.username+'"></div></div>'+
     '<div class="fg c2"><div class="form-group"><label>New password <span style="font-size:10px;color:var(--text3)">(leave blank to keep)</span></label><input type="password" id="up-pass" placeholder="New password"></div>'+
     '<div class="form-group"><label>Confirm password</label><input type="password" id="up-pass2" placeholder="Confirm new password"></div></div>'+
@@ -11421,7 +11423,7 @@ function removeUser(id){
     type:'danger',
     title:'Remove user?',
     msg:'This user will be moved to the Recycle Bin. They will lose access immediately.',
-    detail:'🛡️ '+u.name+' (@'+u.username+') — '+(u.role==='admin'?'Administrator':'Staff'),
+    detail:'🛡️ '+esc(u.name)+' (@'+u.username+') — '+(u.role==='admin'?'Administrator':'Staff'),
     confirmLabel:'🗑️ Remove user',
     cancelLabel:'Cancel'
   },function(){
@@ -11498,7 +11500,7 @@ function showDepositModal(custId){
     '<div class="confirm-box" onclick="event.stopPropagation()" style="min-width:360px;max-width:440px">'+
       '<div class="confirm-icon success">💰</div>'+
       '<div class="confirm-title">Record deposit</div>'+
-      '<div class="confirm-msg">'+cust.name+'</div>'+
+      '<div class="confirm-msg">'+esc(cust.name)+'</div>'+
       (depBal>0?'<div class="confirm-detail" style="color:#15803d;font-weight:700">Current balance: '+fmt(depBal)+'</div>':'')+
       '<div style="margin:14px 0 0;text-align:left">'+
         '<div class="fg" style="grid-template-columns:1fr 1fr;gap:10px">'+
@@ -11570,7 +11572,7 @@ function recordDeposit(custId){
   saveData();
   renderApp();
   setTimeout(function(){
-    showConfirm({type:'success',title:'Deposit recorded',msg:'',detail:fmt(amt)+' deposit saved for '+cust.name+'. Balance updated.',confirmLabel:'OK',cancelLabel:null},function(){});
+    showConfirm({type:'success',title:'Deposit recorded',msg:'',detail:fmt(amt)+' deposit saved for '+esc(cust.name)+'. Balance updated.',confirmLabel:'OK',cancelLabel:null},function(){});
   },100);
 }
 
@@ -11583,12 +11585,12 @@ function writeOffCredit(custId){
   // Use entered amount if available, else offer full balance
   var suggested=amtEl&&amtEl.value?parseFloat(amtEl.value):balance;
   var amt=parseFloat(prompt(
-    'Write-off / Discount for '+cust.name+'\nCurrent balance owed: '+fmt(balance)+'\n\nEnter amount to write off as discount:',
+    'Write-off / Discount for '+esc(cust.name)+'\nCurrent balance owed: '+fmt(balance)+'\n\nEnter amount to write off as discount:',
     Math.round(suggested)
   ));
   if(isNaN(amt)||amt<=0)return;
   if(amt>balance){alert('Cannot write off more than the outstanding balance ('+fmt(balance)+').');return;}
-  if(!confirm('Write off '+fmt(amt)+' from '+cust.name+"'s balance as a discount?\n\nThis will NOT be recorded as cash received.\nRemaining balance after write-off: "+fmt(balance-amt)))return;
+  if(!confirm('Write off '+fmt(amt)+' from '+esc(cust.name)+"'s balance as a discount?\n\nThis will NOT be recorded as cash received.\nRemaining balance after write-off: "+fmt(balance-amt)))return;
 
   var rawDate=dateEl&&dateEl.value?new Date(dateEl.value):new Date();
   var date=rawDate.toLocaleDateString();
@@ -11608,11 +11610,11 @@ function writeOffCredit(custId){
   });
 
   logActivity('Credit write-off',
-    'Discount of '+fmt(amt)+' applied to '+cust.name+'. Remaining balance: '+fmt(Math.max(0,cust.creditBalance)),
+    'Discount of '+fmt(amt)+' applied to '+esc(cust.name)+'. Remaining balance: '+fmt(Math.max(0,cust.creditBalance)),
     'writeoff');
   saveData();
   renderApp();
-  alert('Write-off of '+fmt(amt)+' applied to '+cust.name+'.\nRemaining balance: '+fmt(Math.max(0,cust.creditBalance)));
+  alert('Write-off of '+fmt(amt)+' applied to '+esc(cust.name)+'.\nRemaining balance: '+fmt(Math.max(0,cust.creditBalance)));
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -11634,7 +11636,7 @@ function showAddCommission(invNum, custId, custName){
     '<div style="font-size:11px;color:#6b7280;margin-top:4px">Total commission on this invoice: <b>'+fmt(existingTotal)+'</b></div></div>':'';
 
   var bankOptsHtml=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
-  var posOptsHtml=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
+  var posOptsHtml=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
 
   var overlay=document.createElement('div');
   overlay.id='commission-modal';
@@ -11777,7 +11779,7 @@ function showPayCommission(custId){
         '<button onclick="document.getElementById(\'pay-commission-modal\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer">&times;</button>'+
       '</div>'+
       '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px">'+
-        '<b>'+cust.name+'</b> — Commission Balance: <span style="font-weight:800;color:#15803d">'+fmt(balance)+'</span>'+
+        '<b>'+esc(cust.name)+'</b> — Commission Balance: <span style="font-weight:800;color:#15803d">'+fmt(balance)+'</span>'+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:12px">'+
         '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Amount to pay (₦) <span style="color:#dc2626">*</span></label>'+
@@ -11828,11 +11830,11 @@ function recordCommissionPayout(custId){
   // Reduce customer commissionBalance
   cust.commissionBalance=(cust.commissionBalance||0)-amt;
   // Auto-record as expense in cashflow
-  DB.cashflow.push({id:uid(),desc:'Commission paid — '+cust.name+(note?' ('+note+')':''),amount:amt,type:'out',cat:'Commission',payMode:mode,bankId:bankId||null,posId:posId||null,date:date,month:month,by:DB.currentUser.name});
+  DB.cashflow.push({id:uid(),desc:'Commission paid — '+esc(cust.name)+(note?' ('+note+')':''),amount:amt,type:'out',cat:'Commission',payMode:mode,bankId:bankId||null,posId:posId||null,date:date,month:month,by:DB.currentUser.name});
   saveData();
   document.getElementById('pay-commission-modal').remove();
   renderApp();
-  alert('✅ Commission of '+fmt(amt)+' paid to '+cust.name+' and recorded as expense.');
+  alert('✅ Commission of '+fmt(amt)+' paid to '+esc(cust.name)+' and recorded as expense.');
 }
 /* ══════════════════════════════════════════════════════════════ */
 
@@ -11917,7 +11919,7 @@ function buildProformas(){
       '<td style="text-align:right;font-weight:700">'+fmt(p.grandTotal)+'</td>'+
       '<td style="font-size:11px;color:#6b7280">'+validUntilStr(p)+'</td>'+
       '<td>'+statusBadge(p)+'</td>'+
-      '<td style="font-size:11px;color:#9ca3af">'+p.by+'</td>'+
+      '<td style="font-size:11px;color:#9ca3af">'+esc(p.by)+'</td>'+
       '<td style="white-space:nowrap">'+actions+'</td>'+
     '</tr>';
   }).join('');
@@ -11966,7 +11968,7 @@ function printProforma(prfNum){
     var disc=l.discAmt>0?'<span style="color:#dc2626">-'+fmt(l.discAmt)+'</span>':'—';
     return '<tr>'+
       '<td style="text-align:center">'+(i+1)+'</td>'+
-      '<td>'+l.name+'</td>'+
+      '<td>'+esc(l.name)+'</td>'+
       '<td style="text-align:center">'+l.qty+'</td>'+
       '<td style="text-align:right">'+fmt(l.price)+'</td>'+
       '<td style="text-align:right">'+disc+'</td>'+
@@ -12028,7 +12030,7 @@ function printProforma(prfNum){
       '<div class="meta-box"><b>Proforma #</b>'+prfNum+'</div>'+
       '<div class="meta-box"><b>Date Issued</b>'+(new Date(p.date).toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'})||p.date)+'</div>'+
       '<div class="meta-box"><b>Customer / Bill To</b>'+(p.custName||'Walk-in customer')+'</div>'+
-      '<div class="meta-box"><b>Prepared by</b>'+p.by+'</div>'+
+      '<div class="meta-box"><b>Prepared by</b>'+esc(p.by)+'</div>'+
     '</div>'+
     '<table>'+
       '<thead><tr><th style="text-align:center">#</th><th>Item Description</th><th style="text-align:center">Qty</th>'+
@@ -12060,7 +12062,7 @@ function shareProformaWhatsApp(prfNum){
   var validUntil=new Date((new Date(p.date).getTime()||parseSaleDate(p.date))+(p.validDays||7)*86400000);
   var validStr=validUntil.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
   var lines=['📄 *PROFORMA INVOICE*','','*'+prfNum+'*','Date: '+p.date,'Customer: '+(p.custName||'Walk-in'),'','*Items:*'];
-  p.items.forEach(function(i,idx){lines.push((idx+1)+'. '+i.name+' ×'+i.qty+' = '+fmt(i.price*i.qty-(i.discAmt||0)));});
+  p.items.forEach(function(i,idx){lines.push((idx+1)+'. '+esc(i.name)+' ×'+i.qty+' = '+fmt(i.price*i.qty-(i.discAmt||0)));});
   lines.push('','*Grand Total: '+fmt(p.grandTotal)+'*');
   lines.push('Valid until: '+validStr);
   lines.push('','_Great Chid Electro (Nig.) — 08035158594_');
@@ -12143,7 +12145,7 @@ function prodReportLiveSearch(val, showAll){
     return '<div onclick="prodReportSelect(\''+i.id+'\',\''+i.name.replace(/'/g,'&#39;')+'\')" '+
       'style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center" '+
       'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">'+
-      '<span><b style="font-size:13px">'+i.name+'</b> <span style="color:#9ca3af;font-size:11px;margin-left:6px">'+( i.cat||'')+'</span></span>'+
+      '<span><b style="font-size:13px">'+esc(i.name)+'</b> <span style="color:#9ca3af;font-size:11px;margin-left:6px">'+( i.cat||'')+'</span></span>'+
       '<span style="color:var(--primary);font-size:12px;font-weight:600;white-space:nowrap;margin-left:8px">'+i.qty+' in stock</span>'+
     '</div>';
   }).join('');
@@ -12260,7 +12262,7 @@ function buildProductReport(){
     '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">'+
         '<div>'+
-          '<div style="font-size:20px;font-weight:800;color:#1e293b">'+item.name+'</div>'+
+          '<div style="font-size:20px;font-weight:800;color:#1e293b">'+esc(item.name)+'</div>'+
           '<div style="font-size:13px;color:#6b7280;margin-top:3px">'+
             '<span style="margin-right:12px">📂 '+(item.cat||'Uncategorised')+'</span>'+
             '<span style="margin-right:12px">🚛 '+(sup.name||'No supplier')+'</span>'+
@@ -12302,13 +12304,13 @@ function buildProductReport(){
           return '<tr>'+
             '<td>'+p.date+'</td>'+
             '<td><b>#'+(p.invoiceNum||'—')+'</b></td>'+
-            '<td>'+p.supName+'</td>'+
+            '<td>'+esc(p.supName)+'</td>'+
             '<td style="text-align:center">'+p.qtyOrdered+'</td>'+
             '<td style="text-align:center;color:#15803d;font-weight:700">'+p.qtyReceived+'</td>'+
             '<td style="text-align:right">'+fmt(p.cost)+'</td>'+
             '<td style="text-align:right;font-weight:600">'+fmt(p.total)+'</td>'+
             '<td><span style="background:'+(p.status==='Complete'?'#dcfce7':'#fef9c3')+';color:'+(p.status==='Complete'?'#15803d':'#92400e')+';padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700">'+p.status+'</span></td>'+
-            '<td style="color:#9ca3af;font-size:11px">'+p.by+'</td>'+
+            '<td style="color:#9ca3af;font-size:11px">'+esc(p.by)+'</td>'+
           '</tr>';
         }).join('')+
         '<tfoot><tr style="background:var(--surface2);font-weight:700"><td colspan="3">TOTAL</td>'+
@@ -12320,7 +12322,7 @@ function buildProductReport(){
       (pendingEvents.length?
         '<div style="background:var(--warning-bg);border:1px solid #fde68a;border-radius:8px;padding:10px 12px;margin-top:10px">'+
           '<b style="color:#92400e">📦 '+pendingEvents.length+' pending delivery(ies):</b> '+
-          pendingEvents.map(function(d){return d.qtyPending+' units from '+d.supName+' (Invoice #'+d.invoiceNum+')';}).join(', ')+
+          pendingEvents.map(function(d){return d.qtyPending+' units from '+esc(d.supName)+' (Invoice #'+d.invoiceNum+')';}).join(', ')+
         '</div>':'')+
     '</div>'+
 
@@ -12348,7 +12350,7 @@ function buildProductReport(){
             '<td style="text-align:right;color:#6366f1;font-weight:600">'+fmt(s.total)+'</td>'+
             '<td style="text-align:right;color:'+(profit>=0?'#15803d':'#dc2626')+';font-weight:600">'+fmt(profit)+'</td>'+
             '<td>'+ptBadge+'</td>'+
-            '<td style="color:#9ca3af;font-size:11px">'+s.seller+'</td>'+
+            '<td style="color:#9ca3af;font-size:11px">'+esc(s.seller)+'</td>'+
           '</tr>';
         }).join('')+
         '<tfoot><tr style="background:var(--surface2);font-weight:700"><td colspan="3">TOTAL</td>'+
@@ -12379,7 +12381,7 @@ function buildProductReport(){
             '<td style="text-align:right;color:#dc2626;font-weight:600">'+fmt(r.refundAmt||0)+'</td>'+
             '<td style="color:#6b7280;font-size:11px">'+(r.reason||'—')+'</td>'+
             '<td>'+(rtBadge[r.refundType]||rtBadge.cash)+'</td>'+
-            '<td style="color:#9ca3af;font-size:11px">'+r.by+'</td>'+
+            '<td style="color:#9ca3af;font-size:11px">'+esc(r.by)+'</td>'+
           '</tr>';
         }).join('')+
         '</tbody></table></div>'+
@@ -12459,8 +12461,8 @@ function recordCreditPayment(custId){
   // Record in cashflow as income
   DB.cashflow.push({id:uid(),desc:'Credit payment — '+cust.name,amount:amt,type:'in',cat:'Credit Payment',payMode:mode,bankId:bankId,posId:posId,date:date,month:month});
   saveData();
-  alert('Payment of '+fmt(amt)+' recorded for '+cust.name+'. Remaining balance: '+fmt(Math.max(0,cust.creditBalance)));
-  logActivity('Credit payment','Payment of '+fmt(amt)+' from '+cust.name+'. Balance: '+fmt(Math.max(0,cust.creditBalance)),mode);
+  alert('Payment of '+fmt(amt)+' recorded for '+esc(cust.name)+'. Remaining balance: '+fmt(Math.max(0,cust.creditBalance)));
+  logActivity('Credit payment','Payment of '+fmt(amt)+' from '+esc(cust.name)+'. Balance: '+fmt(Math.max(0,cust.creditBalance)),mode);
   renderApp();
 }
 
@@ -12653,7 +12655,7 @@ function repairOpeningBalanceClearances(){
           });
           if(!alreadyRecorded&&toRecord>0){
             // Record the missing cashflow entry
-            DB.cashflow.push({id:uid(),desc:'Opening balance cleared — '+cust.name+' via overpayment on Invoice #'+inv.invoiceNum,amount:toRecord,type:'in',cat:'Sales',payMode:inv.payMode||'transfer',bankId:inv.bankId||null,posId:inv.posId||null,date:inv.date,month:inv.month});
+            DB.cashflow.push({id:uid(),desc:'Opening balance cleared — '+esc(cust.name)+' via overpayment on Invoice #'+inv.invoiceNum,amount:toRecord,type:'in',cat:'Sales',payMode:inv.payMode||'transfer',bankId:inv.bankId||null,posId:inv.posId||null,date:inv.date,month:inv.month});
             // Record the missing credit payment entry
             DB.creditPayments.push({id:uid(),custId:cust.id,custName:cust.name,amount:toRecord,payMode:inv.payMode||'transfer',bankId:inv.bankId||null,posId:inv.posId||null,date:inv.date,month:inv.month,by:'System repair',note:'Opening balance cleared via overpayment on Invoice #'+inv.invoiceNum});
             covered+=toRecord;
