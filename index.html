@@ -10964,14 +10964,23 @@ function buildReports(){
     }).join('');
     var totalCreditAllTime=DB.customers.reduce(function(a,c){return a+(c.creditBalance||0);},0); // kept for WhatsApp/print functions
 
-    // ── Payment mode breakdown — use cashflow 'in' for accuracy ─
+    // ── Payment mode breakdown — same method as Financial Dashboard ─
     var pmCash=0,pmPos=0,pmTransfer=0;
-    DB.cashflow.filter(function(c){
-      return c.type==='in'&&c.cat==='Sales'&&!c.isDepositApplied&&!c.isExchange&&inSelMonth(c.date);
-    }).forEach(function(c){
-      if(c.payMode==='pos')pmPos+=c.amount;
-      else if(c.payMode==='transfer')pmTransfer+=c.amount;
-      else pmCash+=c.amount;
+    mSales.forEach(function(s){
+      if(s.payMode==='split'&&s.splitPayment){
+        var sp=s.splitPayment;
+        var ratio=s.total/((sp.amt1||0)+(sp.amt2||0))||1;
+        if(sp.mode1==='cash')pmCash+=sp.amt1*ratio;
+        else if(sp.mode1==='pos')pmPos+=sp.amt1*ratio;
+        else if(sp.mode1==='transfer')pmTransfer+=sp.amt1*ratio;
+        if(sp.mode2==='cash')pmCash+=sp.amt2*ratio;
+        else if(sp.mode2==='pos')pmPos+=sp.amt2*ratio;
+        else if(sp.mode2==='transfer')pmTransfer+=sp.amt2*ratio;
+      } else if(s.payment!=='credit'){
+        if(s.payMode==='cash')pmCash+=s.total;
+        else if(s.payMode==='pos')pmPos+=s.total;
+        else if(s.payMode==='transfer')pmTransfer+=s.total;
+      }
     });
 
     // ── Staff performance ────────────────────────────────────
