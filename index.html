@@ -9180,7 +9180,8 @@ function buildFinance(){
   var cashIn        = cashflowInF.reduce(function(a,c){return a+c.amount;},0);
   var expTotal      = expF.reduce(function(a,c){return a+c.amount;},0);
   var purchTotal    = purchF.reduce(function(a,c){return a+c.amount;},0);
-  var netCash       = cashIn-expTotal-purchTotal;
+  var netCash       = cashIn-expTotal;
+  var netProfit     = profit-expTotal;  // Gross Profit minus Operating Expenses
   var discTotal     = salesF.reduce(function(a,s){return a+(s.discAmt||0);},0);
 
   // Month selector options (last 24 months)
@@ -9234,11 +9235,12 @@ function buildFinance(){
     mc('Credit owed',fmt(creditOwed),'Not yet paid','amber')+
     mc('Expenses',fmt(expTotal),'Outgoings','red')+
     mc('Restocking',fmt(purchTotal),'Purchases','red')+
-    mc('Net cash',fmt(netCash),'In - expenses',netCash>=0?'green':'red')+
+    mc('Net cash',fmt(netCash),'Revenue - expenses',netCash>=0?'green':'red')+
+    mc('Net profit',fmt(netProfit),pct(netProfit,rev)+' margin',netProfit>=0?'green':'red')+
     mc('Discounts given',fmt(discTotal),'Total given','amber')+
   '</div>'+
   (pendingSupplyTotal>0?'<div style="background:var(--warning-bg);border:1px solid #ffe69c;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:1rem;font-size:13px;color:#664d03"><b>⏳ Goods not yet supplied:</b> '+fmt(pendingSupplyTotal)+' — payment received but stock not yet deducted</div>':'')+
-  // ── 7-day Revenue & Profit Chart ─────────────────────────
+  // ── 7-day Revenue & Profit Chart setup (no output) ───────
   (function(){
     var days=[];
     for(var di=6;di>=0;di--){
@@ -9252,8 +9254,8 @@ function buildFinance(){
     var maxD=days.reduce(function(m,d){return Math.max(m,d.rev,d.profit);},1);
     window._finChartDays=days;
     window._finChartMax=maxD;
-  })();
-  '<div class="card" style="margin-bottom:1.25rem">'+
+    return '';  // prevent undefined in string concatenation
+  })()+
   '<div class="sec-title">Revenue &amp; Profit — Last 7 Days</div>'+
   '<div style="display:flex;gap:6px;align-items:flex-end;height:120px;padding:0 4px 0">'+
   window._finChartDays.map(function(d){
