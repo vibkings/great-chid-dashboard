@@ -7301,7 +7301,7 @@ function buildSales(){
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
       '<div style="position:relative;flex:1;max-width:360px">'+
         '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px">&#128269;</span>'+
-        '<input type="text" id="sales-search" placeholder="Search by invoice #, customer or item..." value="'+salesSearch+'" oninput="salesSearch=this.value;if(this.value&&window._salesLedgerFilter!==\'all\'){window._salesLedgerFilter=\'all\';renderApp();}else{filterSalesTable();}" style="padding-left:32px;width:100%;font-size:13px">'+
+        '<input type="text" id="sales-search" placeholder="Search by invoice #, customer or item..." value="'+salesSearch+'" oninput="salesSearch=this.value;window._salesLedgerFilter=\'all\';filterSalesTable();" style="padding-left:32px;width:100%;font-size:13px">'+
       '</div>'+
       '<button id="sales-clear-btn" class="btn sm" onclick="salesSearch=\'\';window._salesLedgerFilter=\'today\';renderApp()" style="color:var(--danger);border-color:#f5c2c7;display:'+(salesSearch?'inline-flex':'none')+'">&#10005; Clear</button>'+
       '<span id="sales-search-count" style="font-size:12px;color:var(--text3)"></span>'+
