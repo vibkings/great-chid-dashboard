@@ -1303,6 +1303,30 @@ function clearAllData() {
 function uid(){return Date.now()+Math.floor(Math.random()*99999);}
 function fmt(n){return '₦'+Math.round(n).toLocaleString();}
 
+// ── Pagination helpers ────────────────────────────────────────
+var PAGE_SIZE=50;
+function pgSlice(arr,page){var s=page*PAGE_SIZE;return arr.slice(s,s+PAGE_SIZE);}
+function pgBar(page,total,setter){
+  var pages=Math.ceil(total/PAGE_SIZE);
+  if(pages<=1)return '';
+  var from=page*PAGE_SIZE+1,to=Math.min((page+1)*PAGE_SIZE,total);
+  var prev=page>0?'<button class="btn sm" onclick="pgSet(\''+setter+'\','+(page-1)+');renderApp()" style="font-size:12px">&#8592; Prev</button>':'<button class="btn sm" disabled style="font-size:12px;opacity:.4">&#8592; Prev</button>';
+  var next=page<pages-1?'<button class="btn sm" onclick="pgSet(\''+setter+'\','+(page+1)+');renderApp()" style="font-size:12px">Next &#8594;</button>':'<button class="btn sm" disabled style="font-size:12px;opacity:.4">Next &#8594;</button>';
+  var pageNums='';
+  for(var pi=0;pi<pages;pi++){
+    if(pi===0||pi===pages-1||Math.abs(pi-page)<=1){
+      pageNums+='<button class="btn sm" onclick="pgSet(\''+setter+'\','+pi+');renderApp()" style="font-size:11px;min-width:28px;'+(pi===page?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+'">'+(pi+1)+'</button>';
+    } else if(Math.abs(pi-page)===2){
+      pageNums+='<span style="font-size:12px;color:var(--text3);padding:0 2px">…</span>';
+    }
+  }
+  return '<div style="display:flex;align-items:center;gap:6px;justify-content:center;padding:10px 0 4px;flex-wrap:wrap">'+
+    prev+pageNums+next+
+    '<span style="font-size:11px;color:var(--text3);margin-left:8px">'+from+'–'+to+' of '+total+'</span>'+
+  '</div>';
+}
+function pgSet(key,val){window[key]=val;}
+
 // ============================================================
 // CONFIRMATION POPUP SYSTEM
 // ============================================================
@@ -2455,7 +2479,7 @@ function renderApp(){
     '</div>';
   renderPanel();
 }
-function switchTab(t){activeTab=t;renderApp();}
+function switchTab(t){activeTab=t;window._invPage=0;window._salesPage=0;window._purchPage=0;renderApp();}
 
 // ── Global keyboard shortcuts ─────────────────────────────
 (function(){
@@ -3264,7 +3288,7 @@ function buildInventory(){
     alertGroup('No cost price set — Cannot be sold',noCostItems,'danger','⚠️')+
     alertGroup('Selling below cost price — Fix prices',belowCostItems,'danger','⚠️');
   var supOpts=DB.suppliers.map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('');
-  var rows=DB.inventory.length?DB.inventory.map(function(i){
+  var _allInvRows=DB.inventory.length?DB.inventory.map(function(i){
     var margin=i.sell>0&&i.cost>0?Math.round(((i.sell-i.cost)/i.sell)*100):0;
     var priceFlag=(!i.cost||i.cost<=0)?'<span class="badge out" title="No cost price set">⚠ No cost</span>':i.sell<i.cost?'<span class="badge out" title="Selling below cost">⚠ Below cost</span>':'';
     var stockStatus=i.qty===0?'<span class="badge out">Out</span>':i.qty<=i.minQty?'<span class="badge low">Low</span>':'<span class="badge ok">OK</span>';
@@ -3279,7 +3303,11 @@ function buildInventory(){
       (canDel?'<button class="btn danger sm" onclick="removeItem('+i.id+')">Del</button>':'')+
       '</div>':' - ';
     return '<tr data-name="'+i.name.replace(/"/g,'&quot;')+'" data-cat="'+(i.cat||'').replace(/"/g,'&quot;')+'" data-sup="'+getSupName(i.supId).replace(/"/g,'&quot;')+'"><td>'+i.name+'</td><td>'+(i.cat||' - ')+'</td><td>'+getSupName(i.supId)+'</td><td>'+i.qty+'</td><td>'+i.minQty+'</td><td>'+costDisplay+'</td><td>'+sellDisplay+'</td><td>'+(i.cost>0?margin+'%':' - ')+'</td><td>'+fmt(i.qty*i.cost)+'</td><td>'+status+'</td><td>'+actionBtns+'</td></tr>';
-  }).join(''):'<tr data-empty="1"><td colspan="11" class="empty">No items yet.</td></tr>';
+  }):[];
+  var _invPage=window._invPage||0;
+  if(_invPage>0&&_allInvRows.length<=_invPage*PAGE_SIZE){_invPage=0;window._invPage=0;}
+  var rows=_allInvRows.length?pgSlice(_allInvRows,_invPage).join(''):'<tr data-empty="1"><td colspan="11" class="empty">No items yet.</td></tr>';
+  var _invPager=pgBar(_invPage,_allInvRows.length,'_invPage');
   return reorderAlert+alerts+'<div class="metrics">'+mc('Items',DB.inventory.length,'','')+mc('Stock value',fmt(totalVal),'At cost','')+mc('Low stock',lowStock,'',lowStock>0?'amber':'')+mc('Out of stock',outStock,'',outStock>0?'red':'')+'</div>'+
 
 
@@ -3310,7 +3338,7 @@ function buildInventory(){
       '<button id="inv-clear-btn" class="btn sm" onclick="invSearch=\'\';var s=document.getElementById(\'inv-search\');if(s)s.value=\'\';filterInventoryTable()" style="color:var(--danger);border-color:#f5c2c7;display:'+(invSearch?'inline-flex':'none')+'">&#10005; Clear</button>'+
       '<span id="inv-search-count" style="font-size:12px;color:var(--text3);margin-left:4px">'+DB.inventory.length+' item'+(DB.inventory.length!==1?'s':'')+'</span>'+
     '</div>'+
-    '<div class="tbl-wrap"><table id="inv-stock-table"><thead><tr><th>Item</th><th>Category</th><th>Supplier</th><th>Qty</th><th>Min</th><th>Cost</th><th>Sell</th><th>Margin</th><th>Value</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+    '<div class="tbl-wrap"><table id="inv-stock-table"><thead><tr><th>Item</th><th>Category</th><th>Supplier</th><th>Qty</th><th>Min</th><th>Cost</th><th>Sell</th><th>Margin</th><th>Value</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+_invPager;
 }
 
 // STOCK MANAGEMENT
@@ -7102,7 +7130,7 @@ function buildSales(){
       '</div>'+
     '</div>':'';
 
-  var ledger=invoiceKeys.length?invoiceKeys.map(function(k){
+  var _allLedgerRows=invoiceKeys.length?invoiceKeys.map(function(k){
     var g=invoiceGroups[k];
     var firstItem=g.items[0].name+(g.items.length>1?' <span style="color:var(--text3);font-size:10.5px">+'+( g.items.length-1)+' more</span>':'');
     var isPending=g.items.some(function(s){return s.pendingSupply;});
@@ -7138,7 +7166,11 @@ function buildSales(){
         (!isPending?'<button class="btn sm" onclick="showReturnModal(\''+(g.items[0].invoiceNum||g.items[0].invoiceId||g.items[0].id)+'\')" style="color:#dc3545;border-color:#f5c2c7;font-size:11px">&#8617; Return</button>':'')+
         (isAdmin()?'<button class="btn danger sm" onclick="voidInvoice(\''+k+'\')" style="font-size:11px">🗑️ Void</button>':'')+
       '</div></td></tr>';
-  }).join(''):'';
+  }):[];
+  var _salesPage=window._salesPage||0;
+  if(_salesPage>0&&_allLedgerRows.length<=_salesPage*PAGE_SIZE){_salesPage=0;window._salesPage=0;}
+  var ledger=pgSlice(_allLedgerRows,_salesPage).join('');
+  var _salesPager=pgBar(_salesPage,_allLedgerRows.length,'_salesPage');
   return '<div class="metrics">'+mc('Revenue',fmt(totalRev),'','')+mc('Profit',fmt(totalProfit),pct(totalProfit,totalRev)+' margin',totalProfit>=0?'green':'red')+mc('On credit',fmt(creditTotal),'','amber')+mc('Invoices',invoiceKeys.length,'','')+ '</div>'+
     '<div class="metrics" style="grid-template-columns:repeat(3,1fr)">'+mc('Cash',fmt(cashS),'','')+mc('POS',fmt(posS),'','')+mc('Transfer',fmt(transS),'','')+ '</div>'+
     '<p class="sec-title">New invoice</p>'+
@@ -7292,9 +7324,9 @@ function buildSales(){
     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">'+
       '<p class="sec-title" style="margin:0">Sales ledger (by invoice)</p>'+
       '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
-        '<button class="btn sm" onclick="window._salesLedgerFilter=\'today\';window._salesLedgerDate=\'\';renderApp()" style="'+(salesLedgerFilter==='today'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+' font-size:11.5px">Today</button>'+
-        '<button class="btn sm" onclick="window._salesLedgerFilter=\'all\';window._salesLedgerDate=\'\';renderApp()" style="'+(salesLedgerFilter==='all'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+' font-size:11.5px">All</button>'+
-        '<input type="date" onchange="window._salesLedgerFilter=\'date\';window._salesLedgerDate=this.value;renderApp()" value="'+(salesLedgerFilter==='date'?salesLedgerDate:'')+'" style="font-size:11.5px;padding:4px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);height:30px">'+
+        '<button class="btn sm" onclick="window._salesLedgerFilter=\'today\';window._salesLedgerDate=\'\';window._salesPage=0;renderApp()" style="'+(salesLedgerFilter==='today'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+' font-size:11.5px">Today</button>'+
+        '<button class="btn sm" onclick="window._salesLedgerFilter=\'all\';window._salesLedgerDate=\'\';window._salesPage=0;renderApp()" style="'+(salesLedgerFilter==='all'?'background:var(--primary);color:#fff;border-color:var(--primary)':'')+' font-size:11.5px">All</button>'+
+        '<input type="date" onchange="window._salesLedgerFilter=\'date\';window._salesLedgerDate=this.value;window._salesPage=0;renderApp()" value="'+(salesLedgerFilter==='date'?salesLedgerDate:'')+'" style="font-size:11.5px;padding:4px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);height:30px">'+
         '<button class="btn sm" onclick="printSaleLedger()" style="color:#1a237e;border-color:#93c5fd;font-size:11.5px">&#128438; Print</button>'+
       '</div>'+
     '</div>'+
@@ -7308,7 +7340,7 @@ function buildSales(){
     '</div>'+
     pendingAlert+
     summaryBar+
-    (invoiceKeys.length?'<div class="tbl-wrap"><table id="sales-ledger-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Customer</th><th>Pay type</th><th>Items</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Mode</th><th style="text-align:right;color:#15803d">Deposit bal.</th><th>Seller</th><th></th></tr></thead><tbody>'+ledger+'</tbody></table></div>':'<div class="empty">'+(salesLedgerFilter==='today'?'No invoices recorded today yet.':salesLedgerFilter==='date'&&salesLedgerDate?'No invoices found for that date.':'No invoices yet.')+'</div>')+
+    (invoiceKeys.length?'<div class="tbl-wrap"><table id="sales-ledger-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Customer</th><th>Pay type</th><th>Items</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Mode</th><th style="text-align:right;color:#15803d">Deposit bal.</th><th>Seller</th><th></th></tr></thead><tbody>'+ledger+_salesPager+'</tbody></table></div>':'<div class="empty">'+(salesLedgerFilter==='today'?'No invoices recorded today yet.':salesLedgerFilter==='date'&&salesLedgerDate?'No invoices found for that date.':'No invoices yet.')+'</div>')+
     // Returns history — filtered by the same date as the sales ledger
     (function(){
       if(!DB.salesReturns||!DB.salesReturns.length) return '';
@@ -8306,6 +8338,7 @@ function submitPurchase(){
         cost:l.cost,
         sell:l.sell||l.cost||0,
         cat:l.cat||'',
+        dateOrdered:date,
         dateExpected:null,
         status:'pending', // 'pending' | 'partial' | 'complete'
         deliveries:[] // log of partial deliveries received
@@ -8680,7 +8713,7 @@ function buildPurchases(){
   var supOpts=DB.suppliers.map(function(s){return '<option value="'+s.id+'">'+s.name+'</option>';}).join('');
   var bankSubField=DB.banks.length?'<div class="form-group" id="pu-bank-wrap" style="display:none"><label>Which bank? <span style="color:var(--danger)">*</span></label><select id="pu-bankid"><option value="">Select bank...</option>'+bankOpts()+'</select></div>':'';
   var posSubField=DB.posTerminals.length?'<div class="form-group" id="pu-pos-wrap" style="display:none"><label>Which POS terminal? <span style="color:var(--danger)">*</span></label><select id="pu-posid"><option value="">Select terminal...</option>'+posOpts()+'</select></div>':'';
-  var puRows=DB.purchases.slice().reverse().filter(function(p){
+  var _allPuRows=DB.purchases.slice().reverse().filter(function(p){
     if(!purchaseSearch)return true;
     var t=purchaseSearch.toLowerCase();
     return (p.invoiceNum||'').toLowerCase().indexOf(t)>-1||(p.supName||'').toLowerCase().indexOf(t)>-1||(p.items||[]).some(function(l){return l.name.toLowerCase().indexOf(t)>-1;});
@@ -8707,7 +8740,11 @@ function buildPurchases(){
         (isAdmin()?'<button class="btn danger sm" onclick="deletePurchase('+p.id+')" title="Move to bin">🗑️</button>':'')+
       '</div></td>'+
     '</tr>';
-  }).join('');
+  });
+  var _purchPage=window._purchPage||0;
+  if(_purchPage>0&&_allPuRows.length<=_purchPage*PAGE_SIZE){_purchPage=0;window._purchPage=0;}
+  var puRows=pgSlice(_allPuRows,_purchPage).join('');
+  var _purchPager=pgBar(_purchPage,_allPuRows.length,'_purchPage');
 
   // Pending deliveries section — grouped by invoice like Sales pending supply
   // Check for completed deliveries where inventory item is missing (repair section)
@@ -8740,7 +8777,7 @@ function buildPurchases(){
       var pendingGroups={};
       openPending.forEach(function(d){
         var k=d.invoiceNum||d.id;
-        if(!pendingGroups[k])pendingGroups[k]={invoiceNum:k,supName:d.supName,dateOrdered:d.dateOrdered,items:[]};
+        if(!pendingGroups[k]){var _purch=DB.purchases.find(function(p){return p.invoiceNum===k;});pendingGroups[k]={invoiceNum:k,supName:d.supName,dateOrdered:d.dateOrdered||((_purch&&_purch.date)||'—'),items:[]};}
         pendingGroups[k].items.push(d);
       });
       var groupHtml=Object.values(pendingGroups).map(function(g){
@@ -8847,7 +8884,7 @@ function buildPurchases(){
         '<input type="text" placeholder="Search purchases..." value="'+purchaseSearch+'" oninput="purchaseSearch=this.value;renderPanel()" style="padding-left:32px;width:100%;font-size:13px">'+
       '</div>'+
     '</div>'+
-    (puRows?'<div class="tbl-wrap"><table id="purchases-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Supplier</th><th>Items</th><th style="text-align:center">Units</th><th style="text-align:right">Total</th><th>Payment</th><th>By</th><th></th></tr></thead><tbody>'+puRows+'</tbody></table></div>':'<div class="empty">No purchases recorded yet.</div>')+
+    (puRows?'<div class="tbl-wrap"><table id="purchases-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Supplier</th><th>Items</th><th style="text-align:center">Units</th><th style="text-align:right">Total</th><th>Payment</th><th>By</th><th></th></tr></thead><tbody>'+puRows+_purchPager+'</tbody></table></div>':'<div class="empty">No purchases recorded yet.</div>')+
     pendingRows+
     buildPurchaseReturnsSection();
 }
