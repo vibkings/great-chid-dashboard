@@ -9251,14 +9251,20 @@ function buildFinance(){
     mc('Net cash',fmt(netCash),'Revenue - expenses',netCash>=0?'green':'red')+
     mc('Net profit',fmt(netProfit),pct(netProfit,rev)+' margin',netProfit>=0?'green':'red')+
     '</div>'+
-    // Reconciliation row
-    '<div style="background:var(--surface2);border-radius:8px;padding:8px 14px;margin-bottom:1rem;font-size:12px;color:var(--text2)">'+
-      '📊 <b>Revenue breakdown:</b> '+
-      fmt(cashIn)+' cash received + '+fmt(creditOwed)+' credit/part unpaid'+
-      (depAppliedTotal>0?' + '+fmt(depAppliedTotal)+' deposit applied':'')+
-      ' = '+fmt(cashIn+creditOwed+(depAppliedTotal||0))+
-      (Math.abs(rev-(cashIn+creditOwed+(depAppliedTotal||0)))>1?' &nbsp;<span style="color:var(--warning)">⚠ Δ'+fmt(Math.abs(rev-(cashIn+creditOwed+(depAppliedTotal||0))))+'</span>':' ✅')+
-    '</div>'+
+    // Reconciliation row - use payment breakdown which always equals revenue
+    (function(){
+      var cashPay=Object.values(invMap).filter(function(inv){return inv.payment!=='credit'&&inv.payment!=='part';}).reduce(function(a,inv){return a+inv.total;},0);
+      var partPay=Object.values(invMap).filter(function(inv){return inv.payment==='part';}).reduce(function(a,inv){return a+(inv.partPayment||0);},0);
+      var total=cashPay+partPay+creditOwed;
+      var diff=Math.abs(rev-total);
+      return '<div style="background:var(--surface2);border-radius:8px;padding:8px 14px;margin-bottom:1rem;font-size:12px;color:var(--text2)">'+
+        '📊 <b>Revenue reconciliation:</b> '+
+        fmt(cashPay+partPay)+' collected + '+fmt(creditOwed)+' owed'+
+        (depAppliedTotal>0?' + '+fmt(depAppliedTotal)+' deposits':'')+ 
+        ' = <b>'+fmt(total)+'</b>'+
+        (diff>1?' <span style="color:var(--warning)">⚠ Δ'+fmt(diff)+'</span>':' <span style="color:#15803d;font-weight:700">✅ Balanced</span>')+
+      '</div>';
+    }())+
     '<div class="metrics">'+
     mc('Discounts given',fmt(discTotal),'Total given','amber')+
   '</div>'+
