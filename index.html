@@ -375,7 +375,7 @@ var DB={
   users:[{id:1,name:'Admin',username:'admin',password:'admin123',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
   adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],commissionLedger:[],proformas:[],
-  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],
+  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
   invoiceCounter:1,
@@ -456,7 +456,7 @@ var GCE_API_KEY_QS   = '?key=' + GCE_API_KEY;
 var GCE_COLLECTIONS = [
   'sales','inventory','customers','suppliers','purchases','cashflow',
   'creditPayments','deposits','salesReturns','adjLog','stockCounts','commissionLedger','proformas',
-  'supplierPayments','tillSessions','activityLog','settings',
+  'supplierPayments','tillSessions','activityLog','settings','supplierDeposits',
   'creditCustomers','users','banks','posTerminals','categories',
   'expenseCats','transferLog','warehouse','recycleBin','drafts',
   'pendingDeliveries','meta' // meta = invoiceCounter, invoiceYear, etc.
@@ -621,6 +621,7 @@ function buildCollectionSnapshot(colName) {
     stockCounts: DB.stockCounts||[],
     supplierPayments: DB.supplierPayments||[],
     tillSessions: DB.tillSessions||[],
+    supplierDeposits: DB.supplierDeposits||[],
     activityLog: (DB.activityLog||[]).slice(0,200), // limit to 200
     settings: DB.settings||{},
     creditCustomers: DB.creditCustomers||[],
@@ -656,7 +657,7 @@ function applyCollection(colName, payload) {
     creditPayments:'creditPayments', deposits:'deposits',
     salesReturns:'salesReturns', adjLog:'adjLog', stockCounts:'stockCounts',
     commissionLedger:'commissionLedger', proformas:'proformas',
-    supplierPayments:'supplierPayments', tillSessions:'tillSessions',
+    supplierPayments:'supplierPayments', tillSessions:'tillSessions', supplierDeposits:'supplierDeposits',
     activityLog:'activityLog', settings:'settings',
     creditCustomers:'creditCustomers', users:'users', banks:'banks',
     posTerminals:'posTerminals', categories:'categories',
@@ -1177,6 +1178,7 @@ function applySnapshot(snapshot) {
   DB.activityLog = snapshot.activityLog || [];
   DB.supplierPayments = snapshot.supplierPayments || [];
   DB.tillSessions = snapshot.tillSessions || [];
+  DB.supplierDeposits = snapshot.supplierDeposits || [];
   DB.recycleBin = snapshot.recycleBin || [];
   DB.drafts = snapshot.drafts || [];
   DB.pendingDeliveries = snapshot.pendingDeliveries || [];
@@ -1240,6 +1242,7 @@ function buildSnapshot() {
     activityLog: DB.activityLog || [],
     supplierPayments: DB.supplierPayments || [],
     tillSessions: DB.tillSessions || [],
+    supplierDeposits: DB.supplierDeposits || [],
     _savedAt: now,
   };
 }
@@ -5238,6 +5241,19 @@ function selectSupDd(id, name){
   if(inp)inp.value=name;
   if(hidden)hidden.value=id;
   if(dd)dd.style.display='none';
+  // Show deposit balance indicator
+  var depBal=getSupDepositBalance(id);
+  var depInfo=document.getElementById('pu-dep-info');
+  if(depInfo){
+    if(depBal>0){
+      depInfo.innerHTML='<div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:9px 14px;font-size:13px;color:#065f46;display:flex;align-items:center;justify-content:space-between">'+
+        '<span>💰 Deposit balance with <b>'+esc(name)+'</b>: <b>'+fmt(depBal)+'</b> — will be auto-applied to this purchase</span>'+
+        '<input type="checkbox" id="pu-use-deposit" checked style="width:18px;height:18px;cursor:pointer" title="Apply deposit">'+
+      '</div>';
+    } else {
+      depInfo.innerHTML='';
+    }
+  }
 }
 
 /* ── Searchable supplier dropdown (Supplier Payments filter) ── */
@@ -8353,16 +8369,32 @@ function submitPurchase(){
     if(creditAmt>0)sup.owedToSupplier+=creditAmt;
     sup.purchases.push({id:purchaseId,desc:purchaseItems.length+' items',invoiceNum:invNum,amount:grandTotal,payment:payType,payMode:pm,bankId:bankId,posId:posId,date:date});
   }
+  // ── Apply supplier deposit if available and checkbox ticked ──
+  var depApplied=0;
+  var useDepChk=document.getElementById('pu-use-deposit');
+  if(useDepChk&&useDepChk.checked&&supId){
+    var depBal=getSupDepositBalance(supId);
+    if(depBal>0){
+      depApplied=Math.min(depBal,grandTotal);
+      applySupplierDepositToPurchase(supId,depApplied,purchaseId,invNum);
+      // Record the applied deposit as cashflow in (offsets the purchase cost)
+      DB.cashflow.push({id:uid(),desc:'Deposit applied — '+(sup?sup.name:'Supplier')+' Inv#'+invNum,amount:depApplied,type:'in',cat:'Supplier Deposit Applied',payMode:'deposit',date:date,month:month});
+    }
+  }
+  var netCashPaid=Math.max(0,cashPaid-depApplied);
   // Cashflow
-  if(cashPaid>0){
-    DB.cashflow.push({id:uid(),desc:'Purchase from '+(sup?sup.name:'Supplier')+' Inv#'+invNum,amount:cashPaid,type:'out',cat:'Restock',payMode:pm,bankId:bankId,posId:posId,date:date,month:month});
+  if(netCashPaid>0){
+    DB.cashflow.push({id:uid(),desc:'Purchase from '+(sup?sup.name:'Supplier')+' Inv#'+invNum+(depApplied>0?' (deposit applied: '+fmt(depApplied)+')':''),amount:netCashPaid,type:'out',cat:'Restock',payMode:pm,bankId:bankId,posId:posId,date:date,month:month});
   }
   // Save purchase record
-  DB.purchases.push({id:purchaseId,invoiceNum:invNum,supId:supId,supName:sup?sup.name:'Unknown',items:JSON.parse(JSON.stringify(purchaseItems)),subtotal:subtotalPu,discAmt:puDiscAmt,grandTotal:grandTotal,payType:payType,payMode:pm,bankId:bankId,posId:posId,partAmt:partAmt,creditAmt:creditAmt,cashPaid:cashPaid,date:date,month:month,by:DB.currentUser.name});
+  DB.purchases.push({id:purchaseId,invoiceNum:invNum,supId:supId,supName:sup?sup.name:'Unknown',items:JSON.parse(JSON.stringify(purchaseItems)),subtotal:subtotalPu,discAmt:puDiscAmt,grandTotal:grandTotal,payType:payType,payMode:pm,bankId:bankId,posId:posId,partAmt:partAmt,creditAmt:creditAmt,cashPaid:cashPaid,depApplied:depApplied,date:date,month:month,by:DB.currentUser.name});
   purchaseItems=[];
   saveData();
   var totalReceived=purchaseItems.length; // already cleared so use pendingLines count
   var successMsg='✅ Purchase recorded! Stock updated.\nInvoice #'+invNum+' from '+(sup?sup.name:'supplier')+'.';
+  if(depApplied>0){
+    successMsg+='\n\n💰 DEPOSIT APPLIED: '+fmt(depApplied)+' deducted from '+sup.name+'\'s deposit balance.\nRemaining deposit: '+fmt(getSupDepositBalance(supId));
+  }
   if(pendingLines.length){
     var pendingQty=pendingLines.reduce(function(a,l){return a+l.qtyPending;},0);
     successMsg+='\n\n📦 PENDING DELIVERY: '+pendingLines.length+' item line(s) with '+pendingQty+' unit(s) not yet received.\nThese have been added to the Pending Deliveries tracker. Go to Purchases → Pending Deliveries to record when the supplier brings the remaining items.';
@@ -8870,6 +8902,7 @@ function buildPurchases(){
     '<div id="pu-totals"></div>'+
     '<p style="font-size:11px;font-weight:600;color:#555;margin:.75rem 0 8px;text-transform:uppercase;letter-spacing:.04em">Payment</p>'+
     '<div class="fg" style="grid-template-columns:1fr 1fr 1fr">'+
+      '<div id="pu-dep-info" style="margin-bottom:10px"></div>'+
       '<div class="form-group"><label>Payment type</label><select id="pu-paytype" onchange="onPurchasePayTypeChange()"><option value="cash">Cash (fully paid)</option><option value="credit">Credit (owed to supplier)</option><option value="part">Part payment</option></select></div>'+
       '<div class="form-group"><label>Payment mode</label><select id="pu-paymode" onchange="togglePaySubFields(this.value,\'pu\')"><option value="cash">Cash</option><option value="pos">POS</option><option value="transfer">Bank transfer</option></select></div>'+
       '<div class="form-group" id="pu-part-wrap" style="display:none"><label>Amount paid now (₦)</label><input type="number" id="pu-part-amt" placeholder="0" min="0"></div>'+
@@ -10425,7 +10458,63 @@ function buildSupplierPayments(){
       mc('Total owed',fmt(totalOwed),'To all suppliers',totalOwed>0?'red':'')+
       mc('Total paid ever',fmt(totalPaidEver),'All time','green')+
       mc('Suppliers with debt',DB.suppliers.filter(function(s){return (s.owedToSupplier||0)>0;}).length,'','red')+
+      mc('Total deposits held',fmt((DB.supplierDeposits||[]).filter(function(d){return !d.applied&&d.amount>0;}).reduce(function(a,d){return a+d.amount;},0)),'Available balances','green')+
     '</div>'+
+
+    // ── Supplier Deposits Section ─────────────────────────────
+    '<p class="sec-title" style="margin-bottom:10px">💰 Supplier Deposits</p>'+
+    (function(){
+      var deps=DB.supplierDeposits||[];
+      // Group active balances by supplier
+      var supBalMap={};
+      deps.filter(function(d){return !d.applied&&d.amount>0;}).forEach(function(d){
+        if(!supBalMap[d.supId])supBalMap[d.supId]={supName:d.supName,supId:d.supId,balance:0};
+        supBalMap[d.supId].balance+=d.amount;
+      });
+      var balCards=Object.values(supBalMap).map(function(b){
+        return '<div class="card" style="border-left:4px solid #15803d;display:flex;justify-content:space-between;align-items:center;padding:12px 16px">'+
+          '<div>'+
+            '<div style="font-size:14px;font-weight:700">'+esc(b.supName)+'</div>'+
+            '<div style="font-size:11px;color:var(--text3)">Available deposit balance</div>'+
+          '</div>'+
+          '<div style="text-align:right">'+
+            '<div style="font-size:18px;font-weight:800;color:#15803d">'+fmt(b.balance)+'</div>'+
+            '<button onclick="addSupplierDeposit('+b.supId+')" class="btn sm" style="color:#15803d;border-color:#86efac;font-size:11px;margin-top:4px">+ Add more</button>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+
+      // Deposit history table
+      var depRows=deps.slice().reverse().map(function(d){
+        var statusBadge=d.applied||d.amount<=0
+          ?'<span class="badge out" style="font-size:10px">Applied</span>'
+          :'<span class="badge ok" style="font-size:10px">Available</span>';
+        return '<tr>'+
+          '<td>'+d.date+'</td>'+
+          '<td style="font-weight:700">'+esc(d.supName)+'</td>'+
+          '<td style="text-align:right;font-weight:700;color:#15803d">'+fmt(d.amount)+'</td>'+
+          '<td>'+statusBadge+'</td>'+
+          '<td>'+d.payMode+'</td>'+
+          '<td>'+(d.note||'—')+'</td>'+
+          '<td>'+esc(d.by||'')+'</td>'+
+          (isAdmin()?'<td><button class="btn danger sm" onclick="deleteSupplierDeposit(\''+d.id+'\')" style="font-size:10px">🗑️</button></td>':'<td></td>')+
+        '</tr>';
+      }).join('');
+
+      var addBtns='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
+        DB.suppliers.map(function(s){
+          return '<button onclick="addSupplierDeposit('+s.id+')" class="btn sm" style="color:#15803d;border-color:#86efac">+ Deposit to '+esc(s.name)+'</button>';
+        }).join('')+
+      '</div>';
+
+      return (Object.keys(supBalMap).length?
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:14px">'+balCards+'</div>':
+        '<div style="background:var(--surface2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text3);margin-bottom:12px">No active deposit balances with any supplier.</div>')+
+      addBtns+
+      (depRows?
+        '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Supplier</th><th style="text-align:right">Amount</th><th>Status</th><th>Mode</th><th>Note</th><th>By</th>'+(isAdmin()?'<th></th>':'')+'</tr></thead><tbody>'+depRows+'</tbody></table></div>':
+        '<div class="empty" style="margin-bottom:1rem">No deposits recorded yet.</div>');
+    }())+
 
     // Owed cards
     (owedCards?'<p class="sec-title" style="margin-bottom:10px">Suppliers with outstanding balance</p><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:1.5rem">'+owedCards+'</div>':
@@ -10514,6 +10603,104 @@ function buildSuppliers(){
     '</div>'+
     (rows?'<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Address</th><th style="text-align:right">Total bought</th><th style="text-align:right">Opening bal.</th><th style="text-align:right">Total owed</th><th style="text-align:right">Orders</th><th>Actions</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="empty">No suppliers yet.</div>');
 }
+
+// ── Supplier Deposit Balance helper ─────────────────────────
+function getSupDepositBalance(supId){
+  return (DB.supplierDeposits||[]).filter(function(d){
+    return String(d.supId)===String(supId)&&!d.applied;
+  }).reduce(function(a,d){return a+(d.amount||0);},0);
+}
+
+// ── Record a new supplier deposit ────────────────────────────
+function addSupplierDeposit(supId){
+  var sup=DB.suppliers.find(function(s){return s.id==supId;});
+  if(!sup){alert('Supplier not found.');return;}
+  var bal=getSupDepositBalance(sup.id);
+  var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+esc(b.name)+'</option>';}).join('');
+  var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join('');
+  var html=
+    '<div class="modal-header"><h3>💰 Add Deposit — '+esc(sup.name)+'</h3>'+
+      '<button class="modal-close" onclick="closeModal()">✕</button></div>'+
+    '<div class="modal-body">'+
+      (bal>0?'<div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#065f46">'+
+        '✅ Current deposit balance: <b>'+fmt(bal)+'</b></div>':'')+
+      '<div class="form-row"><label>Amount (₦)</label>'+
+        '<input type="number" id="sdep-amount" placeholder="0" min="1" style="font-size:15px;font-weight:700"></div>'+
+      '<div class="form-row"><label>Payment Mode</label>'+
+        '<select id="sdep-mode" onchange="(function(){var m=document.getElementById(\'sdep-mode\').value;document.getElementById(\'sdep-bank-row\').style.display=m===\'transfer\'?\'flex\':\'none\';document.getElementById(\'sdep-pos-row\').style.display=m===\'pos\'?\'flex\':\'none\';})()">' +
+          '<option value="cash">Cash</option>'+
+          '<option value="transfer">Bank Transfer</option>'+
+          (posOpts?'<option value="pos">POS</option>':'')+
+        '</select></div>'+
+      (bankOpts?'<div class="form-row" id="sdep-bank-row" style="display:none"><label>Bank</label><select id="sdep-bank">'+bankOpts+'</select></div>':'')+
+      (posOpts?'<div class="form-row" id="sdep-pos-row" style="display:none"><label>POS Terminal</label><select id="sdep-pos">'+posOpts+'</select></div>':'')+
+      '<div class="form-row"><label>Note (optional)</label>'+
+        '<input type="text" id="sdep-note" placeholder="e.g. Advance for door order"></div>'+
+      '<div class="form-row"><label>Date</label>'+
+        '<input type="date" id="sdep-date" value="'+new Date().toISOString().slice(0,10)+'"></div>'+
+      '<div class="modal-footer">'+
+        '<button class="btn" onclick="closeModal()">Cancel</button>'+
+        '<button class="btn primary" onclick="saveSupplierDeposit('+sup.id+')">💾 Save Deposit</button>'+
+      '</div>'+
+    '</div>';
+  openModal(html);
+}
+
+function saveSupplierDeposit(supId){
+  var sup=DB.suppliers.find(function(s){return s.id==supId;});
+  if(!sup)return;
+  var amount=parseFloat(document.getElementById('sdep-amount').value)||0;
+  var mode=document.getElementById('sdep-mode').value;
+  var bankId=mode==='transfer'&&document.getElementById('sdep-bank')?document.getElementById('sdep-bank').value:null;
+  var posId=mode==='pos'&&document.getElementById('sdep-pos')?document.getElementById('sdep-pos').value:null;
+  var note=document.getElementById('sdep-note').value.trim();
+  var dateVal=document.getElementById('sdep-date').value;
+  if(amount<=0){alert('Enter a valid amount.');return;}
+  var dateStr=dateVal?(function(){var dp=dateVal.split('-');return new Date(+dp[0],+dp[1]-1,+dp[2]).toLocaleDateString();}()):new Date().toLocaleDateString();
+  var month=dateVal?dateVal.slice(0,7):new Date().toISOString().slice(0,7);
+  var dep={
+    id:uid(), supId:sup.id, supName:sup.name,
+    amount:amount, payMode:mode, bankId:bankId||null, posId:posId||null,
+    note:note||'Deposit to supplier', date:dateStr, month:month,
+    by:DB.currentUser?DB.currentUser.name:'Admin', applied:false
+  };
+  if(!DB.supplierDeposits)DB.supplierDeposits=[];
+  DB.supplierDeposits.push(dep);
+  // Cashflow out
+  DB.cashflow.push({id:uid(),desc:'Deposit to '+sup.name+(note?' — '+note:''),amount:amount,type:'out',cat:'Supplier Deposit',payMode:mode,bankId:bankId||null,posId:posId||null,date:dateStr,month:month,by:dep.by});
+  logActivity('Supplier deposit','Deposit of '+fmt(amount)+' to '+sup.name,{extra:mode});
+  saveData();
+  closeModal();
+  renderPanel();
+  showToast('✅ Deposit of '+fmt(amount)+' recorded for '+sup.name);
+}
+
+// ── Apply supplier deposit on purchase ──────────────────────
+function applySupplierDepositToPurchase(supId, amountToApply, purchaseId, invNum){
+  if(!DB.supplierDeposits)return;
+  var remaining=amountToApply;
+  // Apply oldest deposits first (FIFO)
+  DB.supplierDeposits.filter(function(d){
+    return String(d.supId)===String(supId)&&!d.applied&&d.amount>0;
+  }).sort(function(a,b){return (a.id||0)-(b.id||0);}).forEach(function(d){
+    if(remaining<=0)return;
+    var use=Math.min(d.amount,remaining);
+    d.amount-=use;
+    if(d.amount<=0)d.applied=true;
+    remaining-=use;
+  });
+}
+
+// ── Delete a supplier deposit (admin only) ───────────────────
+function deleteSupplierDeposit(depId){
+  if(!isAdmin()){alert('Admin only.');return;}
+  showConfirm({title:'Delete Deposit?',msg:'This will permanently remove this deposit record.',type:'danger',confirmLabel:'Delete'}, function(){
+    DB.supplierDeposits=(DB.supplierDeposits||[]).filter(function(d){return d.id!==depId;});
+    saveData();
+    renderPanel();
+  });
+}
+
 function paySupplier(supId){
   var sup=DB.suppliers.find(function(s){return s.id==supId;});
   if(!sup){alert('Supplier not found.');return;}
