@@ -2326,6 +2326,7 @@ function checkNewMonthReminder(){
 
 function renderApp(){
   if(!DB.currentUser){renderAuth();return;}
+  try{
   // NOTE: saveData() intentionally NOT called here — only call when data changes
   // ── New Month reminder on 1st of each month ──────────────────
   checkNewMonthReminder();
@@ -2484,6 +2485,11 @@ function renderApp(){
     '</div>'+
     '</div>';
   renderPanel();
+  }catch(e){
+    console.error('renderApp crash:',e);
+    var r=document.getElementById('root');
+    if(r)r.innerHTML='<div style="padding:2rem;font-family:monospace;background:#fff"><h2 style="color:red">⚠️ App Error</h2><p>'+e.message+'</p><pre style="font-size:11px;white-space:pre-wrap;background:#f5f5f5;padding:1rem">'+e.stack+'</pre><button onclick="location.reload()">Reload</button></div>';
+  }
 }
 function switchTab(t){activeTab=t;window._invPage=0;window._salesPage=0;window._purchPage=0;if(t!=='suppliers')activeSupSub='list';renderApp();}
 
