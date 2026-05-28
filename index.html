@@ -2826,8 +2826,8 @@ function renderPanel(){
     '&copy; 2026 Great Chid Electro (Nig.) &nbsp;&middot;&nbsp; Built by <span style="color:var(--primary);font-weight:600">Vibkings</span>'+
     '</div>';
   p.innerHTML=vnHtml+content+footer;
-  if(activeTab==='inventory'&&invSearch){setTimeout(filterInventoryTable,0);}
-  if(activeTab==='sales'&&salesSearch){setTimeout(filterSalesTable,0);}
+  if(activeTab==='inventory'&&invSearch){window._invPage=0;}
+  if(activeTab==='sales'&&salesSearch){window._salesPage=0;}
   if(activeTab==='purchases'&&purchaseSearch){setTimeout(function(){window._purchPage=0;},0);}
   window.scrollTo(0,scrollY);
 }
@@ -3307,7 +3307,14 @@ function buildInventory(){
     alertGroup('No cost price set — Cannot be sold',noCostItems,'danger','⚠️')+
     alertGroup('Selling below cost price — Fix prices',belowCostItems,'danger','⚠️');
   var supOpts=DB.suppliers.map(function(s){return '<option value="'+s.id+'">'+esc(s.name)+'</option>';}).join('');
-  var _allInvRows=DB.inventory.length?DB.inventory.map(function(i){
+  var _invSearchTerm=(invSearch||'').toLowerCase().trim();
+  var _invFiltered=DB.inventory.filter(function(i){
+    if(!_invSearchTerm)return true;
+    return (i.name||'').toLowerCase().indexOf(_invSearchTerm)>-1||
+           (i.cat||'').toLowerCase().indexOf(_invSearchTerm)>-1||
+           getSupName(i.supId).toLowerCase().indexOf(_invSearchTerm)>-1;
+  });
+  var _allInvRows=_invFiltered.length?_invFiltered.map(function(i){
     var margin=i.sell>0&&i.cost>0?Math.round(((i.sell-i.cost)/i.sell)*100):0;
     var priceFlag=(!i.cost||i.cost<=0)?'<span class="badge out" title="No cost price set">⚠ No cost</span>':i.sell<i.cost?'<span class="badge out" title="Selling below cost">⚠ Below cost</span>':'';
     var stockStatus=i.qty===0?'<span class="badge out">Out</span>':i.qty<=i.minQty?'<span class="badge low">Low</span>':'<span class="badge ok">OK</span>';
@@ -3352,10 +3359,10 @@ function buildInventory(){
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
       '<div style="position:relative;flex:1;max-width:360px">'+
         '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px">&#128269;</span>'+
-        '<input type="text" id="inv-search" placeholder="Search by name, category or supplier..." value="'+invSearch+'" oninput="invSearch=this.value;filterInventoryTable()" style="padding-left:32px;width:100%;font-size:13px">'+
+        '<input type="text" id="inv-search" placeholder="Search by name, category or supplier..." value="'+invSearch+'" oninput="invSearch=this.value;window._invPage=0;renderPanel()" style="padding-left:32px;width:100%;font-size:13px">'+
       '</div>'+
-      '<button id="inv-clear-btn" class="btn sm" onclick="invSearch=\'\';var s=document.getElementById(\'inv-search\');if(s)s.value=\'\';filterInventoryTable()" style="color:var(--danger);border-color:#f5c2c7;display:'+(invSearch?'inline-flex':'none')+'">&#10005; Clear</button>'+
-      '<span id="inv-search-count" style="font-size:12px;color:var(--text3);margin-left:4px">'+DB.inventory.length+' item'+(DB.inventory.length!==1?'s':'')+'</span>'+
+      '<button id="inv-clear-btn" class="btn sm" onclick="invSearch=\'\';window._invPage=0;renderPanel()" style="color:var(--danger);border-color:#f5c2c7;display:'+(invSearch?'inline-flex':'none')+'">&#10005; Clear</button>'+
+      '<span id="inv-search-count" style="font-size:12px;color:var(--text3);margin-left:4px">'+(_invSearchTerm?_allInvRows.length+' of '+DB.inventory.length:DB.inventory.length)+' item'+(DB.inventory.length!==1?'s':'')+'</span>'+
     '</div>'+
     '<div class="tbl-wrap"><table id="inv-stock-table"><thead><tr><th>Item</th><th>Category</th><th>Supplier</th><th>Qty</th><th>Min</th><th>Cost</th><th>Sell</th><th>Margin</th><th>Value</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+_invPager;
 }
@@ -7106,11 +7113,17 @@ function buildSales(){
   var today=new Date().toLocaleDateString();
   var salesLedgerFilter=window._salesLedgerFilter||'today';
   var salesLedgerDate=window._salesLedgerDate||'';
+  var _salesSearchTerm=(salesSearch||'').toLowerCase().trim();
   var invoiceKeys=Object.keys(invoiceGroups).reverse().filter(function(k){
     var g=invoiceGroups[k];
     if(salesLedgerFilter==='today')return g.date===today;
     if(salesLedgerFilter==='date'&&salesLedgerDate){
       var dp=salesLedgerDate.split("-");var ds=new Date(parseInt(dp[0]),parseInt(dp[1])-1,parseInt(dp[2])).toLocaleDateString();return g.date===ds;
+    }
+    if(_salesSearchTerm){
+      return (g.invoiceNum||'').toLowerCase().indexOf(_salesSearchTerm)>-1||
+             (g.custName||'').toLowerCase().indexOf(_salesSearchTerm)>-1||
+             g.items.some(function(s){return (s.name||'').toLowerCase().indexOf(_salesSearchTerm)>-1;});
     }
     return true; // 'all'
   });
@@ -7365,7 +7378,7 @@ function buildSales(){
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
       '<div style="position:relative;flex:1;max-width:360px">'+
         '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px">&#128269;</span>'+
-        '<input type="text" id="sales-search" placeholder="Search by invoice #, customer or item..." value="'+salesSearch+'" oninput="salesSearch=this.value;window._salesLedgerFilter=\'all\';filterSalesTable();" style="padding-left:32px;width:100%;font-size:13px">'+
+        '<input type="text" id="sales-search" placeholder="Search by invoice #, customer or item..." value="'+salesSearch+'" oninput="salesSearch=this.value;window._salesLedgerFilter=\'all\';window._salesPage=0;renderPanel();" style="padding-left:32px;width:100%;font-size:13px">'+
       '</div>'+
       '<button id="sales-clear-btn" class="btn sm" onclick="salesSearch=\'\';window._salesLedgerFilter=\'today\';renderApp()" style="color:var(--danger);border-color:#f5c2c7;display:'+(salesSearch?'inline-flex':'none')+'">&#10005; Clear</button>'+
       '<span id="sales-search-count" style="font-size:12px;color:var(--text3)"></span>'+
