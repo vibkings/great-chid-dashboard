@@ -2115,7 +2115,7 @@ var TABS=[
 ];
 
 var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋',supplieroverview:'📋',customeroverview:'👤',inventoryval:'🏷️',pandl:'📊',returnstrack:'↩️',proformas:'📄',productreport:'🔎',monthlysummary:'📅'};
-var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing',supplieroverview:'Supplier Overview',customeroverview:'Customer Overview',inventoryval:'Inventory Valuation',pandl:'Profit & Loss',returnstrack:'Returns Tracker',proformas:'Proforma Invoices',productreport:'Product Report',monthlysummary:'Monthly Summary'};
+var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',suppayments:'Supplier Payments',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing',supplieroverview:'Supplier Overview',customeroverview:'Customer Overview',inventoryval:'Inventory Valuation',pandl:'Profit & Loss',returnstrack:'Returns Tracker',proformas:'Proforma Invoices',productreport:'Product Report',monthlysummary:'Monthly Summary'};
 var VERSION_NOTES=[
   {ver:'v27',date:'May 2026',title:'Confirmation popups & Recycle Bin',notes:[
     'Confirmation popups — every delete now shows a styled modal instead of plain browser confirm()',
@@ -2411,7 +2411,7 @@ function renderApp(){
   var sections=[
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases','proformas']},
     {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing','supplieroverview','customeroverview','inventoryval','pandl','returnstrack','productreport','monthlysummary']},
-    {label:'Management',tabs:['suppliers','customers','settings','users','activitylog','recyclebin']},
+    {label:'Management',tabs:['suppliers','suppayments','customers','settings','users','activitylog','recyclebin']},
   ];
   // Auto-purge bin items older than 30 days
   autoPurgeBin();
@@ -2806,7 +2806,14 @@ function renderPanel(){
   var scrollY=window.scrollY||window.pageYOffset;
   var p=document.getElementById('panel-root');if(!p)return;
   var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas,productreport:buildProductReport,monthlysummary:buildMonthlyReport};
-  var content=(map[activeTab]||function(){return '';})();
+  var content='';
+  try{
+    content=(map[activeTab]||function(){return '';})();
+    if(!content)content='<div class="empty">Nothing to show here yet.</div>';
+  }catch(e){
+    content='<div class="card" style="border-left:4px solid var(--danger);padding:16px"><b>⚠️ Panel error ('+activeTab+'):</b><br><code style="font-size:11px;white-space:pre-wrap">'+e.message+'</code></div>';
+    console.error('renderPanel error:',e);
+  }
   // Show version notes only on inventory (home) or when explicitly navigating to it
   var vnHtml='';
   var footer='<div style="text-align:center;padding:1.5rem 1rem;margin-top:2rem;border-top:1px solid var(--border);font-size:11px;color:var(--text3)">'+
