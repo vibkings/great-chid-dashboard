@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<!-- v28 - Partial qty supply modal | Firebase via REST API (no SDK) -->
+<!-- v28.1 - Monthly Summary nav | Supplier Deposits | Pagination | XSS fixes -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -11224,6 +11224,7 @@ function buildReports(){
 
   // ── MONTHLY SUMMARY REPORT ──────────────────────────────────
 function buildMonthlyReport(){
+  console.log('buildMonthlyReport called, activeTab='+activeTab);
     var now=new Date();
     var selMonth=window._monthSumMonth||(now.getFullYear()+'-'+(String(now.getMonth()+1).padStart(2,'0')));
     var selD=new Date(selMonth+'-02');
