@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Great Chid Electro — Business Dashboard v28</title>
+<title>Great Chid Electro — Business Dashboard v28.1</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -11390,26 +11390,26 @@ function buildMonthlyReport(){
     '</div>'+
 
     // KPI row
-    '<div class="metrics">'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:1rem">'+
       mc('Revenue',fmt(mRev),invListM.length+' invoices','')+
       mc('Gross Profit',fmt(mGrossProfit),pct(mGrossProfit,mRev)+' margin',mGrossProfit>=0?'green':'red')+
       mc('Net Profit',fmt(mNetProfit),marginPct+'% after expenses',mNetProfit>=0?'green':'red')+
       mc('Net Cash',fmt(mNetCash),'Sales cash + debt collected − expenses',mNetCash>=0?'green':'red')+
     '</div>'+
-    '<div class="metrics" style="grid-template-columns:repeat(4,1fr)">'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:1rem">'+
       mc('Cash Received',fmt(mCashIn),'From this month\'s invoices','')+
       mc('Credit Collected',fmt(mCreditPaid),'Old debts paid this month',mCreditPaid>0?'green':'')+
       mc('Owed This Month',fmt(mTotalOwed),'New credit not yet paid','amber')+
       mc('Total Credit (All Time)',fmt(mLiveCreditOwed),'Live balance — all customers','amber')+
     '</div>'+
-    '<div class="metrics" style="grid-template-columns:repeat(2,1fr)">'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:1rem">'+
       mc('Expenses',fmt(mExpTotal),'Operating costs this month','red')+
       (mRestocking>0?mc('Restocking',fmt(mRestocking),'Stock purchased this month','red'):'')+
     '</div>'+
 
     // Payment breakdown
     '<p class="sec-title">Payment breakdown</p>'+
-    '<div class="metrics" style="grid-template-columns:repeat(3,1fr)">'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:1rem">'+
       mc('Cash',fmt(pmCash),'','')+mc('POS',fmt(pmPos),'','')+mc('Transfer',fmt(pmTransfer),'','')+
     '</div>'+
 
