@@ -9317,11 +9317,9 @@ function buildFinance(){
   var salesF  = DB.sales.filter(function(s){ return inRange(s.date, s.month); });
   var expF    = DB.cashflow.filter(function(c){ return c.type==='out'&&c.cat!=='Restock'&&c.cat!=='Supplier Payment'&&c.cat!=='Supplier Deposit'&&inRange(c.date,c.month); });
   // Use DB.purchases grandTotal directly — includes paid, credit, part-payment, pending supply
-  // Filter by date (not p.month) to catch purchases where month field was stored differently
   var purchF  = (DB.purchases||[]).filter(function(p){
     if(finFilter==='today') return p.date===now.toLocaleDateString();
     if(finFilter==='month'){
-      // Try month field first, fall back to parsing the date
       if((p.month||'')=== finMonth) return true;
       var pd=parseDate(p.date);
       return pd&&(pd.getFullYear()+'-'+String(pd.getMonth()+1).padStart(2,'0'))===finMonth;
@@ -9332,7 +9330,6 @@ function buildFinance(){
     }
     return true; // 'all'
   });
-  console.log('purchF total:', purchF.reduce(function(a,p){return a+(p.grandTotal||0);},0), 'count:', purchF.length, 'all purchases:', (DB.purchases||[]).length);
 
   var rev           = salesF.reduce(function(a,s){return a+s.total;},0);
   var profit        = salesF.reduce(function(a,s){return a+s.profit;},0);
