@@ -10876,10 +10876,10 @@ function buildReports(){
     }
 
     // Helper: is date in selected month
-    function inSelMonth(dateStr){
+    var inSelMonth=function(dateStr){
       var d=parseDate(dateStr);
       return d&&d.getMonth()===selM&&d.getFullYear()===selY;
-    }
+    };
 
     // ── Revenue & Profit ──────────────────────────────────────
     var mSales=DB.sales.filter(function(s){return inSelMonth(s.date);});
