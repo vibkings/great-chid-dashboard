@@ -1668,8 +1668,9 @@ function buildClosingReport(){
               '<div style="font-size:11px;color:#666;margin-bottom:4px">Actual count</div>'+
               '<div style="font-size:16px;font-weight:700;color:'+(variance===0?'#15803d':variance>0?'#1d4ed8':'#c0392b')+'">'+fmt(closingCount)+'</div>'+
               '<div style="font-size:10px;color:'+(variance===0?'#15803d':variance>0?'#1d4ed8':'#c0392b')+';margin-top:2px">'+(variance===0?'\u2713 Balanced':variance>0?'+'+fmt(variance)+' over':fmt(Math.abs(variance))+' short')+'</div>'+
+              (isAdmin()?'<button onclick="recordClosingCount(true)" style="margin-top:8px;padding:4px 12px;background:none;border:1px solid #93c5fd;border-radius:6px;font-size:11px;color:#1d4ed8;cursor:pointer">&#9998; Edit count</button>':'')+
             '</div>':
-            '<div style="background:var(--warning-bg);border:1px dashed #fcd34d;border-radius:8px;padding:10px;text-align:center;cursor:pointer" onclick="recordClosingCount()">'+
+            '<div style="background:var(--warning-bg);border:1px dashed #fcd34d;border-radius:8px;padding:10px;text-align:center;cursor:pointer" onclick="recordClosingCount(false)">'+
               '<div style="font-size:11px;color:#92400e;margin-bottom:4px">Closing cash count</div>'+
               '<div style="font-size:13px;font-weight:600;color:#92400e">Click to count</div>'+
             '</div>')+
@@ -1734,15 +1735,24 @@ function setOpeningFloat(){
   logActivity('Opening float set',closingDate+' — ₦'+amt.toLocaleString(),'');
 }
 
-function recordClosingCount(){
-  var amt=parseFloat(prompt('Enter actual cash count in the till at closing:'));
+function recordClosingCount(isEdit){
+  if(isEdit&&!isAdmin()){alert('Only admin can edit the closing count.');return;}
+  var existing=DB.tillSessions&&DB.tillSessions.find(function(t){return t.date===closingDate;});
+  var current=existing&&existing.closingCount!==null?existing.closingCount:null;
+  var promptMsg=isEdit?'Edit actual cash count for '+closingDate+':\n(Current: ₦'+(current!==null?current.toLocaleString():'not set')+')':'Enter actual cash count in the till at closing:';
+  var amt=parseFloat(prompt(promptMsg));
   if(isNaN(amt)||amt<0){alert('Enter a valid amount.');return;}
   if(!DB.tillSessions)DB.tillSessions=[];
-  var existing=DB.tillSessions.find(function(t){return t.date===closingDate;});
-  if(existing){existing.closingCount=amt;}
-  else{DB.tillSessions.push({id:uid(),date:closingDate,openFloat:0,closingCount:amt,by:DB.currentUser.name});}
+  if(existing){
+    if(isEdit)logActivity('Closing count edited','Date: '+closingDate+' | Old: ₦'+(current||0).toLocaleString()+' → New: ₦'+amt.toLocaleString(),'');
+    existing.closingCount=amt;
+    existing.countEditedBy=isEdit?(DB.currentUser?DB.currentUser.name:'Admin'):existing.countEditedBy;
+    existing.countEditedAt=isEdit?new Date().toLocaleString():existing.countEditedAt;
+  } else {
+    DB.tillSessions.push({id:uid(),date:closingDate,openFloat:0,closingCount:amt,by:DB.currentUser?DB.currentUser.name:'Admin'});
+  }
   saveData();renderPanel();
-  logActivity('Closing cash count',closingDate+' — counted ₦'+amt.toLocaleString(),'');
+  if(!isEdit)logActivity('Closing cash count',closingDate+' — counted ₦'+amt.toLocaleString(),'');
 }
 
 function printClosingReport(){
