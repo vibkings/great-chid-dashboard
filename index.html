@@ -1183,6 +1183,16 @@ function applySnapshot(snapshot) {
   DB.drafts = snapshot.drafts || [];
   DB.pendingDeliveries = snapshot.pendingDeliveries || [];
 
+  // ── One-time migration: reclassify supplier payments from Restock to Supplier Payment ──
+  var migrated=false;
+  (DB.cashflow||[]).forEach(function(c){
+    if(c.type==='out'&&c.cat==='Restock'&&c.desc&&c.desc.indexOf('Supplier payment')===0){
+      c.cat='Supplier Payment';
+      migrated=true;
+    }
+  });
+  if(migrated)saveData();
+
   // ── One-time migration: stamp depositApplied on existing sale records ──
   // Finds negative deposit entries (auto-applied) and patches the matching sale items
   migrateDepositApplied();
@@ -2829,6 +2839,15 @@ function renderPanel(){
   if(activeTab==='inventory'&&invSearch){window._invPage=0;}
   if(activeTab==='sales'&&salesSearch){window._salesPage=0;}
   if(activeTab==='purchases'&&purchaseSearch){setTimeout(function(){window._purchPage=0;},0);}
+  // Restore focus and cursor position for search inputs after re-render
+  var activeSearch=null;
+  if(activeTab==='inventory'&&invSearch)activeSearch='inv-search';
+  if(activeTab==='sales'&&salesSearch)activeSearch='sales-search';
+  if(activeTab==='purchases'&&purchaseSearch)activeSearch='purch-search-input';
+  if(activeSearch){
+    var el=document.getElementById(activeSearch);
+    if(el){el.focus();var v=el.value;el.value='';el.value=v;}
+  }
   window.scrollTo(0,scrollY);
 }
 
@@ -8943,7 +8962,7 @@ function buildPurchases(){
       '<p class="sec-title" style="margin:0">Purchase history</p>'+
       '<div style="position:relative;max-width:320px;width:100%">'+
         '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px">&#128269;</span>'+
-        '<input type="text" placeholder="Search purchases..." value="'+purchaseSearch+'" oninput="purchaseSearch=this.value;window._purchPage=0;renderPanel()" style="padding-left:32px;width:100%;font-size:13px">'+
+        '<input type="text" id="purch-search-input" placeholder="Search purchases..." value="'+purchaseSearch+'" oninput="purchaseSearch=this.value;window._purchPage=0;renderPanel()" style="padding-left:32px;width:100%;font-size:13px">'+
       '</div>'+
     '</div>'+
     (puRows?'<div class="tbl-wrap"><table id="purchases-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Supplier</th><th>Items</th><th style="text-align:center">Units</th><th style="text-align:right">Total</th><th>Payment</th><th>By</th><th></th></tr></thead><tbody>'+puRows+_purchPager+'</tbody></table></div>':'<div class="empty">No purchases recorded yet.</div>')+
