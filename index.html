@@ -9315,8 +9315,9 @@ function buildFinance(){
   }
 
   var salesF  = DB.sales.filter(function(s){ return inRange(s.date, s.month); });
-  var expF    = DB.cashflow.filter(function(c){ return c.type==='out'&&c.cat!=='Restock'&&inRange(c.date,c.month); });
-  var purchF  = DB.cashflow.filter(function(c){ return c.type==='out'&&c.cat==='Restock'&&inRange(c.date,c.month); });
+  var expF    = DB.cashflow.filter(function(c){ return c.type==='out'&&c.cat!=='Restock'&&c.cat!=='Supplier Payment'&&c.cat!=='Supplier Deposit'&&inRange(c.date,c.month); });
+  // Use DB.purchases grandTotal directly — includes paid, credit, part-payment, pending supply
+  var purchF  = (DB.purchases||[]).filter(function(p){ return inRange(p.date, p.month); });
 
   var rev           = salesF.reduce(function(a,s){return a+s.total;},0);
   var profit        = salesF.reduce(function(a,s){return a+s.profit;},0);
@@ -9337,7 +9338,7 @@ function buildFinance(){
   var cashflowInF   = DB.cashflow.filter(function(c){return c.type==='in'&&c.cat==='Sales'&&!c.isDepositApplied&&!c.isExchange&&inRange(c.date,c.month);});
   var cashIn        = cashflowInF.reduce(function(a,c){return a+c.amount;},0);
   var expTotal      = expF.reduce(function(a,c){return a+c.amount;},0);
-  var purchTotal    = purchF.reduce(function(a,c){return a+c.amount;},0);
+  var purchTotal    = purchF.reduce(function(a,p){return a+(p.grandTotal||0);},0);
   var depAppliedF   = DB.cashflow.filter(function(c){return c.isDepositApplied&&c.type==='in'&&inRange(c.date,c.month);});
   var depAppliedTotal = depAppliedF.reduce(function(a,c){return a+c.amount;},0);
   var collectedAmt=Object.values(invMap).reduce(function(a,inv){
@@ -10174,7 +10175,7 @@ function buildPandL(){
   var totalExpenses=expLines.reduce(function(a,e){return a+e.amount;},0);
 
   // ── Supplier payments (restock) ──────────────────────────────
-  var supplierSpend=(DB.cashflow||[]).filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,from,to);}).reduce(function(a,e){return a+e.amount;},0);
+  var supplierSpend=(DB.purchases||[]).filter(function(p){return dateInRange(p.date,from,to);}).reduce(function(a,p){return a+(p.grandTotal||0);},0);
 
   // ── Net profit ───────────────────────────────────────────────
   var netProfit=grossProfit-totalExpenses;
@@ -11621,7 +11622,7 @@ var mCreditPaid=(DB.creditPayments||[]).filter(function(p){return inSelMonth(p.d
 // ── Expenses ─────────────────────────────────────────────
 var mExpLines=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&c.cat!=='Supplier Payment'&&c.cat!=='Supplier Deposit'&&inSelMonth(c.date);});
 var mExpTotal=mExpLines.reduce(function(a,e){return a+e.amount;},0);
-var mRestocking=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&inSelMonth(c.date);}).reduce(function(a,e){return a+e.amount;},0);
+var mRestocking=(DB.purchases||[]).filter(function(p){return inSelMonth(p.date);}).reduce(function(a,p){return a+(p.grandTotal||0);},0);
 var mNetProfit=mGrossProfit-mExpTotal;
 // Net cash = invoices collected + old debts collected - expenses
 var mNetCash=mCashIn+mCreditPaid-mExpTotal;
