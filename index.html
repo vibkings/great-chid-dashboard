@@ -1527,7 +1527,7 @@ function buildClosingReport(){
   var depTotal=depToday.reduce(function(a,d){return a+d.amount;},0);
   // Expenses today
   // Separate expenses from supplier/purchase payments
-  var expToday=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&dateInRange(c.date,closingDate,closingDate);});
+  var expToday=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&c.cat!=='Supplier Payment'&&c.cat!=='Supplier Deposit'&&dateInRange(c.date,closingDate,closingDate);});
   var expTotal=expToday.reduce(function(a,e){return a+e.amount;},0);
   // Supplier payments today
   var suppPayToday=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,closingDate,closingDate);});
@@ -1733,7 +1733,7 @@ function printClosingReport(){
   });
   var cpTotal=(DB.creditPayments||[]).filter(function(p){return dateInRange(p.date,closingDate,closingDate);}).reduce(function(a,p){return a+p.amount;},0);
   var depTotal=(DB.deposits||[]).filter(function(d){return d.amount>0&&dateInRange(d.date,closingDate,closingDate);}).reduce(function(a,d){return a+d.amount;},0);
-  var expToday2=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&dateInRange(c.date,closingDate,closingDate);});
+  var expToday2=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&c.cat!=='Supplier Payment'&&c.cat!=='Supplier Deposit'&&dateInRange(c.date,closingDate,closingDate);});
   var expTotal=expToday2.reduce(function(a,e){return a+e.amount;},0);
   var suppPayToday2=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,closingDate,closingDate);});
   var suppPayTotal2=suppPayToday2.reduce(function(a,e){return a+e.amount;},0);
@@ -2239,7 +2239,7 @@ function sendDailySummaryWhatsApp(){
   var totalPaid=totalRev-creditOwed;
   var cpToday=(DB.creditPayments||[]).filter(function(p){return p.payMode!=='writeoff'&&dateInRange(p.date,new Date().toISOString().slice(0,10),new Date().toISOString().slice(0,10));}).reduce(function(a,p){return a+p.amount;},0);
   var _todayIso=new Date().toISOString().slice(0,10);
-  var expenses=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&dateInRange(c.date,_todayIso,_todayIso);}).reduce(function(a,e){return a+e.amount;},0);
+  var expenses=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&c.cat!=='Supplier Payment'&&c.cat!=='Supplier Deposit'&&dateInRange(c.date,_todayIso,_todayIso);}).reduce(function(a,e){return a+e.amount;},0);
   var suppPayments=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&dateInRange(c.date,_todayIso,_todayIso);}).reduce(function(a,e){return a+e.amount;},0);
 
   var msg=
@@ -2828,7 +2828,7 @@ function renderPanel(){
   p.innerHTML=vnHtml+content+footer;
   if(activeTab==='inventory'&&invSearch){setTimeout(filterInventoryTable,0);}
   if(activeTab==='sales'&&salesSearch){setTimeout(filterSalesTable,0);}
-  if(activeTab==='purchases'&&purchaseSearch){setTimeout(filterPurchaseTable,0);}
+  if(activeTab==='purchases'&&purchaseSearch){setTimeout(function(){window._purchPage=0;},0);}
   window.scrollTo(0,scrollY);
 }
 
@@ -8930,7 +8930,7 @@ function buildPurchases(){
       '<p class="sec-title" style="margin:0">Purchase history</p>'+
       '<div style="position:relative;max-width:320px;width:100%">'+
         '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px">&#128269;</span>'+
-        '<input type="text" placeholder="Search purchases..." value="'+purchaseSearch+'" oninput="purchaseSearch=this.value;renderPanel()" style="padding-left:32px;width:100%;font-size:13px">'+
+        '<input type="text" placeholder="Search purchases..." value="'+purchaseSearch+'" oninput="purchaseSearch=this.value;window._purchPage=0;renderPanel()" style="padding-left:32px;width:100%;font-size:13px">'+
       '</div>'+
     '</div>'+
     (puRows?'<div class="tbl-wrap"><table id="purchases-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Supplier</th><th>Items</th><th style="text-align:center">Units</th><th style="text-align:right">Total</th><th>Payment</th><th>By</th><th></th></tr></thead><tbody>'+puRows+_purchPager+'</tbody></table></div>':'<div class="empty">No purchases recorded yet.</div>')+
@@ -10109,7 +10109,7 @@ function buildPandL(){
   var netRevenue=grossRevenue-totalReturns;
 
   // ── Expenses (non-restock cashflow out) ─────────────────────
-  var expLines=(DB.cashflow||[]).filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&dateInRange(c.date,from,to);});
+  var expLines=(DB.cashflow||[]).filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&c.cat!=='Supplier Payment'&&c.cat!=='Supplier Deposit'&&dateInRange(c.date,from,to);});
   var totalExpenses=expLines.reduce(function(a,e){return a+e.amount;},0);
 
   // ── Supplier payments (restock) ──────────────────────────────
@@ -10973,9 +10973,9 @@ function saveSupplierPayment(supId){
     mode:modeLabel,payMode:mode,bankId:bankId||null,posId:posId||null,
     note:note,date:dateVal,month:month,by:DB.currentUser.name});
 
-  // Record in cashflow as supplier payment outflow
+  // Record in cashflow as supplier payment outflow (NOT Restock - already counted when purchased)
   DB.cashflow.push({id:uid(),desc:'Supplier payment — '+sup.name+(note?' ('+note+')':''),
-    amount:amt,type:'out',cat:'Restock',payMode:mode,bankId:bankId||null,posId:posId||null,
+    amount:amt,type:'out',cat:'Supplier Payment',payMode:mode,bankId:bankId||null,posId:posId||null,
     date:dateVal,month:month});
 
   sup.owedToSupplier=Math.max(0,(sup.owedToSupplier||0)-amt);
@@ -11558,7 +11558,7 @@ var mCashIn=invListM.filter(function(g){return g.payment!=='credit';}).reduce(fu
 var mCreditPaid=(DB.creditPayments||[]).filter(function(p){return inSelMonth(p.date)&&p.payMode!=='writeoff';}).reduce(function(a,p){return a+(p.amount||0);},0);
 
 // ── Expenses ─────────────────────────────────────────────
-var mExpLines=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&inSelMonth(c.date);});
+var mExpLines=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&c.cat!=='Supplier Payment'&&c.cat!=='Supplier Deposit'&&inSelMonth(c.date);});
 var mExpTotal=mExpLines.reduce(function(a,e){return a+e.amount;},0);
 var mRestocking=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&inSelMonth(c.date);}).reduce(function(a,e){return a+e.amount;},0);
 var mNetProfit=mGrossProfit-mExpTotal;
