@@ -1186,12 +1186,19 @@ function applySnapshot(snapshot) {
   // ── One-time migration: reclassify supplier payments from Restock to Supplier Payment ──
   var migrated=false;
   (DB.cashflow||[]).forEach(function(c){
-    if(c.type==='out'&&c.cat==='Restock'&&c.desc&&c.desc.indexOf('Supplier payment')===0){
+    if(c.type==='out'&&c.cat==='Restock'&&c.desc&&(
+      c.desc.indexOf('Supplier payment')===0||
+      c.desc.indexOf('supplier payment')===0||
+      c.desc.indexOf('Payment to ')===0
+    )){
       c.cat='Supplier Payment';
       migrated=true;
     }
   });
-  if(migrated)saveData();
+  if(migrated){
+    console.log('Migration: reclassified supplier payment cashflow entries to Supplier Payment');
+    saveData();
+  }
 
   // ── One-time migration: stamp depositApplied on existing sale records ──
   // Finds negative deposit entries (auto-applied) and patches the matching sale items
@@ -1287,8 +1294,27 @@ function importBackup(file) {
   reader.readAsText(file);
 }
 
-function clearAllData() {
-  showConfirm({
+function fixSupplierPaymentCategories(){
+  var fixed=0;
+  (DB.cashflow||[]).forEach(function(c){
+    if(c.type==='out'&&c.cat==='Restock'&&c.desc&&(
+      c.desc.indexOf('Supplier payment')===0||
+      c.desc.indexOf('supplier payment')===0
+    )){
+      c.cat='Supplier Payment';
+      fixed++;
+    }
+  });
+  if(fixed>0){
+    saveData();
+    showToast('✅ Fixed '+fixed+' cashflow entries. Restocking figures updated.');
+    renderApp();
+  } else {
+    showToast('ℹ️ No entries needed fixing — already clean.');
+  }
+}
+
+function clearAllData() {  showConfirm({
     type:'danger',
     title:'⚠️ Clear ALL data?',
     msg:'This will PERMANENTLY delete all inventory, sales, customers, and everything else. This cannot be undone. Export a backup first.',
@@ -2066,7 +2092,10 @@ function buildSettings(){
     '<p style="font-size:13px;color:#666;margin-bottom:1rem">Terminals shown when "POS" is selected as payment mode.</p>'+
     '<div class="fg" style="grid-template-columns:1fr 1fr auto"><div class="form-group"><label>Terminal name</label><input type="text" id="sp-pos-name" placeholder="e.g. Moniepoint POS 1"></div><div class="form-group"><label>Terminal ID (optional)</label><input type="text" id="sp-pos-tid" placeholder="e.g. TID-001"></div><div class="form-group"><label>&nbsp;</label><button class="btn primary" onclick="addPos()">Add terminal</button></div></div>'+
     '<div class="tbl-wrap"><table><thead><tr><th>Terminal name</th><th>Terminal ID</th><th></th></tr></thead><tbody>'+posRows+'</tbody></table></div>'+
-    (isAdmin()?'<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title" style="color:var(--danger)">⚠ Danger zone</p><p style="font-size:13px;color:#666;margin-bottom:1rem">Permanently delete all business data. This cannot be undone. Export a backup first.</p><button class="btn danger" style="font-size:13px;padding:8px 14px" onclick="clearAllData()">🗑 Clear all data</button>':'');
+    (isAdmin()?'<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title" style="color:var(--danger)">⚠ Danger zone</p><p style="font-size:13px;color:#666;margin-bottom:1rem">Permanently delete all business data. This cannot be undone. Export a backup first.</p><button class="btn danger" style="font-size:13px;padding:8px 14px" onclick="clearAllData()">🗑 Clear all data</button>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title">🔧 Data Fixes</p>'+
+    '<p style="font-size:13px;color:#666;margin-bottom:10px">Fix restocking discrepancy: reclassifies old supplier payment cashflow entries that were incorrectly tagged as Restock.</p>'+
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#1a237e;color:#fff;border-color:#1a237e" onclick="fixSupplierPaymentCategories()">🔧 Fix Restocking Categories</button>':'');
 }
 
 function renderAuth(){
