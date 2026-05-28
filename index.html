@@ -4761,7 +4761,7 @@ function printCustomerInvoice(invNum,custId){
   if(!invSales.length){alert('Invoice not found.');return;}
   var s0=invSales[0];
   var d=new Date(s0.date);var day=isNaN(d.getTime())?new Date().getDate():d.getDate();var mon=isNaN(d.getTime())?new Date().getMonth()+1:d.getMonth()+1;var yr=isNaN(d.getTime())?new Date().getFullYear():d.getFullYear();
-  var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(s.name)+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
+  var rows=invSales.map(function(s,i){var hasP=s.pendingSupply&&((s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending'));var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(s.name)+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var emptyRows='';var minRI=Math.max(12,invSales.length);for(var i=invSales.length;i<minRI;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
   // Date-aware: only count invoices/payments that existed at the time of this invoice
@@ -6095,7 +6095,7 @@ function printInvoice(inv){
   if(!inv){alert('No invoice to print.');return;}
   var d=new Date(inv.date),day=d.getDate(),month2=d.getMonth()+1,year=d.getFullYear();
   var rows=inv.items.map(function(l,i){
-    var hasPartial=l.pendingSupply&&((l.suppliedQty!==undefined&&l.pendingQty>0)||(l.supplyStatus==='partial'||l.supplyStatus==='pending'));
+    var hasPartial=inv.pendingSupply&&((l.suppliedQty!==undefined&&l.pendingQty>0)||(l.supplyStatus==='partial'||l.supplyStatus==='pending'));
     var suppliedQty=l.suppliedQty!==undefined?l.suppliedQty:l.qty;
     var pendingQty=l.pendingQty!==undefined?l.pendingQty:0;
     var qtyCell=hasPartial
@@ -6163,7 +6163,7 @@ function doPrint(mode, inv) {
     var forcedSize=mode==='a4'?'A4':'A5';
     var d=new Date(inv.date),day=d.getDate(),month2=d.getMonth()+1,year=d.getFullYear();
     var rows=inv.items.map(function(l,i){
-    var hasPartial=l.pendingSupply&&((l.suppliedQty!==undefined&&l.pendingQty>0)||(l.supplyStatus==='partial'||l.supplyStatus==='pending'));
+    var hasPartial=inv.pendingSupply&&((l.suppliedQty!==undefined&&l.pendingQty>0)||(l.supplyStatus==='partial'||l.supplyStatus==='pending'));
       var suppliedQty=l.suppliedQty!==undefined?l.suppliedQty:l.qty;
       var pendingQty=l.pendingQty!==undefined?l.pendingQty:0;
       var qtyCell=hasPartial?'<span style="color:#16a34a;font-weight:700">'+suppliedQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pendingQty+' pending</span>':''+l.qty;
@@ -6212,7 +6212,7 @@ function buildThermalHTML(inv){
   var partPaid=isPartPay?(inv.partPayment||0):0;
   var partBalance=isPartPay?Math.max(0,inv.grandTotal-partPaid):0;
   var itemRows=inv.items.map(function(l,i){
-    var hasPartial=l.pendingSupply&&(l.suppliedQty!==undefined&&l.pendingQty>0);
+    var hasPartial=inv.pendingSupply&&(l.suppliedQty!==undefined&&l.pendingQty>0);
     var qtyStr=hasPartial?(l.suppliedQty||0)+' of '+l.qty:l.qty;
     return '<tr>'+
       '<td style="padding:2px 0;font-size:11px">'+(i+1)+'. '+esc(l.name)+(hasPartial?'<br><span style="font-size:9px;color:#888">'+l.pendingQty+' pending</span>':'')+'</td>'+
@@ -8175,7 +8175,7 @@ function reprintInvoice(invNum){
   var invSales=DB.sales.filter(function(s){return (s.invoiceNum||s.id)==invNum;});
   if(!invSales.length){alert('Invoice not found.');return;}
   var s0=invSales[0];var d=new Date(s0.date),day=d.getDate(),mon=d.getMonth()+1,yr=d.getFullYear();
-  var rows=invSales.map(function(s,i){var hasP=(s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending');var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(s.name)+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
+  var rows=invSales.map(function(s,i){var hasP=s.pendingSupply&&((s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending'));var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(s.name)+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var subtotalAll=invSales.reduce(function(a,s){return a+(s.salePrice*s.qty);},0);
   var invoiceDiscAmt=subtotalAll-grandTotal;
