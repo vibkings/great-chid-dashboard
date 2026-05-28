@@ -4949,7 +4949,7 @@ function buildInvoiceHTML(inv){
           (inv.pendingSupply?'⏳ NOT YET SUPPLIED':'✅ SUPPLIED')+
         '</div>'+
         '<div style="font-size:9px;color:'+(inv.pendingSupply?'#92400e':'#166534')+';margin-top:2px">'+
-          (inv.pendingSupply?'Payment received. Goods will be supplied at a later date.':'Goods collected by customer'+(inv.wasEverPending&&inv.supplyDate?' on '+inv.supplyDate:'.'))+
+          (inv.pendingSupply?'Payment received. Goods will be supplied at a later date.':'Goods collected by customer'+(inv.supplyDate?' on '+inv.supplyDate:'.'))+
         '</div>'+
       '</div>'+
       '<div style="text-align:center;flex-shrink:0">'+
@@ -5299,9 +5299,15 @@ function filterSupDd(val, showAll){
   if(!matches.length){dd.style.display='none';return;}
   dd.innerHTML=matches.map(function(s){
     var badge=s.owedToSupplier>0?'<span style="color:#dc2626;font-size:10px;margin-left:6px">owes '+fmt(s.owedToSupplier)+'</span>':'';
-    return '<div onclick="selectSupDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'"><b>'+esc(s.name)+'</b>'+badge+'<div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
+    return '<div data-sid="'+s.id+'" data-sname="'+s.name.replace(/"/g,'&quot;').replace(/'/g,'&#39;')+'" class="sup-dd-item" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'"><b>'+esc(s.name)+'</b>'+badge+'<div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
   }).join('');
   dd.style.display='block';
+  dd.querySelectorAll('.sup-dd-item').forEach(function(el){
+    el.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      selectSupDd(this.getAttribute('data-sid'),this.getAttribute('data-sname').replace(/&quot;/g,'"').replace(/&#39;/g,"'"));
+    });
+  });
 }
 function selectSupDd(id, name){
   var inp=document.getElementById('pu-sup-search');
@@ -5333,11 +5339,17 @@ function filterSupPayDd(val, showAll){
   var suppliers=DB.suppliers||[];
   var q=(val||'').toLowerCase().trim();
   var matches=showAll&&!q?suppliers:suppliers.filter(function(s){return s.name.toLowerCase().indexOf(q)>=0;});
-  var allOpt='<div onclick="selectSupPayDd(\'\',\'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;color:#6b7280" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">All Suppliers</div>';
+  var allOpt='<div class="sup-pay-dd-item" data-sid="" data-sname="" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;color:#6b7280" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">All Suppliers</div>';
   dd.innerHTML=allOpt+matches.map(function(s){
-    return '<div onclick="selectSupPayDd(\''+s.id+'\',\''+s.name.replace(/'/g,'&#39;')+'\')" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'"><b>'+esc(s.name)+'</b><div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
+    return '<div data-sid="'+s.id+'" data-sname="'+s.name.replace(/"/g,'&quot;').replace(/'/g,'&#39;')+'" class="sup-pay-dd-item" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px" onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'"><b>'+esc(s.name)+'</b><div style="font-size:11px;color:#9ca3af">'+(s.phone||'')+'</div></div>';
   }).join('');
   dd.style.display='block';
+  dd.querySelectorAll('.sup-pay-dd-item').forEach(function(el){
+    el.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      selectSupPayDd(this.getAttribute('data-sid'),this.getAttribute('data-sname').replace(/&quot;/g,'"').replace(/&#39;/g,"'"));
+    });
+  });
 }
 function selectSupPayDd(id, name){
   var inp=document.getElementById('sup-pay-filter-search');
@@ -6083,7 +6095,7 @@ function printInvoice(inv){
   if(!inv){alert('No invoice to print.');return;}
   var d=new Date(inv.date),day=d.getDate(),month2=d.getMonth()+1,year=d.getFullYear();
   var rows=inv.items.map(function(l,i){
-    var hasPartial=(l.suppliedQty!==undefined&&l.pendingQty>0)||(l.supplyStatus==='partial'||l.supplyStatus==='pending');
+    var hasPartial=l.pendingSupply&&((l.suppliedQty!==undefined&&l.pendingQty>0)||(l.supplyStatus==='partial'||l.supplyStatus==='pending'));
     var suppliedQty=l.suppliedQty!==undefined?l.suppliedQty:l.qty;
     var pendingQty=l.pendingQty!==undefined?l.pendingQty:0;
     var qtyCell=hasPartial
@@ -6102,7 +6114,7 @@ function printInvoice(inv){
   var _invPrintTotal=inv.payment==='deposit'?(inv.subtotalAll||(inv.grandTotal||0))-(inv.invoiceDiscAmt||0):inv.grandTotal;
   var _invSales=DB.sales.filter(function(s){return s.invoiceNum===inv.invoiceNum;});
   var _invDepApplied=inv.depositApplied||_invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
-  var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:inv.pendingSupply,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:liveOutstanding,prevInvTotal:0});
+  var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:inv.pendingSupply,wasEverPending:inv.wasEverPending||false,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:liveOutstanding,prevInvTotal:0});
   // Show print mode dialog
   showPrintDialog(inv, html);
 }
@@ -6151,7 +6163,7 @@ function doPrint(mode, inv) {
     var forcedSize=mode==='a4'?'A4':'A5';
     var d=new Date(inv.date),day=d.getDate(),month2=d.getMonth()+1,year=d.getFullYear();
     var rows=inv.items.map(function(l,i){
-      var hasPartial=(l.suppliedQty!==undefined&&l.pendingQty>0)||(l.supplyStatus==='partial'||l.supplyStatus==='pending');
+    var hasPartial=l.pendingSupply&&((l.suppliedQty!==undefined&&l.pendingQty>0)||(l.supplyStatus==='partial'||l.supplyStatus==='pending'));
       var suppliedQty=l.suppliedQty!==undefined?l.suppliedQty:l.qty;
       var pendingQty=l.pendingQty!==undefined?l.pendingQty:0;
       var qtyCell=hasPartial?'<span style="color:#16a34a;font-weight:700">'+suppliedQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pendingQty+' pending</span>':''+l.qty;
@@ -6186,7 +6198,7 @@ function buildInvoiceHTMLSized(inv,rows,forcedSize,liveOutstanding){
     grandTotal:inv.grandTotal,payment:inv.payment,payMode:inv.payMode,
     depTopupMode:inv.depTopupMode||null,depositApplied:inv.depositApplied||0,
     bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,
-    seller:inv.seller,pendingSupply:inv.pendingSupply,supplyDate:inv.supplyDate||null,
+    seller:inv.seller,pendingSupply:inv.pendingSupply,wasEverPending:inv.wasEverPending||false,supplyDate:inv.supplyDate||null,
     partPayment:inv.partPayment||0,outstandingBal:liveOutstanding,prevInvTotal:0
   });
   inv.items=savedItems;
@@ -6200,7 +6212,7 @@ function buildThermalHTML(inv){
   var partPaid=isPartPay?(inv.partPayment||0):0;
   var partBalance=isPartPay?Math.max(0,inv.grandTotal-partPaid):0;
   var itemRows=inv.items.map(function(l,i){
-    var hasPartial=(l.suppliedQty!==undefined&&l.pendingQty>0);
+    var hasPartial=l.pendingSupply&&(l.suppliedQty!==undefined&&l.pendingQty>0);
     var qtyStr=hasPartial?(l.suppliedQty||0)+' of '+l.qty:l.qty;
     return '<tr>'+
       '<td style="padding:2px 0;font-size:11px">'+(i+1)+'. '+esc(l.name)+(hasPartial?'<br><span style="font-size:9px;color:#888">'+l.pendingQty+' pending</span>':'')+'</td>'+
@@ -12916,15 +12928,22 @@ function prodReportLiveSearch(val, showAll){
                showAll?inventory.slice(0,40):[];
   if(!matches.length){dd.style.display='none';return;}
   dd.innerHTML=matches.map(function(i){
-    return '<div onclick="prodReportSelect(\''+i.id+'\',\''+i.name.replace(/'/g,'&#39;')+'\')" '+
+    return '<div data-pid="'+i.id+'" data-pname="'+i.name.replace(/"/g,'&quot;').replace(/'/g,'&#39;')+'" class="prod-rep-dd-item" '+
       'style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center" '+
       'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'var(--white)\'">'+
-      '<span><b style="font-size:13px">'+esc(i.name)+'</b> <span style="color:#9ca3af;font-size:11px;margin-left:6px">'+( i.cat||'')+'</span></span>'+
+      '<span><b style="font-size:13px">'+esc(i.name)+'</b> <span style="color:#9ca3af;font-size:11px;margin-left:6px">'+(i.cat||'')+'</span></span>'+
       '<span style="color:var(--primary);font-size:12px;font-weight:600;white-space:nowrap;margin-left:8px">'+i.qty+' in stock</span>'+
     '</div>';
   }).join('');
   dd.style.display='block';
+  dd.querySelectorAll('.prod-rep-dd-item').forEach(function(el){
+    el.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      prodReportSelect(this.getAttribute('data-pid'),this.getAttribute('data-pname').replace(/&quot;/g,'"').replace(/&#39;/g,"'"));
+    });
+  });
 }
+
 
 function prodReportSelect(id, name){
   prodReportItemId=id;
