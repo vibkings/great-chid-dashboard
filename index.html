@@ -11222,226 +11222,6 @@ function buildReports(){
   }
 
 
-  // ── MONTHLY SUMMARY REPORT ──────────────────────────────────
-function buildMonthlyReport(){
-  console.log('buildMonthlyReport called, activeTab='+activeTab);
-    var now=new Date();
-    var selMonth=window._monthSumMonth||(now.getFullYear()+'-'+(String(now.getMonth()+1).padStart(2,'0')));
-    var selD=new Date(selMonth+'-02');
-    var selM=selD.getMonth(),selY=selD.getFullYear();
-    var monthLabel=selD.toLocaleString('default',{month:'long',year:'numeric'});
-
-    // Build last 24 months for selector
-    var mOpts='';
-    for(var mi=0;mi<24;mi++){
-      var md=new Date(now.getFullYear(),now.getMonth()-mi,1);
-      var mv=md.getFullYear()+'-'+String(md.getMonth()+1).padStart(2,'0');
-      mOpts+='<option value="'+mv+'"'+(mv===selMonth?' selected':'')+'>'+md.toLocaleString('default',{month:'long',year:'numeric'})+'</option>';
-    }
-
-    // Helper: is date in selected month
-    var inSelMonth=function(dateStr){
-      var d=parseDate(dateStr);
-      return d&&d.getMonth()===selM&&d.getFullYear()===selY;
-    };
-
-    // ── Revenue & Profit ──────────────────────────────────────
-    var mSales=DB.sales.filter(function(s){return inSelMonth(s.date);});
-    var invMapM={};
-    mSales.forEach(function(s){
-      var k=s.invoiceNum||s.id;
-      if(!invMapM[k]){
-        invMapM[k]={
-          total:0,profit:0,
-          payment:s.payment,
-          payMode:s.payMode||'cash',
-          splitPayment:s.splitPayment||null,
-          partPayment:s.partPayment||0,
-          depositApplied:s.depositApplied||0
-        };
-      }
-      // partPayment only set on first line — always take the max found across lines
-      if(s.partPayment)invMapM[k].partPayment=Math.max(invMapM[k].partPayment,s.partPayment);
-      invMapM[k].total+=s.total;
-      invMapM[k].profit+=s.profit;
-    });
-    var invListM=Object.values(invMapM);
-    var mRev=invListM.reduce(function(a,g){return a+g.total;},0);
-    var mGrossProfit=invListM.reduce(function(a,g){return a+g.profit;},0);
-
-    // ── Still Owed: use live creditCustomers & creditPayments for accuracy ──
-    // New credit invoices raised this month
-    var mCreditOwed=invListM.filter(function(g){return g.payment==='credit';}).reduce(function(a,g){return a+Math.max(0,g.total-(g.depositApplied||0));},0);
-    var mPartOwed=invListM.filter(function(g){return g.payment==='part';}).reduce(function(a,g){return a+Math.max(0,g.total-g.partPayment-(g.depositApplied||0));},0);
-    var mTotalOwed=mCreditOwed+mPartOwed;
-
-    // ── Cash Received: only from paid invoices this month ────
-    var mCashIn=invListM.filter(function(g){return g.payment!=='credit';}).reduce(function(a,g){
-      if(g.payment==='part')return a+(g.partPayment||0);
-      return a+g.total;
-    },0);
-    // Credit payments collected this month (old debts paid)
-    var mCreditPaid=(DB.creditPayments||[]).filter(function(p){return inSelMonth(p.date)&&p.payMode!=='writeoff';}).reduce(function(a,p){return a+(p.amount||0);},0);
-
-    // ── Expenses ─────────────────────────────────────────────
-    var mExpLines=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&inSelMonth(c.date);});
-    var mExpTotal=mExpLines.reduce(function(a,e){return a+e.amount;},0);
-    var mRestocking=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&inSelMonth(c.date);}).reduce(function(a,e){return a+e.amount;},0);
-    var mNetProfit=mGrossProfit-mExpTotal;
-    // Net cash = invoices collected + old debts collected - expenses
-    var mNetCash=mCashIn+mCreditPaid-mExpTotal;
-
-    // ── Expense breakdown ────────────────────────────────────
-    var mExpCats={};
-    mExpLines.forEach(function(e){var cat=e.cat||'Other';if(!mExpCats[cat])mExpCats[cat]=0;mExpCats[cat]+=e.amount;});
-    var mExpCatRows=Object.entries(mExpCats).sort(function(a,b){return b[1]-a[1];}).map(function(ec){
-      return '<tr><td style="font-size:12px">'+esc(ec[0])+'</td><td style="text-align:right;font-size:12px">'+fmt(ec[1])+'</td></tr>';
-    }).join('');
-
-    // ── Top 5 items by revenue ───────────────────────────────
-    var itemMapM={};
-    mSales.forEach(function(s){
-      var k=s.itemId||s.name;
-      if(!itemMapM[k])itemMapM[k]={name:s.name,qty:0,rev:0,profit:0};
-      itemMapM[k].qty+=s.qty||1;
-      itemMapM[k].rev+=s.total;
-      itemMapM[k].profit+=s.profit;
-    });
-    var topItems=Object.values(itemMapM).sort(function(a,b){return b.rev-a.rev;}).slice(0,5);
-    var topRows=topItems.map(function(it,i){
-      return '<tr>'+
-        '<td style="font-size:12px"><b>'+(i+1)+'.</b> '+esc(it.name)+'</td>'+
-        '<td style="text-align:center;font-size:12px">'+it.qty+'</td>'+
-        '<td style="text-align:right;font-size:12px">'+fmt(it.rev)+'</td>'+
-        '<td style="text-align:right;font-size:12px;color:#15803d">'+fmt(it.profit)+'</td>'+
-      '</tr>';
-    }).join('');
-
-    // ── Credit summary ───────────────────────────────────────
-    var creditCusts=DB.customers.filter(function(c){return (c.creditBalance||0)>0;}).sort(function(a,b){return (b.creditBalance||0)-(a.creditBalance||0);}).slice(0,5);
-    var creditRows=creditCusts.map(function(c){
-      return '<tr>'+
-        '<td style="font-size:12px">'+esc(c.name)+'</td>'+
-        '<td style="font-size:12px;color:#6b7280">'+(c.phone||'—')+'</td>'+
-        '<td style="text-align:right;font-size:12px;color:#dc2626;font-weight:700">'+fmt(c.creditBalance||0)+'</td>'+
-      '</tr>';
-    }).join('');
-    var totalCreditAllTime=DB.customers.reduce(function(a,c){return a+(c.creditBalance||0);},0); // kept for WhatsApp/print functions
-
-    // ── Payment mode breakdown — same method as Financial Dashboard ─
-    var pmCash=0,pmPos=0,pmTransfer=0;
-    mSales.forEach(function(s){
-      if(s.payMode==='split'&&s.splitPayment){
-        var sp=s.splitPayment;
-        var ratio=s.total/((sp.amt1||0)+(sp.amt2||0))||1;
-        if(sp.mode1==='cash')pmCash+=sp.amt1*ratio;
-        else if(sp.mode1==='pos')pmPos+=sp.amt1*ratio;
-        else if(sp.mode1==='transfer')pmTransfer+=sp.amt1*ratio;
-        if(sp.mode2==='cash')pmCash+=sp.amt2*ratio;
-        else if(sp.mode2==='pos')pmPos+=sp.amt2*ratio;
-        else if(sp.mode2==='transfer')pmTransfer+=sp.amt2*ratio;
-      } else if(s.payment!=='credit'){
-        if(s.payMode==='cash')pmCash+=s.total;
-        else if(s.payMode==='pos')pmPos+=s.total;
-        else if(s.payMode==='transfer')pmTransfer+=s.total;
-      }
-    });
-
-    // ── Staff performance ────────────────────────────────────
-    var staffMapM={};
-    invListM.forEach(function(g){});
-    mSales.forEach(function(s){
-      var k=s.seller||'Unknown';
-      if(!staffMapM[k])staffMapM[k]={name:k,invoices:new Set(),rev:0,profit:0};
-      staffMapM[k].invoices.add(s.invoiceNum||s.id);
-      staffMapM[k].rev+=s.total;
-      staffMapM[k].profit+=s.profit;
-    });
-    var staffRows=Object.values(staffMapM).sort(function(a,b){return b.rev-a.rev;}).map(function(st){
-      return '<tr>'+
-        '<td style="font-size:12px">'+esc(st.name)+'</td>'+
-        '<td style="text-align:center;font-size:12px">'+st.invoices.size+'</td>'+
-        '<td style="text-align:right;font-size:12px">'+fmt(st.rev)+'</td>'+
-        '<td style="text-align:right;font-size:12px;color:#15803d">'+fmt(st.profit)+'</td>'+
-      '</tr>';
-    }).join('');
-
-    // Store computed data for print/WhatsApp functions
-    window._monthlySummaryData={
-      monthLabel:monthLabel, selMonth:selMonth,
-      mRev:mRev, mGrossProfit:mGrossProfit, mNetProfit:mNetProfit,
-      mNetCash:mNetCash, mCashIn:mCashIn, mCreditPaid:mCreditPaid,
-      mExpTotal:mExpTotal, mRestocking:mRestocking,
-      mCreditOwed:mCreditOwed, mPartOwed:mPartOwed, mTotalOwed:mTotalOwed,
-      invCount:invListM.length, topItems:topItems,
-      pmCash:pmCash, pmPos:pmPos, pmTransfer:pmTransfer,
-      mExpCats:mExpCats, totalCreditAllTime:totalCreditAllTime,
-      creditCusts:creditCusts
-    };
-
-    // ── Total credit owed live (from customer records — most accurate) ──
-    var mLiveCreditOwed=DB.customers.reduce(function(a,c){return a+(c.creditBalance||0);},0);
-
-    var marginPct=mRev>0?Math.round(mNetProfit/mRev*100):0;
-
-    return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap">'+
-      '<select onchange="window._monthSumMonth=this.value;renderApp()" style="font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--border)">'+mOpts+'</select>'+
-      '<button class="btn" onclick="printMonthlySummary()" style="color:#1a237e;border-color:#93c5fd">&#128438; Print</button>'+
-      '<button class="btn" onclick="shareMonthlySummaryWhatsApp()" style="background:#25D366;color:#fff;border-color:#25D366">&#128242; Send on WhatsApp</button>'+
-    '</div>'+
-
-    // KPI row
-    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:1rem">'+
-      mc('Revenue',fmt(mRev),invListM.length+' invoices','')+
-      mc('Gross Profit',fmt(mGrossProfit),pct(mGrossProfit,mRev)+' margin',mGrossProfit>=0?'green':'red')+
-      mc('Net Profit',fmt(mNetProfit),marginPct+'% after expenses',mNetProfit>=0?'green':'red')+
-      mc('Net Cash',fmt(mNetCash),'Sales cash + debt collected − expenses',mNetCash>=0?'green':'red')+
-    '</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:1rem">'+
-      mc('Cash Received',fmt(mCashIn),'From this month\'s invoices','')+
-      mc('Credit Collected',fmt(mCreditPaid),'Old debts paid this month',mCreditPaid>0?'green':'')+
-      mc('Owed This Month',fmt(mTotalOwed),'New credit not yet paid','amber')+
-      mc('Total Credit (All Time)',fmt(mLiveCreditOwed),'Live balance — all customers','amber')+
-    '</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:1rem">'+
-      mc('Expenses',fmt(mExpTotal),'Operating costs this month','red')+
-      (mRestocking>0?mc('Restocking',fmt(mRestocking),'Stock purchased this month','red'):'')+
-    '</div>'+
-
-    // Payment breakdown
-    '<p class="sec-title">Payment breakdown</p>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:1rem">'+
-      mc('Cash',fmt(pmCash),'','')+mc('POS',fmt(pmPos),'','')+mc('Transfer',fmt(pmTransfer),'','')+
-    '</div>'+
-
-    // Top items
-    (topItems.length?
-      '<p class="sec-title">Top 5 items by revenue</p>'+
-      '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th style="text-align:center">Qty sold</th><th style="text-align:right">Revenue</th><th style="text-align:right">Profit</th></tr></thead><tbody>'+topRows+'</tbody></table></div>'
-    :'')+
-
-    // Expense breakdown
-    (mExpCatRows?
-      '<p class="sec-title">Expenses breakdown</p>'+
-      '<div class="tbl-wrap"><table><thead><tr><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+mExpCatRows+'</tbody></table></div>'
-    :'')+
-
-    // Staff performance
-    (staffRows?
-      '<p class="sec-title">Staff performance</p>'+
-      '<div class="tbl-wrap"><table><thead><tr><th>Staff</th><th style="text-align:center">Invoices</th><th style="text-align:right">Revenue</th><th style="text-align:right">Profit</th></tr></thead><tbody>'+staffRows+'</tbody></table></div>'
-    :'')+
-
-    // Credit summary
-    '<p class="sec-title">Credit outstanding (all time top 5)</p>'+
-    '<div class="metrics" style="grid-template-columns:repeat(2,1fr);margin-bottom:1rem">'+
-      mc('New credit this month',fmt(mCreditOwed),'From this month\'s invoices','amber')+
-      mc('Total owed (all time)',fmt(mLiveCreditOwed),'Live balance — all customers','amber')+
-    '</div>'+
-    (creditRows?
-      '<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th style="text-align:right">Balance owed</th></tr></thead><tbody>'+creditRows+'</tbody></table></div>'
-    :'<div class="empty">No outstanding credit balances.</div>');
-}
 
 
   if(reportTab==='income'){
@@ -11714,6 +11494,227 @@ function buildMonthlyReport(){
   '</div>'+
   '<div class="metrics">'+mc('Records',filtered.length,'Items','')+ mc('Revenue',fmt(totalRev),'','')+mc('Profit',fmt(totalProfit),pct(totalProfit,totalRev)+' margin',totalProfit>=0?'green':'red')+mc('Discounts',fmt(totalDisc),'','amber')+'</div>'+
   (rows?'<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Invoice #</th><th>Item</th><th>Customer</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Discount</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="empty">No records for this filter.</div>');
+}
+
+// ── Monthly Summary Report (standalone) ────────────────
+function buildMonthlyReport(){
+  console.log('buildMonthlyReport called, activeTab='+activeTab);
+var now=new Date();
+var selMonth=window._monthSumMonth||(now.getFullYear()+'-'+(String(now.getMonth()+1).padStart(2,'0')));
+var selD=new Date(selMonth+'-02');
+var selM=selD.getMonth(),selY=selD.getFullYear();
+var monthLabel=selD.toLocaleString('default',{month:'long',year:'numeric'});
+
+// Build last 24 months for selector
+var mOpts='';
+for(var mi=0;mi<24;mi++){
+  var md=new Date(now.getFullYear(),now.getMonth()-mi,1);
+  var mv=md.getFullYear()+'-'+String(md.getMonth()+1).padStart(2,'0');
+  mOpts+='<option value="'+mv+'"'+(mv===selMonth?' selected':'')+'>'+md.toLocaleString('default',{month:'long',year:'numeric'})+'</option>';
+}
+
+// Helper: is date in selected month
+var inSelMonth=function(dateStr){
+  var d=parseDate(dateStr);
+  return d&&d.getMonth()===selM&&d.getFullYear()===selY;
+};
+
+// ── Revenue & Profit ──────────────────────────────────────
+var mSales=DB.sales.filter(function(s){return inSelMonth(s.date);});
+var invMapM={};
+mSales.forEach(function(s){
+  var k=s.invoiceNum||s.id;
+  if(!invMapM[k]){
+    invMapM[k]={
+      total:0,profit:0,
+      payment:s.payment,
+      payMode:s.payMode||'cash',
+      splitPayment:s.splitPayment||null,
+      partPayment:s.partPayment||0,
+      depositApplied:s.depositApplied||0
+    };
+  }
+  // partPayment only set on first line — always take the max found across lines
+  if(s.partPayment)invMapM[k].partPayment=Math.max(invMapM[k].partPayment,s.partPayment);
+  invMapM[k].total+=s.total;
+  invMapM[k].profit+=s.profit;
+});
+var invListM=Object.values(invMapM);
+var mRev=invListM.reduce(function(a,g){return a+g.total;},0);
+var mGrossProfit=invListM.reduce(function(a,g){return a+g.profit;},0);
+
+// ── Still Owed: use live creditCustomers & creditPayments for accuracy ──
+// New credit invoices raised this month
+var mCreditOwed=invListM.filter(function(g){return g.payment==='credit';}).reduce(function(a,g){return a+Math.max(0,g.total-(g.depositApplied||0));},0);
+var mPartOwed=invListM.filter(function(g){return g.payment==='part';}).reduce(function(a,g){return a+Math.max(0,g.total-g.partPayment-(g.depositApplied||0));},0);
+var mTotalOwed=mCreditOwed+mPartOwed;
+
+// ── Cash Received: only from paid invoices this month ────
+var mCashIn=invListM.filter(function(g){return g.payment!=='credit';}).reduce(function(a,g){
+  if(g.payment==='part')return a+(g.partPayment||0);
+  return a+g.total;
+},0);
+// Credit payments collected this month (old debts paid)
+var mCreditPaid=(DB.creditPayments||[]).filter(function(p){return inSelMonth(p.date)&&p.payMode!=='writeoff';}).reduce(function(a,p){return a+(p.amount||0);},0);
+
+// ── Expenses ─────────────────────────────────────────────
+var mExpLines=DB.cashflow.filter(function(c){return c.type==='out'&&!c.isReturn&&c.cat!=='Restock'&&c.cat!=='Change'&&inSelMonth(c.date);});
+var mExpTotal=mExpLines.reduce(function(a,e){return a+e.amount;},0);
+var mRestocking=DB.cashflow.filter(function(c){return c.type==='out'&&c.cat==='Restock'&&inSelMonth(c.date);}).reduce(function(a,e){return a+e.amount;},0);
+var mNetProfit=mGrossProfit-mExpTotal;
+// Net cash = invoices collected + old debts collected - expenses
+var mNetCash=mCashIn+mCreditPaid-mExpTotal;
+
+// ── Expense breakdown ────────────────────────────────────
+var mExpCats={};
+mExpLines.forEach(function(e){var cat=e.cat||'Other';if(!mExpCats[cat])mExpCats[cat]=0;mExpCats[cat]+=e.amount;});
+var mExpCatRows=Object.entries(mExpCats).sort(function(a,b){return b[1]-a[1];}).map(function(ec){
+  return '<tr><td style="font-size:12px">'+esc(ec[0])+'</td><td style="text-align:right;font-size:12px">'+fmt(ec[1])+'</td></tr>';
+}).join('');
+
+// ── Top 5 items by revenue ───────────────────────────────
+var itemMapM={};
+mSales.forEach(function(s){
+  var k=s.itemId||s.name;
+  if(!itemMapM[k])itemMapM[k]={name:s.name,qty:0,rev:0,profit:0};
+  itemMapM[k].qty+=s.qty||1;
+  itemMapM[k].rev+=s.total;
+  itemMapM[k].profit+=s.profit;
+});
+var topItems=Object.values(itemMapM).sort(function(a,b){return b.rev-a.rev;}).slice(0,5);
+var topRows=topItems.map(function(it,i){
+  return '<tr>'+
+    '<td style="font-size:12px"><b>'+(i+1)+'.</b> '+esc(it.name)+'</td>'+
+    '<td style="text-align:center;font-size:12px">'+it.qty+'</td>'+
+    '<td style="text-align:right;font-size:12px">'+fmt(it.rev)+'</td>'+
+    '<td style="text-align:right;font-size:12px;color:#15803d">'+fmt(it.profit)+'</td>'+
+  '</tr>';
+}).join('');
+
+// ── Credit summary ───────────────────────────────────────
+var creditCusts=DB.customers.filter(function(c){return (c.creditBalance||0)>0;}).sort(function(a,b){return (b.creditBalance||0)-(a.creditBalance||0);}).slice(0,5);
+var creditRows=creditCusts.map(function(c){
+  return '<tr>'+
+    '<td style="font-size:12px">'+esc(c.name)+'</td>'+
+    '<td style="font-size:12px;color:#6b7280">'+(c.phone||'—')+'</td>'+
+    '<td style="text-align:right;font-size:12px;color:#dc2626;font-weight:700">'+fmt(c.creditBalance||0)+'</td>'+
+  '</tr>';
+}).join('');
+var totalCreditAllTime=DB.customers.reduce(function(a,c){return a+(c.creditBalance||0);},0); // kept for WhatsApp/print functions
+
+// ── Payment mode breakdown — same method as Financial Dashboard ─
+var pmCash=0,pmPos=0,pmTransfer=0;
+mSales.forEach(function(s){
+  if(s.payMode==='split'&&s.splitPayment){
+    var sp=s.splitPayment;
+    var ratio=s.total/((sp.amt1||0)+(sp.amt2||0))||1;
+    if(sp.mode1==='cash')pmCash+=sp.amt1*ratio;
+    else if(sp.mode1==='pos')pmPos+=sp.amt1*ratio;
+    else if(sp.mode1==='transfer')pmTransfer+=sp.amt1*ratio;
+    if(sp.mode2==='cash')pmCash+=sp.amt2*ratio;
+    else if(sp.mode2==='pos')pmPos+=sp.amt2*ratio;
+    else if(sp.mode2==='transfer')pmTransfer+=sp.amt2*ratio;
+  } else if(s.payment!=='credit'){
+    if(s.payMode==='cash')pmCash+=s.total;
+    else if(s.payMode==='pos')pmPos+=s.total;
+    else if(s.payMode==='transfer')pmTransfer+=s.total;
+  }
+});
+
+// ── Staff performance ────────────────────────────────────
+var staffMapM={};
+invListM.forEach(function(g){});
+mSales.forEach(function(s){
+  var k=s.seller||'Unknown';
+  if(!staffMapM[k])staffMapM[k]={name:k,invoices:new Set(),rev:0,profit:0};
+  staffMapM[k].invoices.add(s.invoiceNum||s.id);
+  staffMapM[k].rev+=s.total;
+  staffMapM[k].profit+=s.profit;
+});
+var staffRows=Object.values(staffMapM).sort(function(a,b){return b.rev-a.rev;}).map(function(st){
+  return '<tr>'+
+    '<td style="font-size:12px">'+esc(st.name)+'</td>'+
+    '<td style="text-align:center;font-size:12px">'+st.invoices.size+'</td>'+
+    '<td style="text-align:right;font-size:12px">'+fmt(st.rev)+'</td>'+
+    '<td style="text-align:right;font-size:12px;color:#15803d">'+fmt(st.profit)+'</td>'+
+  '</tr>';
+}).join('');
+
+// Store computed data for print/WhatsApp functions
+window._monthlySummaryData={
+  monthLabel:monthLabel, selMonth:selMonth,
+  mRev:mRev, mGrossProfit:mGrossProfit, mNetProfit:mNetProfit,
+  mNetCash:mNetCash, mCashIn:mCashIn, mCreditPaid:mCreditPaid,
+  mExpTotal:mExpTotal, mRestocking:mRestocking,
+  mCreditOwed:mCreditOwed, mPartOwed:mPartOwed, mTotalOwed:mTotalOwed,
+  invCount:invListM.length, topItems:topItems,
+  pmCash:pmCash, pmPos:pmPos, pmTransfer:pmTransfer,
+  mExpCats:mExpCats, totalCreditAllTime:totalCreditAllTime,
+  creditCusts:creditCusts
+};
+
+// ── Total credit owed live (from customer records — most accurate) ──
+var mLiveCreditOwed=DB.customers.reduce(function(a,c){return a+(c.creditBalance||0);},0);
+
+var marginPct=mRev>0?Math.round(mNetProfit/mRev*100):0;
+
+return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:1.25rem;flex-wrap:wrap">'+
+  '<select onchange="window._monthSumMonth=this.value;renderApp()" style="font-size:13px;padding:6px 10px;border-radius:8px;border:1px solid var(--border)">'+mOpts+'</select>'+
+  '<button class="btn" onclick="printMonthlySummary()" style="color:#1a237e;border-color:#93c5fd">&#128438; Print</button>'+
+  '<button class="btn" onclick="shareMonthlySummaryWhatsApp()" style="background:#25D366;color:#fff;border-color:#25D366">&#128242; Send on WhatsApp</button>'+
+'</div>'+
+
+// KPI row
+'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:1rem">'+
+  mc('Revenue',fmt(mRev),invListM.length+' invoices','')+
+  mc('Gross Profit',fmt(mGrossProfit),pct(mGrossProfit,mRev)+' margin',mGrossProfit>=0?'green':'red')+
+  mc('Net Profit',fmt(mNetProfit),marginPct+'% after expenses',mNetProfit>=0?'green':'red')+
+  mc('Net Cash',fmt(mNetCash),'Sales cash + debt collected − expenses',mNetCash>=0?'green':'red')+
+'</div>'+
+'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:1rem">'+
+  mc('Cash Received',fmt(mCashIn),'From this month\'s invoices','')+
+  mc('Credit Collected',fmt(mCreditPaid),'Old debts paid this month',mCreditPaid>0?'green':'')+
+  mc('Owed This Month',fmt(mTotalOwed),'New credit not yet paid','amber')+
+  mc('Total Credit (All Time)',fmt(mLiveCreditOwed),'Live balance — all customers','amber')+
+'</div>'+
+'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:1rem">'+
+  mc('Expenses',fmt(mExpTotal),'Operating costs this month','red')+
+  (mRestocking>0?mc('Restocking',fmt(mRestocking),'Stock purchased this month','red'):'')+
+'</div>'+
+
+// Payment breakdown
+'<p class="sec-title">Payment breakdown</p>'+
+'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:1rem">'+
+  mc('Cash',fmt(pmCash),'','')+mc('POS',fmt(pmPos),'','')+mc('Transfer',fmt(pmTransfer),'','')+
+'</div>'+
+
+// Top items
+(topItems.length?
+  '<p class="sec-title">Top 5 items by revenue</p>'+
+  '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th style="text-align:center">Qty sold</th><th style="text-align:right">Revenue</th><th style="text-align:right">Profit</th></tr></thead><tbody>'+topRows+'</tbody></table></div>'
+:'')+
+
+// Expense breakdown
+(mExpCatRows?
+  '<p class="sec-title">Expenses breakdown</p>'+
+  '<div class="tbl-wrap"><table><thead><tr><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+mExpCatRows+'</tbody></table></div>'
+:'')+
+
+// Staff performance
+(staffRows?
+  '<p class="sec-title">Staff performance</p>'+
+  '<div class="tbl-wrap"><table><thead><tr><th>Staff</th><th style="text-align:center">Invoices</th><th style="text-align:right">Revenue</th><th style="text-align:right">Profit</th></tr></thead><tbody>'+staffRows+'</tbody></table></div>'
+:'')+
+
+// Credit summary
+'<p class="sec-title">Credit outstanding (all time top 5)</p>'+
+'<div class="metrics" style="grid-template-columns:repeat(2,1fr);margin-bottom:1rem">'+
+  mc('New credit this month',fmt(mCreditOwed),'From this month\'s invoices','amber')+
+  mc('Total owed (all time)',fmt(mLiveCreditOwed),'Live balance — all customers','amber')+
+'</div>'+
+(creditRows?
+  '<div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th style="text-align:right">Balance owed</th></tr></thead><tbody>'+creditRows+'</tbody></table></div>'
+:'<div class="empty">No outstanding credit balances.</div>');
 }
 
 function printMonthlySummary(){
