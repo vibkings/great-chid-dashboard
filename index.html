@@ -2412,7 +2412,7 @@ function renderApp(){
   var sections=[
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases','proformas']},
     {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing','supplieroverview','customeroverview','inventoryval','pandl','returnstrack','productreport','monthlysummary']},
-    {label:'Management',tabs:['suppliers','suppayments','customers','settings','users','activitylog','recyclebin']},
+    {label:'Management',tabs:['suppliers','customers','settings','users','activitylog','recyclebin']},
   ];
   // Auto-purge bin items older than 30 days
   autoPurgeBin();
@@ -10787,32 +10787,39 @@ function addSupplierDeposit(supId){
   var bal=getSupDepositBalance(sup.id);
   var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+esc(b.name)+'</option>';}).join('');
   var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+'</option>';}).join('');
-  var html=
-    '<div class="modal-header"><h3>💰 Add Deposit — '+esc(sup.name)+'</h3>'+
-      '<button class="modal-close" onclick="closeModal()">✕</button></div>'+
-    '<div class="modal-body">'+
-      (bal>0?'<div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#065f46">'+
-        '✅ Current deposit balance: <b>'+fmt(bal)+'</b></div>':'')+
-      '<div class="form-row"><label>Amount (₦)</label>'+
-        '<input type="number" id="sdep-amount" placeholder="0" min="1" style="font-size:15px;font-weight:700"></div>'+
-      '<div class="form-row"><label>Payment Mode</label>'+
-        '<select id="sdep-mode" onchange="(function(){var m=document.getElementById(\'sdep-mode\').value;document.getElementById(\'sdep-bank-row\').style.display=m===\'transfer\'?\'flex\':\'none\';document.getElementById(\'sdep-pos-row\').style.display=m===\'pos\'?\'flex\':\'none\';})()">' +
+  var old=document.getElementById('sup-deposit-modal');if(old)old.remove();
+  var ov=document.createElement('div');
+  ov.id='sup-deposit-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  ov.onclick=function(e){if(e.target===ov)ov.remove();};
+  ov.innerHTML=
+    '<div style="background:#fff;border-radius:12px;padding:1.5rem;width:100%;max-width:460px;box-shadow:0 20px 60px rgba(0,0,0,.3)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem">'+
+        '<div style="font-size:16px;font-weight:800">💰 Add Deposit — '+esc(sup.name)+'</div>'+
+        '<button onclick="document.getElementById(\'sup-deposit-modal\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#666">&times;</button>'+
+      '</div>'+
+      (bal>0?'<div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#065f46">✅ Current balance: <b>'+fmt(bal)+'</b></div>':'')+
+      '<div class="form-group"><label>Amount (₦)</label>'+
+        '<input type="number" id="sdep-amount" placeholder="0" min="1" style="font-size:15px;font-weight:700;width:100%"></div>'+
+      '<div class="form-group"><label>Payment Mode</label>'+
+        '<select id="sdep-mode" style="width:100%" onchange="(function(){var m=document.getElementById(\'sdep-mode\').value;document.getElementById(\'sdep-bank-row\').style.display=m===\'transfer\'?\'block\':\'none\';document.getElementById(\'sdep-pos-row\').style.display=m===\'pos\'?\'block\':\'none\';})()">' +
           '<option value="cash">Cash</option>'+
           '<option value="transfer">Bank Transfer</option>'+
           (posOpts?'<option value="pos">POS</option>':'')+
         '</select></div>'+
-      (bankOpts?'<div class="form-row" id="sdep-bank-row" style="display:none"><label>Bank</label><select id="sdep-bank">'+bankOpts+'</select></div>':'')+
-      (posOpts?'<div class="form-row" id="sdep-pos-row" style="display:none"><label>POS Terminal</label><select id="sdep-pos">'+posOpts+'</select></div>':'')+
-      '<div class="form-row"><label>Note (optional)</label>'+
-        '<input type="text" id="sdep-note" placeholder="e.g. Advance for door order"></div>'+
-      '<div class="form-row"><label>Date</label>'+
-        '<input type="date" id="sdep-date" value="'+new Date().toISOString().slice(0,10)+'"></div>'+
-      '<div class="modal-footer">'+
-        '<button class="btn" onclick="closeModal()">Cancel</button>'+
+      '<div id="sdep-bank-row" style="display:none" class="form-group"><label>Bank</label><select id="sdep-bank" style="width:100%">'+bankOpts+'</select></div>'+
+      '<div id="sdep-pos-row" style="display:none" class="form-group"><label>POS Terminal</label><select id="sdep-pos" style="width:100%">'+posOpts+'</select></div>'+
+      '<div class="form-group"><label>Note (optional)</label>'+
+        '<input type="text" id="sdep-note" placeholder="e.g. Advance for door order" style="width:100%"></div>'+
+      '<div class="form-group"><label>Date</label>'+
+        '<input type="date" id="sdep-date" value="'+new Date().toISOString().slice(0,10)+'" style="width:100%"></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1rem">'+
+        '<button class="btn" onclick="document.getElementById(\'sup-deposit-modal\').remove()">Cancel</button>'+
         '<button class="btn primary" onclick="saveSupplierDeposit('+sup.id+')">💾 Save Deposit</button>'+
       '</div>'+
     '</div>';
-  openModal(html);
+  document.body.appendChild(ov);
+  setTimeout(function(){var el=document.getElementById('sdep-amount');if(el)el.focus();},100);
 }
 
 function saveSupplierDeposit(supId){
@@ -10839,8 +10846,8 @@ function saveSupplierDeposit(supId){
   DB.cashflow.push({id:uid(),desc:'Deposit to '+sup.name+(note?' — '+note:''),amount:amount,type:'out',cat:'Supplier Deposit',payMode:mode,bankId:bankId||null,posId:posId||null,date:dateStr,month:month,by:dep.by});
   logActivity('Supplier deposit','Deposit of '+fmt(amount)+' to '+sup.name,{extra:mode});
   saveData();
-  closeModal();
-  renderPanel();
+  var modal=document.getElementById('sup-deposit-modal');if(modal)modal.remove();
+  renderApp();
   showToast('✅ Deposit of '+fmt(amount)+' recorded for '+sup.name);
 }
 
