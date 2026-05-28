@@ -2811,7 +2811,7 @@ function filterWhTable(){
 function renderPanel(){
   var scrollY=window.scrollY||window.pageYOffset;
   var p=document.getElementById('panel-root');if(!p)return;
-  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas,productreport:buildProductReport,monthlysummary:buildMonthlyReport};
+  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas,productreport:buildProductReport,monthlysummary:(typeof buildMonthlyReport==='function'?buildMonthlyReport:function(){return '<div class="empty">Monthly Summary loading...</div>';})};
   var content='';
   try{
     content=(map[activeTab]||function(){return '';})();
