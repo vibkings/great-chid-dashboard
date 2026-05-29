@@ -1597,9 +1597,15 @@ function buildClosingReport(){
     else cash+=g.total;
   });
   var totalPaid=cash+pos+transfer+deposit; // part payment already in cash/pos/transfer
-  // Credit payments received today
-  var cpToday=(DB.creditPayments||[]).filter(function(p){return p.payMode!=='writeoff'&&dateInRange(p.date,closingDate,closingDate);});
+  // Credit payments received today — split by mode so they appear in till cash
+  var cpToday=(DB.creditPayments||[]).filter(function(p){return p.payMode!=='writeoff'&&p.payMode!=='commission'&&dateInRange(p.date,closingDate,closingDate);});
   var cpTotal=cpToday.reduce(function(a,p){return a+p.amount;},0);
+  var cpCash=0,cpPos=0,cpTransfer=0;
+  cpToday.forEach(function(p){
+    if(p.payMode==='pos'){pos+=p.amount;cpPos+=p.amount;}
+    else if(p.payMode==='transfer'){transfer+=p.amount;cpTransfer+=p.amount;}
+    else{cash+=p.amount;cpCash+=p.amount;}
+  });
   // Deposits received today
   var depToday=(DB.deposits||[]).filter(function(d){return d.amount>0&&dateInRange(d.date,closingDate,closingDate);});
   var depTotal=depToday.reduce(function(a,d){return a+d.amount;},0);
@@ -1658,7 +1664,7 @@ function buildClosingReport(){
   var balCash=cash-expCash;
   var balTransfer=transfer-expTransfer;
   var balPos=pos-expPos;
-  var balTotal=(cash+pos+transfer+cpTotal+depTotal+exchBalTotal)-(expTotal+retTotal)-changeToday;
+  var balTotal=(cash+pos+transfer+depTotal+exchBalTotal)-(expTotal+retTotal)-changeToday;
   // By staff
   var byStaff={};
   invList.forEach(function(g){byStaff[g.seller]=byStaff[g.seller]||{count:0,total:0,profit:0};byStaff[g.seller].count++;byStaff[g.seller].total+=g.total;byStaff[g.seller].profit+=g.profit;});
@@ -1741,13 +1747,17 @@ function buildClosingReport(){
         (cash>0||expCash>0?'<tr><td style="font-weight:600">💵 Cash</td><td style="text-align:right;color:#15803d">'+fmt(cash)+'</td><td style="text-align:right;color:#c0392b">'+(expCash>0?'- '+fmt(expCash):'-')+'</td><td style="text-align:right;font-weight:700;color:'+(balCash>=0?'#15803d':'#c0392b')+'">'+fmt(balCash)+'</td></tr>':'')+
         (pos>0||expPos>0?'<tr><td style="font-weight:600">💳 POS</td><td style="text-align:right;color:#15803d">'+fmt(pos)+'</td><td style="text-align:right;color:#c0392b">'+(expPos>0?'- '+fmt(expPos):'-')+'</td><td style="text-align:right;font-weight:700;color:'+(balPos>=0?'#15803d':'#c0392b')+'">'+fmt(balPos)+'</td></tr>':'')+
         (transfer>0||expTransfer>0?'<tr><td style="font-weight:600">🏦 Transfer</td><td style="text-align:right;color:#15803d">'+fmt(transfer)+'</td><td style="text-align:right;color:#c0392b">'+(expTransfer>0?'- '+fmt(expTransfer):'-')+'</td><td style="text-align:right;font-weight:700;color:'+(balTransfer>=0?'#15803d':'#c0392b')+'">'+fmt(balTransfer)+'</td></tr>':'')+
-        (cpTotal>0?'<tr><td style="font-weight:600">✅ Credit Payments</td><td style="text-align:right;color:#15803d">'+fmt(cpTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#15803d">'+fmt(cpTotal)+'</td></tr>':'')+
+        (cpTotal>0?'<tr style="background:#f0fdf4"><td style="font-weight:600">✅ Credit Payments</td><td style="text-align:right;color:#15803d">'+fmt(cpTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#15803d">'+fmt(cpTotal)+'</td></tr>'+
+          (cpCash>0?'<tr><td style="font-size:11px;color:#555;padding-left:20px">└ Cash</td><td style="text-align:right;font-size:11px;color:#15803d">'+fmt(cpCash)+'</td><td></td><td></td></tr>':'')+
+          (cpPos>0?'<tr><td style="font-size:11px;color:#555;padding-left:20px">└ POS</td><td style="text-align:right;font-size:11px;color:#0891b2">'+fmt(cpPos)+'</td><td></td><td></td></tr>':'')+
+          (cpTransfer>0?'<tr><td style="font-size:11px;color:#555;padding-left:20px">└ Transfer</td><td style="text-align:right;font-size:11px;color:#0d6efd">'+fmt(cpTransfer)+'</td><td></td><td></td></tr>':'')
+        :'')+
         (exchBalTotal>0?'<tr><td style="font-weight:600">🔄 Exchange Balance</td><td style="text-align:right;color:#0891b2">'+fmt(exchBalTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0891b2">'+fmt(exchBalTotal)+'</td></tr>':'')+
         (depTotal>0?'<tr><td style="font-weight:600">📥 Deposits</td><td style="text-align:right;color:#0369a1">'+fmt(depTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#0369a1">'+fmt(depTotal)+'</td></tr>':'')+
         (suppPayTotal>0?'<tr style="background:var(--warning-bg)"><td style="font-weight:600;color:#92400e">🚛 Supplier Payments</td><td style="text-align:right;color:#92400e;font-size:11px;font-style:italic">see detail below</td><td style="text-align:right;color:#9ca3af;font-size:11px">—</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(suppPayTotal)+'</td></tr>':'')+
         (retTotal>0?'<tr style="background:var(--danger-bg)"><td style="font-weight:600;color:#c0392b">↩ Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">- '+fmt(retTotal)+'</td><td style="text-align:right;font-weight:700;color:#c0392b">- '+fmt(retTotal)+'</td></tr>':'')+
         (changeToday>0?'<tr style="background:var(--warning-bg)"><td style="font-weight:600;color:#92400e">💵 Change Given (Cash)</td><td style="text-align:right;color:#92400e">Cash out</td><td style="text-align:right;color:#92400e">- '+fmt(changeToday)+'</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(changeToday)+'</td></tr>':'')+
-        '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(openFloat+cash+pos+transfer+cpTotal+depTotal+exchBalTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+retTotal>0?'- '+fmt(expTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal+openFloat)+'</td></tr>'+
+        '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(openFloat+cash+pos+transfer+depTotal+exchBalTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+retTotal>0?'- '+fmt(expTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal+openFloat)+'</td></tr>'+
         '</tbody></table>'+
       '</div>'+
       // Expense detail + Supplier payment detail
