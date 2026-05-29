@@ -1516,6 +1516,9 @@ function buildClosingReport(){
   if(!canDo('reports'))return '<div class="empty">Access denied.</div>';
   var d=new Date(closingDate);
   var dateStr=d.toLocaleDateString('en-NG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  // Opening float — declare at outer scope so Payment Breakdown can access it
+  var _todaySession=(DB.tillSessions||[]).find(function(t){return t.date===closingDate;});
+  var openFloat=_todaySession?(_todaySession.openFloat||0):0;
   // All sales for this date
   var daySales=DB.sales.filter(function(s){return dateInRange(s.date,closingDate,closingDate);});
   // Group by invoice
