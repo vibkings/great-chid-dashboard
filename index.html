@@ -4324,63 +4324,48 @@ function buildCustomers(){
           '</div>'+
           (function(){
             var custPays=(DB.creditPayments||[]).filter(function(p){return String(p.custId)==String(cust.id);});
-            if(!custPays.length)return '';
-            // Build running balance: start from openingBalance, add each credit invoice, subtract each payment
-            // Sort payments by date ascending for running total
+            var custSales=DB.sales.filter(function(s){return String(s.custId)==String(cust.id);});
+            if(!custPays.length&&!custSales.length&&!(cust.openingBalance>0))return '';
             var allEvents=[];
-            // Opening balance as first event
-            if(cust.openingBalance>0){
-              allEvents.push({type:'opening',date:'—',label:'Opening balance',amount:cust.openingBalance,mode:'—',by:'Setup'});
-            }
-            // All credit/part invoices for this customer
+            if(cust.openingBalance>0)allEvents.push({type:'opening',date:'\u2014',label:'Opening balance',amount:cust.openingBalance,mode:'\u2014',by:'Setup'});
             var custInvs={};
-            DB.sales.filter(function(s){return String(s.custId)==String(cust.id)&&(s.payment==='credit'||s.payment==='part');}).forEach(function(s){
+            custSales.forEach(function(s){
               var k=s.invoiceNum||s.id;
-              if(!custInvs[k])custInvs[k]={type:'invoice',date:s.date,label:'Invoice #'+k,amount:s.total,mode:s.payment,by:s.seller};
-              else custInvs[k].amount+=s.total;
+              if(!custInvs[k])custInvs[k]={type:'invoice',date:s.date,label:'Invoice #'+k,amount:0,payment:s.payment,payMode:s.payMode,mode:s.payment==='credit'?'Credit':s.payment==='part'?'Part pay':s.payMode==='pos'?'POS':s.payMode==='transfer'?'Transfer':'Cash',by:s.seller};
+              custInvs[k].amount+=s.total;
             });
             Object.values(custInvs).forEach(function(e){allEvents.push(e);});
-            // All credit payments
             custPays.forEach(function(p){
-              allEvents.push({type:'payment',date:p.date,label:'Payment received',amount:p.amount,mode:payModeLabel(p),by:p.by});
+              allEvents.push({type:'payment',date:p.date,label:'Payment received'+(p.note?' \u2014 '+p.note:''),amount:p.amount,mode:payModeLabel(p),by:p.by});
             });
-            // Returned goods — group by invoice, include regardless of refund type
             var retMap={};
             (DB.salesReturns||[]).filter(function(r){return String(r.custId)==String(cust.id);}).forEach(function(r){
               var k=r.invoiceNum+'_'+r.date;
-              if(!retMap[k])retMap[k]={type:'return',date:r.date,label:'Return — Invoice #'+r.invoiceNum,amount:0,refundType:r.refundType,mode:r.refundType==='cash'?'Cash refund':r.refundType==='credit'?'Store credit':'Exchange',by:r.by};
+              if(!retMap[k])retMap[k]={type:'return',date:r.date,label:'Return \u2014 Invoice #'+r.invoiceNum,amount:0,refundType:r.refundType,mode:r.refundType==='cash'?'Cash refund':r.refundType==='credit'?'Store credit':'Exchange',by:r.by};
               retMap[k].amount+=r.refundAmt||0;
             });
             Object.values(retMap).forEach(function(e){allEvents.push(e);});
-            // Sort: opening first, then by date
-            allEvents.sort(function(a,b){
-              if(a.type==='opening')return -1;
-              if(b.type==='opening')return 1;
-              return parseSaleDate(a.date)-parseSaleDate(b.date);
-            });
-            // Build running balance rows
+            allEvents.sort(function(a,b){if(a.type==='opening')return -1;if(b.type==='opening')return 1;return parseSaleDate(a.date)-parseSaleDate(b.date);});
             var running=0;
             var rows=allEvents.map(function(e){
-              if(e.type==='opening'||e.type==='invoice') running+=e.amount;
-              else if(e.type==='payment') running-=e.amount;
-              else if(e.type==='return'){
-                // Credit/exchange returns reduce the balance; cash returns don't affect credit balance
-                if(e.refundType==='credit'||e.refundType==='exchange') running-=e.amount;
-              }
+              if(e.type==='opening')running+=e.amount;
+              else if(e.type==='invoice'&&(e.payment==='credit'||e.payment==='part'))running+=e.amount;
+              else if(e.type==='payment')running-=e.amount;
+              else if(e.type==='return'&&(e.refundType==='credit'||e.refundType==='exchange'))running-=e.amount;
               running=Math.round(running*100)/100;
-              var amtCell;
-              if(e.type==='payment'){
-                amtCell='<td style="color:#16a34a;font-weight:700">- '+fmt(e.amount)+'</td>';
-              } else if(e.type==='return'){
-                var affectsBalance=e.refundType==='credit'||e.refundType==='exchange';
-                amtCell='<td style="color:'+(affectsBalance?'#16a34a':'#6b7280')+';font-weight:700">'+(affectsBalance?'- ':'')+fmt(e.amount)+(affectsBalance?'':' (cash)')+'</td>';
-              } else {
-                amtCell='<td style="color:#c0392b;font-weight:700">+ '+fmt(e.amount)+'</td>';
-              }
-              var balCell='<td style="font-weight:700;color:'+(running>0?'#c0392b':'#15803d')+'">'+fmt(Math.max(0,running))+(running<=0?' ✓':'')+'</td>';
-              return '<tr style="background:'+(e.type==='return'?'#fff8f0':e.type==='payment'?'#f0fdf4':'')+'">'+
+              var isCreditEvent=e.type==='opening'||(e.type==='invoice'&&(e.payment==='credit'||e.payment==='part'));
+              var amtCell=e.type==='payment'
+                ?'<td style="color:#16a34a;font-weight:700">- '+fmt(e.amount)+'</td>'
+                :e.type==='return'
+                  ?'<td style="color:'+(e.refundType==='credit'||e.refundType==='exchange'?'#16a34a':'#6b7280')+';font-weight:700">'+(e.refundType==='credit'||e.refundType==='exchange'?'- ':'')+fmt(e.amount)+'</td>'
+                  :'<td style="color:#c0392b;font-weight:700">+ '+fmt(e.amount)+'</td>';
+              var balCell=isCreditEvent
+                ?'<td style="font-weight:700;color:'+(running>0?'#c0392b':'#15803d')+'">'+fmt(Math.max(0,running))+(running<=0?' \u2713':'')+'</td>'
+                :'<td style="color:#9ca3af;font-size:11px">\u2014</td>';
+              var rowBg=e.type==='return'?'#fff8f0':e.type==='payment'?'#f0fdf4':isCreditEvent?'#fff5f5':'';
+              return '<tr style="background:'+rowBg+'">'+
                 '<td>'+e.date+'</td>'+
-                '<td>'+(e.type==='return'?'🔄 ':e.type==='payment'?'💳 ':'')+e.label+'</td>'+
+                '<td>'+(e.type==='return'?'\ud83d\udd04 ':e.type==='payment'?'\ud83d\udcb3 ':e.type==='opening'?'\ud83d\udccb ':e.type==='invoice'&&(e.payment==='credit'||e.payment==='part')?' ':'')+e.label+'</td>'+
                 amtCell+
                 '<td style="font-size:11px;color:#555">'+e.mode+'</td>'+
                 balCell+
@@ -4388,7 +4373,10 @@ function buildCustomers(){
               '</tr>';
             }).join('');
             return '<div style="margin-top:14px;border-top:2px solid #e5e7eb;padding-top:12px">'+
-              '<div style="font-size:12px;font-weight:700;color:var(--text1,#374151);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">📋 Account statement — payments & balance history</div>'+
+              '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+                '<div style="font-size:12px;font-weight:700;color:var(--text1,#374151);text-transform:uppercase;letter-spacing:.05em">\ud83d\udccb Full transaction history</div>'+
+                '<button onclick="printCustomerStatement('+cust.id+')" style="padding:5px 12px;background:#065f46;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">\ud83d\udda8\ufe0f Print statement</button>'+
+              '</div>'+
               '<div class="tbl-wrap"><table><thead><tr>'+
                 '<th>Date</th><th>Description</th><th>Amount</th><th>Mode</th><th>Balance</th><th>By</th>'+
               '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
