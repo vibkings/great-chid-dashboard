@@ -4383,6 +4383,34 @@ function buildCustomers(){
             '</div>';
           }())+'</div>':'')+ 
         (function(){
+          var custPays2=(DB.creditPayments||[]).filter(function(p){return String(p.custId)==String(cust.id);});
+          var custSales2=DB.sales.filter(function(s){return String(s.custId)==String(cust.id);});
+          if(!custPays2.length&&!custSales2.length&&!(cust.openingBalance>0))return '';
+          var allTx=[];
+          if(cust.openingBalance>0)allTx.push({type:'opening',date:'-',label:'Opening balance',amount:cust.openingBalance,mode:'-',by:'Setup'});
+          var txInvs={};
+          custSales2.forEach(function(s){var k=s.invoiceNum||s.id;if(!txInvs[k])txInvs[k]={type:'invoice',date:s.date,label:'Invoice #'+k,amount:0,payment:s.payment,payMode:s.payMode,mode:s.payment==='credit'?'Credit':s.payment==='part'?'Part pay':s.payMode==='pos'?'POS':s.payMode==='transfer'?'Transfer':'Cash',by:s.seller};txInvs[k].amount+=s.total;});
+          Object.values(txInvs).forEach(function(e){allTx.push(e);});
+          custPays2.forEach(function(p){allTx.push({type:'payment',date:p.date,label:'Payment received'+(p.note?' - '+p.note:''),amount:p.amount,mode:payModeLabel(p),by:p.by});});
+          var retMap2={};
+          (DB.salesReturns||[]).filter(function(r){return String(r.custId)==String(cust.id);}).forEach(function(r){var k=r.invoiceNum+'_'+r.date;if(!retMap2[k])retMap2[k]={type:'return',date:r.date,label:'Return - Invoice #'+r.invoiceNum,amount:0,refundType:r.refundType,mode:r.refundType==='cash'?'Cash refund':r.refundType==='credit'?'Store credit':'Exchange',by:r.by};retMap2[k].amount+=r.refundAmt||0;});
+          Object.values(retMap2).forEach(function(e){allTx.push(e);});
+          allTx.sort(function(a,b){if(a.type==='opening')return -1;if(b.type==='opening')return 1;return parseSaleDate(a.date)-parseSaleDate(b.date);});
+          var run=0;
+          var txRows=allTx.map(function(e){
+            if(e.type==='opening')run+=e.amount;
+            else if(e.type==='invoice'&&(e.payment==='credit'||e.payment==='part'))run+=e.amount;
+            else if(e.type==='payment')run-=e.amount;
+            else if(e.type==='return'&&(e.refundType==='credit'||e.refundType==='exchange'))run-=e.amount;
+            run=Math.round(run*100)/100;
+            var isCr=e.type==='opening'||(e.type==='invoice'&&(e.payment==='credit'||e.payment==='part'));
+            var amt=e.type==='payment'?'<td style="color:#16a34a;font-weight:700">- '+fmt(e.amount)+'</td>':e.type==='return'?'<td style="color:'+(e.refundType==='credit'||e.refundType==='exchange'?'#16a34a':'#6b7280')+';font-weight:700">'+(e.refundType==='credit'||e.refundType==='exchange'?'- ':'')+fmt(e.amount)+'</td>':'<td style="color:#c0392b;font-weight:700">+ '+fmt(e.amount)+'</td>';
+            var bal=isCr?'<td style="font-weight:700;color:'+(run>0?'#c0392b':'#15803d')+'">'+fmt(Math.max(0,run))+(run<=0?' OK':'')+'</td>':'<td style="color:#9ca3af;font-size:11px">-</td>';
+            return '<tr style="background:'+(e.type==='return'?'#fff8f0':e.type==='payment'?'#f0fdf4':isCr?'#fff5f5':'')+'"><td>'+e.date+'</td><td>'+e.label+'</td>'+amt+'<td style="font-size:11px;color:#555">'+e.mode+'</td>'+bal+'<td style="font-size:11px;color:#666">'+e.by+'</td></tr>';
+          }).join('');
+          return '<div style="margin-top:14px;border-top:2px solid #e5e7eb;padding-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:12px;font-weight:700;color:var(--text1,#374151);text-transform:uppercase;letter-spacing:.05em">Full transaction history</div><button onclick="printCustomerStatement('+cust.id+')" style="padding:5px 12px;background:#065f46;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">Print statement</button></div><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Mode</th><th>Balance</th><th>By</th></tr></thead><tbody>'+txRows+'</tbody></table></div></div>';
+        }())+
+        (function(){
           var deps=(DB.deposits||[]).filter(function(d){return d.custId==cust.id;}).slice().reverse();
           var depTotal=deps.reduce(function(a,d){return a+d.amount;},0);
           var depRows=deps.length?deps.map(function(d){
