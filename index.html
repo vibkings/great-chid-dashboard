@@ -6200,6 +6200,12 @@ function doPrint(mode, inv) {
   var w=window.open('','_blank','width=700,height=900');
   w.document.write(html);w.document.close();
   setTimeout(function(){w.print();},500);
+  // Reset the full sales form if this print came from a fresh sale (not a reprint)
+  if(activeTab==='sales'&&invoiceItems.length){
+    invoiceItems=[];
+    window._pendingProformaConvert=null;
+    renderPanel();
+  }
 }
 
 function buildInvoiceHTMLSized(inv,rows,forcedSize,liveOutstanding){
