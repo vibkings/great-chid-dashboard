@@ -5459,7 +5459,16 @@ function addInvoiceItem(){
   }
   var subtotal=price*qty;
   var profit=(price-item.cost)*qty;
-  invoiceItems.push({lineId:uid(),itemId:item.id,name:item.name,cost:item.cost,qty:qty,price:price,discAmt:0,total:subtotal,profit:profit});
+  // Auto-merge: if same item + same price already in invoice, just add qty
+  var existing=invoiceItems.find(function(l){return l.itemId==item.id&&l.price===price;});
+  if(existing){
+    existing.qty+=qty;
+    existing.total=existing.price*existing.qty;
+    existing.profit=(existing.price-existing.cost)*existing.qty;
+    showToast('✅ '+item.name+' quantity updated to '+existing.qty);
+  } else {
+    invoiceItems.push({lineId:uid(),itemId:item.id,name:item.name,cost:item.cost,qty:qty,price:price,discAmt:0,total:subtotal,profit:profit});
+  }
   document.getElementById('inv-qty').value='';document.getElementById('inv-price').value='';
   document.getElementById('inv-item').value='';
   var s=document.getElementById('inv-item-search');if(s)s.value='';
