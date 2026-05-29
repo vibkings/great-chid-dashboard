@@ -4632,23 +4632,20 @@ function parseInvNum(n){
 function generateInvoiceNum(){
   var now=new Date();
   var currentYear=now.getFullYear();
-  // Reset counter if year has changed
   if(!DB.invoiceYear||DB.invoiceYear!==currentYear){
     DB.invoiceCounter=1;
     DB.invoiceYear=currentYear;
   }
-  // Gap protection: scan existing invoices to find the true next safe number
-  // In case counter drifted (e.g. two users saved at same time), skip ahead
+  // Scan to find true max used
   var prefix=String(currentYear)+'/';
-  var usedNums=DB.sales
+  var allNums=DB.sales
     .filter(function(s){return s.invoiceNum&&String(s.invoiceNum).indexOf(prefix)===0;})
     .map(function(s){return parseInt(String(s.invoiceNum).split('/')[1])||0;});
-  var maxUsed=usedNums.length?Math.max.apply(null,usedNums):0;
-  // Always use max(counter, maxUsed+1) so we never re-use a number
-  if(DB.invoiceCounter<=maxUsed){
-    DB.invoiceCounter=maxUsed+1;
-  }
-  var seq=String(DB.invoiceCounter).padStart(4,'0');
+  var maxUsed=allNums.length?Math.max.apply(null,allNums):0;
+  // Use whichever is higher — do NOT modify DB.invoiceCounter here
+  // Counter is only incremented by saveSale() after successful save
+  var next=Math.max(DB.invoiceCounter,maxUsed+1);
+  var seq=String(next).padStart(4,'0');
   return currentYear+'/'+seq;
 }
 
@@ -8892,7 +8889,7 @@ function buildPurchases(){
         // Row 1: Financial KPIs
         kpiCard('Total Purchases','₦'+Math.round(totalPurchAmt).toLocaleString(),filtPurch.length+' invoices','#1a237e')+
         kpiCard('Total Paid','₦'+Math.round(paidAmt).toLocaleString(),fullyPaidPurch.length+' fully paid','#15803d')+
-        kpiCard('Outstanding','₦'+Math.round(outstandingAmt).toLocaleString(),creditPurch.length+' credit + '+partPurch.length+' part','#dc2626')+
+        kpiCard('Outstanding','₦'+Math.round(DB.suppliers.reduce(function(a,s){return a+(s.owedToSupplier||0);},0)).toLocaleString(),creditPurch.length+' credit + '+partPurch.length+' part','#dc2626')+
         kpiCard('Pending Goods','₦'+Math.round(pendingGoodsVal).toLocaleString(),pendingCount+' pending items','#f59e0b')+
         kpiCard('Suppliers',''+supplierCount,'Active this period','#0891b2')+
         kpiCard('Credit Purchases','₦'+Math.round(totalCreditOwed).toLocaleString(),creditPurch.length+' invoices','#7c3aed')+
