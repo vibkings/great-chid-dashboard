@@ -12595,8 +12595,10 @@ function showPayCommission(custId){
         '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px">Note (optional)</label>'+
         '<input type="text" id="pcm-note" placeholder="e.g. Commission for May 2026" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:7px;font-size:13px;box-sizing:border-box"></div>'+
       '</div>'+
-      '<div style="display:flex;gap:10px;margin-top:18px">'+
-        '<button onclick="recordCommissionPayout('+custId+')" style="flex:1;padding:11px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💸 Pay Commission</button>'+
+      '<div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">'+
+        '<button onclick="recordCommissionPayout('+custId+')" style="flex:1;padding:11px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">💸 Pay out cash</button>'+
+        (cust.creditBalance>0?'<button onclick="applyCommissionToDebt('+custId+')" style="flex:1;padding:11px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">💳 Apply to outstanding debt</button>':'')+ 
+        '<button onclick="applyCommissionAsDeposit('+custId+')" style="flex:1;padding:11px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🛒 Use for new purchase</button>'+
         '<button onclick="document.getElementById(\'pay-commission-modal\').remove()" style="padding:11px 18px;background:var(--surface2);color:#495057;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
       '</div>'+
     '</div>';
@@ -12610,6 +12612,61 @@ function togglePcmSubFields(){
   var pw=document.getElementById('pcm-pos-wrap');
   if(bw)bw.style.display=mode==='transfer'?'block':'none';
   if(pw)pw.style.display=mode==='pos'?'block':'none';
+}
+
+function applyCommissionToDebt(custId){
+  var cust=(DB.customers||[]).find(function(c){return c.id==custId;});
+  if(!cust)return;
+  var commBal=cust.commissionBalance||0;
+  var debt=cust.creditBalance||0;
+  if(commBal<=0){alert('No commission balance available.');return;}
+  if(debt<=0){alert('Customer has no outstanding debt.');return;}
+  var amtInput=parseFloat((document.getElementById('pcm-amt')||{}).value)||0;
+  var apply=Math.min(amtInput||commBal, commBal, debt);
+  if(apply<=0){alert('Enter a valid amount.');return;}
+  if(!confirm('Apply '+fmt(apply)+' commission to '+esc(cust.name)+'\'s outstanding debt of '+fmt(debt)+'?\n\nNew debt: '+fmt(Math.max(0,debt-apply))+'\nRemaining commission: '+fmt(commBal-apply)))return;
+  var date=new Date().toLocaleDateString();
+  var month=new Date().toISOString().slice(0,7);
+  // Reduce commission balance
+  cust.commissionBalance=Math.max(0,commBal-apply);
+  // Reduce credit balance (outstanding debt)
+  cust.creditBalance=Math.max(0,debt-apply);
+  // Log commission as paid (used for debt)
+  DB.commissionLedger.push({id:uid(),custId:cust.id,custName:cust.name,type:'paid',amount:apply,note:'Applied to outstanding debt',date:date,month:month,by:DB.currentUser?DB.currentUser.name:'Admin'});
+  // Log as credit payment
+  DB.creditPayments.push({id:uid(),custId:cust.id,custName:cust.name,amount:apply,payMode:'commission',date:date,month:month,note:'Commission applied to debt',by:DB.currentUser?DB.currentUser.name:'Admin'});
+  // Cashflow in
+  DB.cashflow.push({id:uid(),desc:'Commission applied to debt — '+cust.name,amount:apply,type:'in',cat:'Credit Payment',payMode:'commission',date:date,month:month});
+  logActivity('Commission applied to debt',esc(cust.name)+' — '+fmt(apply)+' commission offset against outstanding debt','commission');
+  saveData();
+  var modal=document.getElementById('pay-commission-modal');if(modal)modal.remove();
+  renderApp();
+  showToast('✅ '+fmt(apply)+' commission applied to '+cust.name+'\'s debt. New balance: '+fmt(Math.max(0,debt-apply)));
+}
+
+function applyCommissionAsDeposit(custId){
+  var cust=(DB.customers||[]).find(function(c){return c.id==custId;});
+  if(!cust)return;
+  var commBal=cust.commissionBalance||0;
+  if(commBal<=0){alert('No commission balance available.');return;}
+  var amtInput=parseFloat((document.getElementById('pcm-amt')||{}).value)||0;
+  var apply=Math.min(amtInput||commBal, commBal);
+  if(apply<=0){alert('Enter a valid amount.');return;}
+  if(!confirm('Convert '+fmt(apply)+' commission to store deposit for '+esc(cust.name)+'?\n\nThis will be available as a deposit balance to use on their next purchase.'))return;
+  var date=new Date().toLocaleDateString();
+  var month=new Date().toISOString().slice(0,7);
+  // Reduce commission balance
+  cust.commissionBalance=Math.max(0,commBal-apply);
+  // Add as customer deposit
+  if(!DB.deposits)DB.deposits=[];
+  DB.deposits.push({id:uid(),custId:cust.id,custName:cust.name,amount:apply,mode:'commission',note:'Converted from commission balance',date:date,month:month,by:DB.currentUser?DB.currentUser.name:'Admin'});
+  // Log commission as used
+  DB.commissionLedger.push({id:uid(),custId:cust.id,custName:cust.name,type:'paid',amount:apply,note:'Converted to store deposit for purchases',date:date,month:month,by:DB.currentUser?DB.currentUser.name:'Admin'});
+  logActivity('Commission to deposit',esc(cust.name)+' — '+fmt(apply)+' converted to purchase deposit','commission');
+  saveData();
+  var modal=document.getElementById('pay-commission-modal');if(modal)modal.remove();
+  renderApp();
+  showToast('✅ '+fmt(apply)+' added as deposit for '+cust.name+'. They can now use it on their next purchase.');
 }
 
 function recordCommissionPayout(custId){
