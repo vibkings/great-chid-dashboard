@@ -1294,6 +1294,45 @@ function importBackup(file) {
   reader.readAsText(file);
 }
 
+function fixSupplierDepositOwed(){
+  // Find purchases where depApplied>0 and fix owedToSupplier
+  var fixed=0;
+  (DB.purchases||[]).forEach(function(p){
+    if(!p.depApplied||p.depApplied<=0)return;
+    var sup=DB.suppliers.find(function(s){return String(s.id)===String(p.supId);});
+    if(!sup)return;
+    // Check if this deposit was already deducted (net payable check)
+    // We recalculate: owedToSupplier should be sum of credit purchases minus payments minus deposits applied
+    fixed++;
+  });
+  // Recalculate owedToSupplier for ALL suppliers from scratch
+  DB.suppliers.forEach(function(sup){
+    // Sum all credit purchases
+    var totalCredit=(DB.purchases||[]).filter(function(p){return String(p.supId)===String(sup.id)&&(p.payType==='credit'||p.payType==='part');}).reduce(function(a,p){
+      var owed=p.payType==='credit'?p.grandTotal:(p.grandTotal-(p.partAmt||0));
+      var dep=p.depApplied||0;
+      return a+Math.max(0,owed-dep);
+    },0);
+    // Subtract payments made
+    var totalPaid=(DB.supplierPayments||[]).filter(function(p){return String(p.supId)===String(sup.id);}).reduce(function(a,p){return a+(p.amount||0);},0);
+    // Add opening balance
+    var openBal=sup.openingBalance||0;
+    var newOwed=Math.max(0,openBal+totalCredit-totalPaid);
+    if(Math.abs(newOwed-(sup.owedToSupplier||0))>1){
+      console.log('Fixing '+sup.name+': was '+sup.owedToSupplier+' → '+newOwed);
+      sup.owedToSupplier=newOwed;
+      fixed++;
+    }
+  });
+  if(fixed>0){
+    saveData();
+    showToast('✅ Fixed '+fixed+' supplier balance(s). Reload to see updated figures.');
+    renderApp();
+  } else {
+    showToast('ℹ️ All supplier balances are already correct.');
+  }
+}
+
 function fixSupplierPaymentCategories(){
   var fixed=0;
   (DB.cashflow||[]).forEach(function(c){
@@ -2109,7 +2148,10 @@ function buildSettings(){
     (isAdmin()?'<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title" style="color:var(--danger)">⚠ Danger zone</p><p style="font-size:13px;color:#666;margin-bottom:1rem">Permanently delete all business data. This cannot be undone. Export a backup first.</p><button class="btn danger" style="font-size:13px;padding:8px 14px" onclick="clearAllData()">🗑 Clear all data</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title">🔧 Data Fixes</p>'+
     '<p style="font-size:13px;color:#666;margin-bottom:10px">Fix restocking discrepancy: reclassifies old supplier payment cashflow entries that were incorrectly tagged as Restock.</p>'+
-    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#1a237e;color:#fff;border-color:#1a237e" onclick="fixSupplierPaymentCategories()">🔧 Fix Restocking Categories</button>':'');
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#1a237e;color:#fff;border-color:#1a237e" onclick="fixSupplierPaymentCategories()">🔧 Fix Restocking Categories</button>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
+    '<p style="font-size:13px;color:#666;margin-bottom:10px">Fix supplier owed amounts: recalculates owedToSupplier for all suppliers accounting for deposit applications.</p>'+
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#1a237e;color:#fff;border-color:#1a237e;margin-top:4px" onclick="fixSupplierDepositOwed()">🔧 Fix Supplier Balances</button>':'');
 }
 
 function renderAuth(){
@@ -8496,6 +8538,10 @@ function submitPurchase(){
       applySupplierDepositToPurchase(supId,depApplied,purchaseId,invNum);
       // Record the applied deposit as cashflow in (offsets the purchase cost)
       DB.cashflow.push({id:uid(),desc:'Deposit applied — '+(sup?sup.name:'Supplier')+' Inv#'+invNum,amount:depApplied,type:'in',cat:'Supplier Deposit Applied',payMode:'deposit',date:date,month:month});
+      // Reduce the amount owed to supplier by the deposit applied
+      if(sup&&depApplied>0){
+        sup.owedToSupplier=Math.max(0,(sup.owedToSupplier||0)-depApplied);
+      }
     }
   }
   var netCashPaid=Math.max(0,cashPaid-depApplied);
