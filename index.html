@@ -2934,6 +2934,21 @@ function renderPanel(){
   if(activeTab==='inventory'&&invSearch){window._invPage=0;}
   if(activeTab==='sales'&&salesSearch){window._salesPage=0;}
   if(activeTab==='purchases'&&purchaseSearch){setTimeout(function(){window._purchPage=0;},0);}
+  // Event delegation for expense edit/delete buttons
+  if(activeTab==='expenses'){
+    p.querySelectorAll('.exp-edit-btn').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var id=this.closest('tr').getAttribute('data-expid');
+        editExpense(id);
+      });
+    });
+    p.querySelectorAll('.exp-del-btn').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var id=this.closest('tr').getAttribute('data-expid');
+        deleteExpense(id);
+      });
+    });
+  }
   // Restore focus and cursor position for search inputs after re-render
   var activeSearch=null;
   if(activeTab==='inventory'&&invSearch)activeSearch='inv-search';
@@ -9287,7 +9302,7 @@ function buildExpenses(){
   });
   var totalExp=filtered.reduce(function(a,c){return a+c.amount;},0);
   var rows=filtered.slice().reverse().map(function(e){
-    return '<tr><td>'+e.date+'</td><td>'+esc(e.desc)+'</td><td><span class="badge info">'+esc(e.cat)+'</span></td><td style="text-align:right;color:var(--danger)"><b>'+fmt(e.amount)+'</b></td><td>'+payModeLabel(e)+'</td><td style="display:flex;gap:4px">'+(isAdmin()?'<button class="btn sm" onclick="editExpense(\''+e.id+'\')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">✏️ Edit</button><button class="btn danger sm" onclick="deleteExpense(\''+e.id+'\')" style="font-size:11px">✕</button>':'')+'</td></tr>';
+    return '<tr data-expid="'+e.id+'"><td>'+e.date+'</td><td>'+esc(e.desc)+'</td><td><span class="badge info">'+esc(e.cat)+'</span></td><td style="text-align:right;color:var(--danger)"><b>'+fmt(e.amount)+'</b></td><td>'+payModeLabel(e)+'</td><td style="display:flex;gap:4px">'+(isAdmin()?'<button class="btn sm exp-edit-btn" style="color:#1a237e;border-color:#93c5fd;font-size:11px">✏️ Edit</button><button class="btn danger sm exp-del-btn" style="font-size:11px">✕</button>':'')+'</td></tr>';
   }).join('');
   return '<p class="sec-title">Add expense</p>'+
     '<div class="fg c2"><div class="form-group"><label>Description</label><input type="text" id="ex-desc" placeholder="e.g. Staff salary, Transport..."></div>'+
@@ -9326,7 +9341,7 @@ function addExpense(){
   saveData();renderApp();
 }
 function editExpense(id){
-  var e=DB.cashflow.find(function(c){return c.id===id;});
+  var e=DB.cashflow.find(function(c){return String(c.id)===String(id);});
   if(!e){alert('Expense not found.');return;}
   var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(e.bankId==b.id?' selected':'')+'>'+esc(b.name)+'</option>';}).join('');
   var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(e.posId==p.id?' selected':'')+'>'+esc(p.name)+'</option>';}).join('');
@@ -9362,7 +9377,7 @@ function editExpense(id){
 }
 
 function saveEditedExpense(id){
-  var e=DB.cashflow.find(function(c){return c.id===id;});
+  var e=DB.cashflow.find(function(c){return String(c.id)===String(id);});
   if(!e)return;
   var desc=document.getElementById('ee-desc').value.trim();
   var amt=parseFloat(document.getElementById('ee-amt').value)||0;
@@ -9381,7 +9396,7 @@ function saveEditedExpense(id){
 }
 
 function deleteExpense(id){
-  var e=DB.cashflow.find(function(c){return c.id===id;});
+  var e=DB.cashflow.find(function(c){return String(c.id)===String(id);});
   if(!e)return;
   showConfirm({
     type:'danger',
@@ -9392,7 +9407,7 @@ function deleteExpense(id){
     cancelLabel:'Cancel'
   },function(){
     moveToRecycleBin('expense',e,'Expenses');
-    DB.cashflow=DB.cashflow.filter(function(c){return c.id!==id;});
+    DB.cashflow=DB.cashflow.filter(function(c){return String(c.id)!==String(id);});
     saveData();renderApp();
   });
 }
