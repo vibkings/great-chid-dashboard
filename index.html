@@ -12932,8 +12932,8 @@ function buildDemoSales(){
     '<div class="tbl-wrap" style="margin-bottom:1rem"><table><thead><tr><th>#</th><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Subtotal</th><th></th></tr></thead><tbody>'+itemRows+'</tbody></table></div>'+
     '<div style="text-align:right;margin-bottom:1rem"><b style="font-size:16px">Grand Total: '+fmt(grandTotal)+'</b></div>'+
     '<div style="display:flex;gap:10px;justify-content:flex-end">'+
-      '<button onclick="saveDemoSale(\'print\')" style="padding:10px 24px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Print & Close</button>'+
-      '<button onclick="saveDemoSale(\'save\')" style="padding:10px 24px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💾 Save & Close</button>'+
+      '<button onclick="if(!window._demoSaving){this.disabled=true;this.textContent=\'Saving...\';saveDemoSale(\'print\')}" style="padding:10px 24px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Print & Close</button>'+
+      '<button onclick="if(!window._demoSaving){this.disabled=true;this.textContent=\'Saving...\';saveDemoSale(\'save\')}" style="padding:10px 24px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💾 Save & Close</button>'+
       '<button onclick="demoItems=[];renderPanel()" style="padding:10px 16px;background:none;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">✕ Clear</button>'+
     '</div>'
   :'<div class="empty">No items added yet. Search and add items above.</div>');
@@ -13004,27 +13004,29 @@ function demoRemoveItem(idx){
 
 function saveDemoSale(mode){
   if(!demoItems.length){showToast('Add items first.');return;}
+  // Prevent double-save if already processing
+  if(window._demoSaving){return;}
+  window._demoSaving=true;
   var invNum=generateDemoInvoiceNum();
   var printName=(document.getElementById('demo-print-name')||{}).value||'';
   var grandTotal=demoItems.reduce(function(a,l){return a+l.total;},0);
   var date=new Date().toLocaleDateString();
   var month=new Date().toISOString().slice(0,7);
-  // Save demo record
   if(!DB.demoSales)DB.demoSales=[];
   var record={id:uid(),invoiceNum:invNum,printName:printName||'Walk-in',items:JSON.parse(JSON.stringify(demoItems)),grandTotal:grandTotal,date:date,month:month,by:DB.currentUser?DB.currentUser.name:'Admin'};
   DB.demoSales.push(record);
-  // Increment counter
   DB.demoInvoiceCounter=(DB.demoInvoiceCounter||1)+1;
-  // NOTE: NO stock deduction, NO cashflow, NO DB.sales entry
   saveData();
-  if(mode==='print'){
-    printDemoInvoice(record);
-  }
-  // Clear and close to list
+  // Clear and close to list immediately
   demoItems=[];
   window._demoSub='list';
+  window._demoSaving=false;
   renderPanel();
-  showToast('✅ Demo invoice '+invNum+' saved. Stock unchanged.');
+  showToast('✅ Demo invoice '+invNum+' saved.');
+  // Print after UI has updated
+  if(mode==='print'){
+    setTimeout(function(){printDemoInvoice(record);},300);
+  }
 }
 
 function printDemoInvoice(record){
