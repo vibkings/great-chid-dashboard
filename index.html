@@ -4054,40 +4054,36 @@ function generateAIMessage(){
   var prompt='You are a business messaging assistant for Great Chid Electro, a Nigerian electrical materials and doors shop in Ogbomoso. Write '+typeLabels[msgType]+' for a customer'+(custName?' named '+custName:'')+'. '+(context&&msgType!=='custom'?'Additional context: '+context+'. ':'')+
     'Requirements: Professional but warm Nigerian business tone. WhatsApp-ready format. Use relevant emojis. 3-5 sentences max. Sign off with "Great Chid Electro". Write ONLY the message, no explanation or preamble.';
 
-  fetch('https://greatchid-inventory.valentineahize.workers.dev?url='+encodeURIComponent('https://api.anthropic.com/v1/messages'),{
+  var geminiUrl='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+  fetch('https://greatchid-inventory.valentineahize.workers.dev?url='+encodeURIComponent(geminiUrl),{
     method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'anthropic-version':'2023-06-01'
-    },
+    headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
-      model:'claude-haiku-4-5-20251001',
-      max_tokens:300,
-      messages:[{role:'user',content:prompt}]
+      contents:[{parts:[{text:prompt}]}],
+      generationConfig:{maxOutputTokens:300,temperature:0.8}
     })
   }).then(function(r){
     return r.text().then(function(raw){
       if(!r.ok){
         var errMsg='API error '+r.status;
         try{var e=JSON.parse(raw);errMsg=e.error&&e.error.message?e.error.message:errMsg;}catch(x){}
-        console.error('Claude API raw error response:',raw);
+        console.error('Gemini API raw error:',raw);
         throw new Error(errMsg);
       }
-      try{return JSON.parse(raw);}catch(x){throw new Error('Invalid JSON from Claude: '+raw.substring(0,120));}
+      try{return JSON.parse(raw);}catch(x){throw new Error('Invalid JSON from Gemini: '+raw.substring(0,120));}
     });
   }).then(function(data){
-    var msg=data.content&&data.content[0]&&data.content[0].text?data.content[0].text.trim():'';
-    if(!msg)throw new Error('Empty response from Claude');
+    var msg=data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]?data.candidates[0].content.parts[0].text.trim():'';
+    if(!msg)throw new Error('Empty response from Gemini');
     if(textEl)textEl.textContent=msg;
     if(result)result.style.display='block';
     if(status)status.textContent='✅ Done';
   }).catch(function(e){
-    // Fallback: generate a template message locally
     var fallback=generateFallbackMessage(custName,msgType,context);
     if(textEl)textEl.textContent=fallback;
     if(result)result.style.display='block';
-    if(status)status.textContent='⚠️ Used local template — Claude error: '+e.message;
-    console.warn('Claude API error:',e.message);
+    if(status)status.textContent='⚠️ Used local template — Gemini error: '+e.message;
+    console.warn('Gemini API error:',e.message);
   }).finally(function(){
     btn.disabled=false;btn.textContent='✨ Generate message';
   });
@@ -4133,7 +4129,7 @@ function buildMessagingPanel(){
       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'+
         '<span style="font-size:18px">✨</span>'+
         '<b style="font-size:14px;color:#6a1b9a">AI Message Generator</b>'+
-        '<span style="font-size:11px;color:#9c27b0;background:#f3e5f5;padding:2px 8px;border-radius:10px;border:1px solid #ce93d8">Powered by Claude</span>'+
+        '<span style="font-size:11px;color:#9c27b0;background:#f3e5f5;padding:2px 8px;border-radius:10px;border:1px solid #ce93d8">Powered by Gemini</span>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
         '<div class="form-group" style="margin:0"><label style="font-size:11px">Customer name (optional)</label>'+
