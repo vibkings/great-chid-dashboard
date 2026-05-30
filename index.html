@@ -13086,11 +13086,11 @@ function printDemoInvoice(record, win){
     '.watermark-inv{position:fixed;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);pointer-events:none;z-index:0;user-select:none;text-align:center;line-height:1.1}'+
     '.watermark-inv .wm1{display:block;font-size:110px;font-weight:900;color:rgba(192,57,43,0.07);letter-spacing:8px}'+
     '.watermark-inv .wm2{display:block;font-size:52px;font-weight:900;color:rgba(192,57,43,0.06);letter-spacing:5px}'+
-    '<\/style></head><body>'+
-    '<div class="watermark-inv"><span class="wm1">GCE</span><span class="wm2">ORIGINAL INVOICE</span></div>'+
-    // First page header
-    headerHTML+
-    '</style>';
+    '<\/style>';
+
+  var bodyStart='<div class="watermark-inv"><span class="wm1">GCE</span><span class="wm2">ORIGINAL INVOICE</span></div>';
+
+
 
   var emptyRows='';
   var minRows=record.items.length<8?8:record.items.length;
