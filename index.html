@@ -13158,8 +13158,6 @@ function printDemoInvoice(record, win){
   '</body></html>';
 
 
-  console.log('printDemoInvoice called, html length:', html?html.length:0, 'record:', record.invoiceNum);
-  if(!html||html.length<100){alert('Invoice HTML is empty - build error');return;}
   // Extract style and body content from full HTML string
   var styleMatch=html.match(/<style>([\s\S]*?)<\/style>/);
   var bodyMatch=html.match(/<body>([\s\S]*?)<\/body>/);
