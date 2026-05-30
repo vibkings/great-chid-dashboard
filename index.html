@@ -13166,16 +13166,23 @@ function printDemoInvoice(record, win){
   '</body></html>';
 
 
-  // Use iframe to print - bypasses mobile popup blocker completely
-  // Use passed window or open new one
-  var w=win||window.open('','_blank','width=700,height=900');
-  if(!w){alert('Please allow popups for this site to print.');return;}
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  setTimeout(function(){
-    try{w.focus();w.print();}catch(e){console.error('Print error:',e);}
-  },500);
+  // Use Blob URL - most reliable cross-browser print approach
+  try {
+    var blob=new Blob([html],{type:'text/html'});
+    var url=URL.createObjectURL(blob);
+    var w=win||window.open('','_blank','width=700,height=900');
+    if(!w){alert('Please allow popups for this site to print.');return;}
+    w.location.href=url;
+    var cleanup=function(){try{URL.revokeObjectURL(url);}catch(e){}};
+    setTimeout(function(){
+      try{w.focus();w.print();setTimeout(cleanup,60000);}
+      catch(e){console.error('Print error:',e);cleanup();}
+    },800);
+  } catch(e) {
+    // Fallback: direct write
+    var w2=win||window.open('','_blank','width=700,height=900');
+    if(w2){w2.document.open();w2.document.write(html);w2.document.close();setTimeout(function(){w2.focus();w2.print();},500);}
+  }
 }
 function deleteDemoSale(id){
   if(!isAdmin()){alert('Admin only.');return;}
