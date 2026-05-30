@@ -13158,31 +13158,39 @@ function printDemoInvoice(record, win){
   '</body></html>';
 
 
-  // Inject invoice into current page as print-only div, then window.print()
-  var old=document.getElementById('demo-print-overlay');
-  if(old)old.remove();
+  // Extract style and body content from full HTML string
+  var styleMatch=html.match(/<style>([\s\S]*?)<\/style>/);
+  var bodyMatch=html.match(/<body>([\s\S]*?)<\/body>/);
+  var styleContent=styleMatch?styleMatch[1]:'';
+  var bodyContent=bodyMatch?bodyMatch[1]:html;
+
+  // Create print style that hides everything except our overlay
+  var old2=document.getElementById('demo-print-style');if(old2)old2.remove();
+  var styleEl=document.createElement('style');
+  styleEl.id='demo-print-style';
+  styleEl.textContent=
+    styleContent+
+    '@media print{'+
+      'body>*:not(#demo-print-overlay){display:none!important;}'+
+      '#demo-print-overlay{display:block!important;position:static!important;}'+
+    '}'+
+    '@media screen{#demo-print-overlay{display:none!important;}}';
+  document.head.appendChild(styleEl);
+
+  // Inject body content
+  var old3=document.getElementById('demo-print-overlay');if(old3)old3.remove();
   var overlay=document.createElement('div');
   overlay.id='demo-print-overlay';
-  overlay.innerHTML=html;
-  overlay.style.cssText='display:none';
+  overlay.innerHTML=bodyContent;
   document.body.appendChild(overlay);
-  // Add print-only CSS to show only this overlay when printing
-  var styleEl=document.getElementById('demo-print-style');
-  if(!styleEl){
-    styleEl=document.createElement('style');
-    styleEl.id='demo-print-style';
-    styleEl.textContent='@media print{body>*:not(#demo-print-overlay){display:none!important}#demo-print-overlay{display:block!important}}';
-    document.head.appendChild(styleEl);
-  }
-  overlay.style.display='block';
+
   setTimeout(function(){
     window.print();
     setTimeout(function(){
-      overlay.remove();
-      styleEl.remove();
-    },1000);
+      var o=document.getElementById('demo-print-overlay');if(o)o.remove();
+      var s=document.getElementById('demo-print-style');if(s)s.remove();
+    },2000);
   },300);
-  // Close passed window if it was opened
   if(win){try{win.close();}catch(e){}}
 }
 function deleteDemoSale(id){
