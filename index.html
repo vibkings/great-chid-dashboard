@@ -375,10 +375,10 @@ var DB={
   users:[{id:1,name:'Admin',username:'admin',password:'admin123',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
   adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],commissionLedger:[],proformas:[],
-  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],
+  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
-  invoiceCounter:1,
+  invoiceCounter:1,demoInvoiceCounter:1,
   banks:[
     {id:1,name:'Access Bank',acct:'0123456789'},
     {id:2,name:'GTBank',acct:'0234567890'},
@@ -389,7 +389,7 @@ var DB={
     {id:2,name:'OPay POS',tid:'OP-002'}
   ]
 };
-var ALL_PERMS={inventory:'Inventory',stockmgmt:'Stock Mgmt',invedit:'Edit Inventory',invdelete:'Delete Inventory',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',finance:'Financial Dashboard',expenses:'Expenses',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',settings:'Settings'};
+var ALL_PERMS={inventory:'Inventory',stockmgmt:'Stock Mgmt',invedit:'Edit Inventory',invdelete:'Delete Inventory',warehouse:'Warehouse',sales:'Sales',demosales:'Demo Sales',purchases:'Purchases',finance:'Financial Dashboard',expenses:'Expenses',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',settings:'Settings'};
 var activeTab='inventory',activeStockSub='count',activeCustSub='list',activeSupSub='list',reportTab='sales',reportDateFrom='',reportDateTo='',reportStaff='',saleCustomerType='registered',invSearch='',salesSearch='',purchaseSearch='',supplierSearch='',customerSearch='';
 var expFilterFrom='',expFilterTo='',expFilterCat='';
 var activeCountCat='';
@@ -456,7 +456,7 @@ var GCE_API_KEY_QS   = '?key=' + GCE_API_KEY;
 var GCE_COLLECTIONS = [
   'sales','inventory','customers','suppliers','purchases','cashflow',
   'creditPayments','deposits','salesReturns','adjLog','stockCounts','commissionLedger','proformas',
-  'supplierPayments','tillSessions','activityLog','settings','supplierDeposits',
+  'supplierPayments','tillSessions','activityLog','settings','supplierDeposits','demoSales',
   'creditCustomers','users','banks','posTerminals','categories',
   'expenseCats','transferLog','warehouse','recycleBin','drafts',
   'pendingDeliveries','meta' // meta = invoiceCounter, invoiceYear, etc.
@@ -622,6 +622,8 @@ function buildCollectionSnapshot(colName) {
     supplierPayments: DB.supplierPayments||[],
     tillSessions: DB.tillSessions||[],
     supplierDeposits: DB.supplierDeposits||[],
+    demoSales: DB.demoSales||[],
+    demoInvoiceCounter: DB.demoInvoiceCounter||1,
     activityLog: (DB.activityLog||[]).slice(0,200), // limit to 200
     settings: DB.settings||{},
     creditCustomers: DB.creditCustomers||[],
@@ -657,7 +659,7 @@ function applyCollection(colName, payload) {
     creditPayments:'creditPayments', deposits:'deposits',
     salesReturns:'salesReturns', adjLog:'adjLog', stockCounts:'stockCounts',
     commissionLedger:'commissionLedger', proformas:'proformas',
-    supplierPayments:'supplierPayments', tillSessions:'tillSessions', supplierDeposits:'supplierDeposits',
+    supplierPayments:'supplierPayments', tillSessions:'tillSessions', supplierDeposits:'supplierDeposits', demoSales:'demoSales',
     activityLog:'activityLog', settings:'settings',
     creditCustomers:'creditCustomers', users:'users', banks:'banks',
     posTerminals:'posTerminals', categories:'categories',
@@ -1179,6 +1181,8 @@ function applySnapshot(snapshot) {
   DB.supplierPayments = snapshot.supplierPayments || [];
   DB.tillSessions = snapshot.tillSessions || [];
   DB.supplierDeposits = snapshot.supplierDeposits || [];
+  DB.demoSales = snapshot.demoSales || [];
+  DB.demoInvoiceCounter = snapshot.demoInvoiceCounter || DB.demoInvoiceCounter || 1;
   DB.recycleBin = snapshot.recycleBin || [];
   DB.drafts = snapshot.drafts || [];
   DB.pendingDeliveries = snapshot.pendingDeliveries || [];
@@ -2210,7 +2214,7 @@ var TABS=[
   {id:'inventoryval',label:'Inventory Valuation',perm:'inventory'},
   {id:'pandl',label:'Profit & Loss',perm:'finance'},
   {id:'returnstrack',label:'Returns Tracker',perm:'sales'},
-  {id:'proformas',label:'Proforma Invoices',perm:'sales'},
+  {id:'demosales',label:'Demo Sales',perm:'demosales'},
   {id:'productreport',label:'Product Report',perm:'reports'},
   {id:'monthlysummary',label:'Monthly Summary',perm:'reports'},
   {id:'activitylog',label:'🔍 Activity',perm:'admin'},
@@ -2219,8 +2223,8 @@ var TABS=[
   {id:'users',label:'Users',perm:'users'}
 ];
 
-var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋',supplieroverview:'📋',customeroverview:'👤',inventoryval:'🏷️',pandl:'📊',returnstrack:'↩️',proformas:'📄',productreport:'🔎',monthlysummary:'📅'};
-var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',suppayments:'Supplier Payments',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing',supplieroverview:'Supplier Overview',customeroverview:'Customer Overview',inventoryval:'Inventory Valuation',pandl:'Profit & Loss',returnstrack:'Returns Tracker',proformas:'Proforma Invoices',productreport:'Product Report',monthlysummary:'Monthly Summary'};
+var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',demosales:'🎯',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋',supplieroverview:'📋',customeroverview:'👤',inventoryval:'🏷️',pandl:'📊',returnstrack:'↩️',proformas:'📄',productreport:'🔎',monthlysummary:'📅'};
+var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',demosales:'Demo Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',suppayments:'Supplier Payments',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing',supplieroverview:'Supplier Overview',customeroverview:'Customer Overview',inventoryval:'Inventory Valuation',pandl:'Profit & Loss',returnstrack:'Returns Tracker',proformas:'Proforma Invoices',productreport:'Product Report',monthlysummary:'Monthly Summary'};
 var VERSION_NOTES=[
   {ver:'v27',date:'May 2026',title:'Confirmation popups & Recycle Bin',notes:[
     'Confirmation popups — every delete now shows a styled modal instead of plain browser confirm()',
@@ -2516,6 +2520,7 @@ function renderApp(){
   var navHtml='';
   var sections=[
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases','proformas']},
+    {label:'Demo',tabs:['demosales']},
     {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing','supplieroverview','customeroverview','inventoryval','pandl','returnstrack','productreport','monthlysummary']},
     {label:'Management',tabs:['suppliers','customers','settings','users','activitylog','recyclebin']},
   ];
@@ -2916,7 +2921,7 @@ function filterWhTable(){
 function renderPanel(){
   var scrollY=window.scrollY||window.pageYOffset;
   var p=document.getElementById('panel-root');if(!p)return;
-  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas,productreport:buildProductReport,monthlysummary:(typeof buildMonthlyReport==='function'?buildMonthlyReport:function(){return '<div class="empty">Monthly Summary loading...</div>';})};
+  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,demosales:buildDemoSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas,productreport:buildProductReport,monthlysummary:(typeof buildMonthlyReport==='function'?buildMonthlyReport:function(){return '<div class="empty">Monthly Summary loading...</div>';})};
   var content='';
   try{
     content=(map[activeTab]||function(){return '';})();
@@ -12827,6 +12832,325 @@ function saveAsProforma(){
   if(confirm('✅ Proforma '+prfNum+' saved!\n\nPrint it now?'))printProforma(prfNum);
   invoiceItems=[];
   renderInvoiceItems();
+}
+
+
+// ============================================================
+// DEMO SALES
+// ============================================================
+var demoItems=[]; // current demo invoice line items
+
+function generateDemoInvoiceNum(){
+  var year=new Date().getFullYear();
+  if(!DB.demoInvoiceCounter)DB.demoInvoiceCounter=1;
+  // Scan existing demo sales for max used
+  var allNums=(DB.demoSales||[]).map(function(s){return parseInt((s.invoiceNum||'').split('/').pop())||0;});
+  var maxUsed=allNums.length?Math.max.apply(null,allNums):0;
+  var next=Math.max(DB.demoInvoiceCounter,maxUsed+1);
+  return 'DM/'+year+'/'+String(next).padStart(4,'0');
+}
+
+function buildDemoSales(){
+  if(!canDo('demosales'))return '<div class="empty">Access denied. Ask admin to grant Demo Sales permission.</div>';
+  var demoSub=window._demoSub||'form';
+
+  if(demoSub==='list'){
+    var records=(DB.demoSales||[]).slice().reverse();
+    var rows=records.length?records.map(function(d){
+      return '<tr>'+
+        '<td>'+d.date+'</td>'+
+        '<td><b>'+d.invoiceNum+'</b></td>'+
+        '<td>'+esc(d.printName||'Walk-in')+'</td>'+
+        '<td style="font-size:11px">'+d.items.map(function(l){return esc(l.name)+' x'+l.qty;}).join(', ')+'</td>'+
+        '<td style="text-align:right"><b>'+fmt(d.grandTotal)+'</b></td>'+
+        '<td>'+d.by+'</td>'+
+        '<td><button class="btn sm" onclick="reprintDemoInvoice(\''+d.id+'\')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">Print</button>'+
+            (isAdmin()?'<button class="btn danger sm" onclick="deleteDemoSale(\''+d.id+'\')" style="font-size:11px;margin-left:4px">🗑️</button>':'')+
+        '</td>'+
+      '</tr>';
+    }).join(''):null;
+    return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">'+
+      '<p class="sec-title" style="margin:0">🎯 Demo Sales History</p>'+
+      '<button class="btn primary" onclick="window._demoSub=\'form\';renderPanel()">+ New Demo Sale</button>'+
+    '</div>'+
+    (rows?'<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Invoice #</th><th>Customer</th><th>Items</th><th style="text-align:right">Total</th><th>By</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="empty">No demo sales recorded yet.</div>');
+  }
+
+  // Form view
+  var invNum=generateDemoInvoiceNum();
+  var itemRows=demoItems.map(function(l,i){
+    return '<tr>'+
+      '<td style="font-size:12px">'+(i+1)+'</td>'+
+      '<td>'+esc(l.name)+'</td>'+
+      '<td style="text-align:center">'+l.qty+'</td>'+
+      '<td style="text-align:right">'+fmt(l.price)+'</td>'+
+      '<td style="text-align:right"><b>'+fmt(l.total)+'</b></td>'+
+      '<td><button onclick="demoRemoveItem('+i+')" style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:16px">&times;</button></td>'+
+    '</tr>';
+  }).join('');
+  var grandTotal=demoItems.reduce(function(a,l){return a+l.total;},0);
+
+  return '<div style="background:#fff3cd;border:2px dashed #f59e0b;border-radius:10px;padding:10px 16px;margin-bottom:1rem;display:flex;align-items:center;gap:10px">'+
+    '<span style="font-size:18px">🎯</span>'+
+    '<div><b style="color:#92400e">DEMO SALES MODE</b> <span style="font-size:12px;color:#92400e">— Stock is NOT deducted. No financial records saved.</span></div>'+
+    '<button onclick="window._demoSub=\'list\';renderPanel()" class="btn sm" style="margin-left:auto">View history</button>'+
+  '</div>'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1rem">'+
+    '<div class="form-group"><label>Invoice Number (auto)</label><input type="text" value="'+invNum+'" readonly style="background:var(--surface2);font-weight:700"></div>'+
+    '<div class="form-group"><label>Customer / Print name (optional)</label><input type="text" id="demo-print-name" placeholder="e.g. Mr Johnson"></div>'+
+  '</div>'+
+  '<p class="sec-title">Add Items</p>'+
+  '<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:flex-end;margin-bottom:12px">'+
+    '<div class="form-group" style="margin:0"><label>Item</label>'+
+      '<div style="position:relative">'+
+        '<input type="text" id="demo-item-search" placeholder="Search items..." oninput="filterDemoItemDd(this.value)" onfocus="filterDemoItemDd(this.value,true)" onblur="setTimeout(function(){var d=document.getElementById(\'demo-item-dd\');if(d)d.style.display=\'none\';},200)" style="width:100%">'+
+        '<div id="demo-item-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:6px;max-height:200px;overflow-y:auto;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>'+
+        '<input type="hidden" id="demo-item-id">'+
+      '</div>'+
+    '</div>'+
+    '<div class="form-group" style="margin:0"><label>Qty</label><input type="number" id="demo-qty" value="1" min="1" style="width:70px"></div>'+
+    '<div class="form-group" style="margin:0"><label>Price (₦)</label><input type="number" id="demo-price" value="0" min="0" style="width:100px"></div>'+
+    '<button class="btn primary" onclick="addDemoItem()" style="align-self:flex-end">+ Add</button>'+
+  '</div>'+
+  (demoItems.length?
+    '<div class="tbl-wrap" style="margin-bottom:1rem"><table><thead><tr><th>#</th><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Subtotal</th><th></th></tr></thead><tbody>'+itemRows+'</tbody></table></div>'+
+    '<div style="text-align:right;margin-bottom:1rem"><b style="font-size:16px">Grand Total: '+fmt(grandTotal)+'</b></div>'+
+    '<div style="display:flex;gap:10px;justify-content:flex-end">'+
+      '<button onclick="saveDemoSale(\'print\')" style="padding:10px 24px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🖨️ Print & Close</button>'+
+      '<button onclick="saveDemoSale(\'save\')" style="padding:10px 24px;background:#15803d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💾 Save & Close</button>'+
+      '<button onclick="demoItems=[];renderPanel()" style="padding:10px 16px;background:none;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">✕ Clear</button>'+
+    '</div>'
+  :'<div class="empty">No items added yet. Search and add items above.</div>');
+}
+
+function filterDemoItemDd(val, showAll){
+  var dd=document.getElementById('demo-item-dd');
+  if(!dd)return;
+  var term=(val||'').toLowerCase().trim();
+  var matches=DB.inventory.filter(function(i){
+    if(!showAll&&!term)return false;
+    return !term||i.name.toLowerCase().indexOf(term)>-1||(i.cat||'').toLowerCase().indexOf(term)>-1;
+  }).slice(0,20);
+  if(!matches.length){dd.style.display='none';return;}
+  dd.innerHTML=matches.map(function(i){
+    return '<div data-iid="'+i.id+'" data-iname="'+i.name.replace(/"/g,'&quot;')+'" data-iprice="'+i.sell+'" class="demo-dd-item" '+
+      'style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between" '+
+      'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'#fff\'">'+
+      '<span><b>'+esc(i.name)+'</b> <span style="color:#9ca3af;font-size:11px">'+(i.cat||'')+'</span></span>'+
+      '<span style="color:#15803d;font-size:12px;font-weight:600">'+fmt(i.sell)+' · '+i.qty+' in stock</span>'+
+    '</div>';
+  }).join('');
+  dd.style.display='block';
+  dd.querySelectorAll('.demo-dd-item').forEach(function(el){
+    el.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      var inp=document.getElementById('demo-item-search');
+      var hid=document.getElementById('demo-item-id');
+      var prc=document.getElementById('demo-price');
+      if(inp)inp.value=this.getAttribute('data-iname').replace(/&quot;/g,'"');
+      if(hid)hid.value=this.getAttribute('data-iid');
+      if(prc)prc.value=this.getAttribute('data-iprice');
+      dd.style.display='none';
+    });
+  });
+}
+
+function addDemoItem(){
+  var id=document.getElementById('demo-item-id').value;
+  var name=document.getElementById('demo-item-search').value.trim();
+  var qty=parseInt(document.getElementById('demo-qty').value)||1;
+  var price=parseFloat(document.getElementById('demo-price').value)||0;
+  if(!id&&!name){showToast('Search and select an item first.');return;}
+  var item=id?DB.inventory.find(function(i){return String(i.id)===String(id);}):DB.inventory.find(function(i){return i.name===name;});
+  if(!item){showToast('Item not found in inventory.');return;}
+  if(qty<=0){showToast('Enter a valid quantity.');return;}
+  if(qty>item.qty){showToast('Only '+item.qty+' in stock.');return;}
+  // Auto-merge same item + same price
+  var existing=demoItems.find(function(l){return l.itemId==item.id&&l.price===price;});
+  if(existing){
+    if(existing.qty+qty>item.qty){showToast('Only '+item.qty+' in stock total.');return;}
+    existing.qty+=qty;existing.total=existing.price*existing.qty;
+  } else {
+    demoItems.push({itemId:item.id,name:item.name,cost:item.cost,qty:qty,price:price,total:price*qty});
+  }
+  // Reset fields
+  document.getElementById('demo-item-search').value='';
+  document.getElementById('demo-item-id').value='';
+  document.getElementById('demo-qty').value='1';
+  document.getElementById('demo-price').value='0';
+  renderPanel();
+}
+
+function demoRemoveItem(idx){
+  demoItems.splice(idx,1);
+  renderPanel();
+}
+
+function saveDemoSale(mode){
+  if(!demoItems.length){showToast('Add items first.');return;}
+  var invNum=generateDemoInvoiceNum();
+  var printName=(document.getElementById('demo-print-name')||{}).value||'';
+  var grandTotal=demoItems.reduce(function(a,l){return a+l.total;},0);
+  var date=new Date().toLocaleDateString();
+  var month=new Date().toISOString().slice(0,7);
+  // Save demo record
+  if(!DB.demoSales)DB.demoSales=[];
+  var record={id:uid(),invoiceNum:invNum,printName:printName||'Walk-in',items:JSON.parse(JSON.stringify(demoItems)),grandTotal:grandTotal,date:date,month:month,by:DB.currentUser?DB.currentUser.name:'Admin'};
+  DB.demoSales.push(record);
+  // Increment counter
+  DB.demoInvoiceCounter=(DB.demoInvoiceCounter||1)+1;
+  // NOTE: NO stock deduction, NO cashflow, NO DB.sales entry
+  saveData();
+  if(mode==='print'){
+    printDemoInvoice(record);
+  }
+  // Clear and close to list
+  demoItems=[];
+  window._demoSub='list';
+  renderPanel();
+  showToast('✅ Demo invoice '+invNum+' saved. Stock unchanged.');
+}
+
+function printDemoInvoice(record){
+  var d=new Date(record.date||new Date());
+  var day=d.getDate(),month2=d.getMonth()+1,year=d.getFullYear();
+  var emptyRows='';
+  var minRows=record.items.length<8?8:record.items.length;
+  for(var i=record.items.length;i<minRows;i++){
+    emptyRows+='<tr class="empty-row"><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>';
+  }
+  var rows=record.items.map(function(l,i){
+    return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(l.name)+'</td><td class="center">'+l.qty+'</td><td class="right">'+fmt(l.price)+'</td><td></td><td class="right"><b>'+fmt(l.total)+'</b></td></tr>';
+  }).join('')+emptyRows;
+
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8">'+
+  '<style>'+
+  '@page{size:A5;margin:8mm}'+
+  '*{box-sizing:border-box;margin:0;padding:0}'+
+  'body{font-family:Arial,sans-serif;font-size:11px;color:#111}'+
+  '.h{display:flex;align-items:flex-start;gap:10px;border-bottom:3px solid #1a237e;padding-bottom:8px;margin-bottom:8px}'+
+  '.htext{flex:1}'+
+  '.co{font-size:15px;font-weight:900;color:#1a237e;letter-spacing:.02em}'+
+  '.co2{font-size:12px;font-weight:800;color:#1a237e}'+
+  '.su{font-size:9px;color:#555;margin:1px 0}'+
+  '.ds{font-size:9px;color:#555;margin:1px 0}'+
+  '.of{font-size:8.5px;color:#444;margin:1px 0}'+
+  '.tb{display:inline-block;background:#1a237e;color:#fff;font-size:13px;font-weight:800;padding:4px 18px;border-radius:3px;margin-top:5px;letter-spacing:.08em}'+
+  '.info{display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px}'+
+  '.info-label{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:.03em}'+
+  '.info-val{font-weight:700;font-size:11px}'+
+  '.date-box{border:1px solid #1a237e;border-radius:4px;padding:4px 10px;text-align:center;min-width:90px}'+
+  '.date-box .label{font-size:8px;color:#1a237e;font-weight:700;text-transform:uppercase;letter-spacing:.05em}'+
+  '.date-box .val{font-size:14px;font-weight:900;color:#111}'+
+  '.no{font-size:12px;font-weight:800;color:#1a237e}'+
+  'table{width:100%;border-collapse:collapse;margin:6px 0}'+
+  'thead tr{background:#1a237e;color:#fff}'+
+  'th{padding:5px 6px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;text-align:left}'+
+  'td{padding:5px 6px;border-bottom:1px solid #f0f0f0;font-size:10.5px}'+
+  '.center{text-align:center}.right{text-align:right}'+
+  '.empty-row td{border-bottom:1px solid #f5f5f5;height:20px}'+
+  '.total-section{margin-top:4px;display:flex;justify-content:flex-end}'+
+  '.total-box{min-width:200px}'+
+  '.total-row-t{display:flex;justify-content:space-between;padding:4px 6px;font-size:11px}'+
+  '.grand-total{background:#1a237e;color:#fff;font-weight:900;font-size:13px;padding:6px 8px;display:flex;justify-content:space-between;border-radius:3px;margin-top:4px}'+
+  '.pay-box{border:1px solid #e5e7eb;border-radius:6px;padding:8px;margin-top:8px;font-size:10.5px}'+
+  '.disclaimer{font-size:9px;color:#555;margin-top:8px;border-top:1px solid #eee;padding-top:6px;font-style:italic;text-align:center}'+
+  '.footer{text-align:center;font-size:9px;color:#9ca3af;margin-top:6px}'+
+  '</style></head><body>'+
+
+  // Header — same as real invoice but blue
+  '<div class="h">'+
+    '<div class="logo-wrap">'+
+      '<svg width="60" height="67" viewBox="0 0 72 80" fill="none" xmlns="http://www.w3.org/2000/svg">'+
+        '<path d="M36 2 L70 14 L70 48 Q70 68 36 78 Q2 68 2 48 L2 14 Z" fill="#1a237e" stroke="#fff" stroke-width="1.5"/>'+
+        '<path d="M36 9 L63 19 L63 47 Q63 63 36 71 Q9 63 9 47 L9 19 Z" fill="none" stroke="#ffd700" stroke-width="1.2"/>'+
+        '<rect x="26" y="28" width="20" height="26" rx="1" fill="#fff" opacity="0.95"/>'+
+        '<rect x="28" y="30" width="16" height="22" rx="1" fill="#1a237e" opacity="0.9"/>'+
+        '<rect x="26" y="28" width="20" height="26" rx="1" fill="none" stroke="#ffd700" stroke-width="1.2"/>'+
+        '<circle cx="43" cy="41" r="1.5" fill="#ffd700"/>'+
+        '<line x1="30" y1="34" x2="42" y2="34" stroke="#ffd700" stroke-width="0.5" opacity="0.7"/>'+
+        '<line x1="30" y1="38" x2="42" y2="38" stroke="#ffd700" stroke-width="0.5" opacity="0.7"/>'+
+        '<polygon points="36,5 38,10 36,9 34,10" fill="#ffd700"/>'+
+        '<text x="36" y="25" text-anchor="middle" fill="#ffd700" font-size="7" font-weight="900" font-family="Arial" letter-spacing="1">GCE</text>'+
+        '<text x="36" y="60" text-anchor="middle" fill="#ffd700" font-size="6" font-weight="700" font-family="Arial">ELECTRO</text>'+
+      '</svg>'+
+    '</div>'+
+    '<div class="htext">'+
+      '<div class="co">GREAT CHID ELECTRO (NIG.)</div>'+
+      '<div class="co2">GLOBAL DOORS LTD</div>'+
+      '<div class="su">A Subsidiary of De-Chdex Electrics International</div>'+
+      '<div class="ds">Multi-Stockist of all Electrical Materials, Fancy Wall Brackets, Chandeliers and Home Furnitures</div>'+
+      '<div class="of"><b>OGBOMOSO OFFICE:</b> Ile-Bara Oke-Ado, Sabo Ilorin Rd, Ogbomoso, Oyo State. Tel: 08035158594, 08100170802</div>'+
+      '<div class="of"><b>ILORIN HEAD OFFICE:</b> 189, Ibrahim Taiwo Rd, beside UBA Bank, Ilorin, Kwara State. Tel: 08033617798, 08060569040</div>'+
+      '<div class="tb">SALES</div>'+
+    '</div>'+
+  '</div>'+
+
+  // Customer + invoice info row
+  '<div class="info">'+
+    '<div>'+
+      '<div class="info-label">Name</div>'+
+      '<div class="info-val">'+(record.printName||'Walk-in customer')+'</div>'+
+    '</div>'+
+    '<div style="text-align:right">'+
+      '<div class="no">No: '+record.invoiceNum+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:4px">'+
+        '<div class="date-box"><div class="label">Day</div><div class="val">'+String(day).padStart(2,'0')+'</div></div>'+
+        '<div class="date-box"><div class="label">Month</div><div class="val">'+String(month2).padStart(2,'0')+'</div></div>'+
+        '<div class="date-box"><div class="label">Year</div><div class="val">'+year+'</div></div>'+
+      '</div>'+
+    '</div>'+
+  '</div>'+
+
+  // Items table
+  '<table>'+
+    '<thead><tr>'+
+      '<th style="width:30px">#</th>'+
+      '<th>Description of Goods</th>'+
+      '<th class="center" style="width:40px">Qty</th>'+
+      '<th class="right" style="width:70px">Rate</th>'+
+      '<th class="right" style="width:55px">Disc.</th>'+
+      '<th class="right" style="width:75px">Amount</th>'+
+    '</tr></thead>'+
+    '<tbody>'+rows+'</tbody>'+
+  '</table>'+
+
+  // Total
+  '<div class="total-section">'+
+    '<div class="total-box">'+
+      '<div class="grand-total"><span>TOTAL</span><span>'+fmt(record.grandTotal)+'</span></div>'+
+    '</div>'+
+  '</div>'+
+
+  // Payment type row
+  '<div class="pay-box">'+
+    '<div style="display:flex;gap:20px">'+
+      '<div><div class="info-label">Payment Type</div><div style="font-weight:700">CASH SALE</div></div>'+
+      '<div><div class="info-label">Served by</div><div style="font-weight:700">'+esc(record.by)+'</div></div>'+
+    '</div>'+
+  '</div>'+
+
+  '<div class="disclaimer">Examine well and receive the above goods in good condition. No refund of money or exchange after payment.<br><i>Thanks for your patronage</i></div>'+
+  '<div class="footer"><i>Thank you for patronizing Great Chid Electro (Nig.) | Come again</i></div>'+
+  '</body></html>';
+
+  var w=window.open('','_blank','width=600,height=750');
+  w.document.write(html);w.document.close();
+  setTimeout(function(){w.print();},400);
+}
+
+function reprintDemoInvoice(id){
+  var record=(DB.demoSales||[]).find(function(d){return d.id===id;});
+  if(!record){showToast('Demo invoice not found.');return;}
+  printDemoInvoice(record);
+}
+
+function deleteDemoSale(id){
+  if(!isAdmin()){alert('Admin only.');return;}
+  showConfirm({title:'Delete demo sale?',msg:'This will permanently remove this demo invoice.',type:'danger',confirmLabel:'Delete'},function(){
+    DB.demoSales=(DB.demoSales||[]).filter(function(d){return d.id!==id;});
+    saveData();renderPanel();
+  });
 }
 
 function buildProformas(){
