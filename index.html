@@ -13004,7 +13004,6 @@ function demoRemoveItem(idx){
 
 function saveDemoSale(mode){
   if(!demoItems.length){showToast('Add items first.');return;}
-  // Prevent double-save if already processing
   if(window._demoSaving){return;}
   window._demoSaving=true;
   var invNum=generateDemoInvoiceNum();
@@ -13017,16 +13016,16 @@ function saveDemoSale(mode){
   DB.demoSales.push(record);
   DB.demoInvoiceCounter=(DB.demoInvoiceCounter||1)+1;
   saveData();
-  // Clear and close to list immediately
+  // Print FIRST (must be synchronous from click event to avoid popup blocker)
+  if(mode==='print'){
+    printDemoInvoice(record);
+  }
+  // Then clear and close
   demoItems=[];
   window._demoSub='list';
   window._demoSaving=false;
   renderPanel();
   showToast('✅ Demo invoice '+invNum+' saved.');
-  // Print after UI has updated
-  if(mode==='print'){
-    setTimeout(function(){printDemoInvoice(record);},300);
-  }
 }
 
 function printDemoInvoice(record){
@@ -13150,10 +13149,19 @@ function printDemoInvoice(record){
   '<div class="ft">Examine well and receive the above goods in good condition. No refund of money or exchange after payment.<br><i>Thanks for your patronage</i><br><br><i>Thank you for patronizing Great Chid Electro (Nig.) | Come again</i></div>'+
   '</body></html>';
 
-  var w=window.open('','_blank','width=600,height=850');
-  w.document.write(html);w.document.close();
-  var _p=false;function _dp(){if(!_p){_p=true;w.print();}}
-  w.onload=function(){setTimeout(_dp,400);};setTimeout(_dp,2500);
+
+  // Use iframe to print - bypasses mobile popup blocker completely
+  var iframe=document.getElementById('demo-print-frame');
+  if(!iframe){
+    iframe=document.createElement('iframe');
+    iframe.id='demo-print-frame';
+    iframe.style.cssText='position:fixed;right:-9999px;bottom:0;width:1px;height:1px;border:none';
+    document.body.appendChild(iframe);
+  }
+  iframe.onload=function(){
+    try{iframe.contentWindow.focus();iframe.contentWindow.print();}catch(e){window.print();}
+  };
+  iframe.srcdoc=html;
 }
 function deleteDemoSale(id){
   if(!isAdmin()){alert('Admin only.');return;}
