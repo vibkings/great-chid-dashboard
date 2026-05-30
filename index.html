@@ -1341,48 +1341,43 @@ function fixCustomerCreditBalances(){
   if(!confirm('This will rebuild ALL customer credit balances from scratch using actual sales and payment records. Continue?'))return;
   var fixed=0;
   DB.customers.forEach(function(cust){
-    // Sum all credit sales for this customer
-    var totalCreditSales=(DB.sales||[]).filter(function(s){
-      return s.custId===cust.id&&(s.payment==='credit'||s.payment==='part');
-    }).reduce(function(a,s){
-      if(s.payment==='credit'){
-        var dep=s.depositApplied||0;
-        return a+Math.max(0,s.total-dep);
-      } else {
-        // part payment — only unpaid portion
-        var partPaid=s.partPayment||0;
-        var dep=s.depositApplied||0;
-        return a+Math.max(0,s.total-partPaid-dep);
-      }
-    },0);
-    // Deduplicate — sum per invoice not per line item
-    var invoiceCreditMap={};
+    // Step 1: Group sales by invoice (to avoid multiplying partPayment by line item count)
+    var invoiceMap={};
     (DB.sales||[]).filter(function(s){
       return s.custId===cust.id&&(s.payment==='credit'||s.payment==='part');
     }).forEach(function(s){
-      var key=s.invoiceNum||s.id;
-      if(!invoiceCreditMap[key]){
-        invoiceCreditMap[key]={payment:s.payment,total:0,partPayment:s.partPayment||0,depositApplied:0};
+      var key=s.invoiceNum||s.invoiceId||s.id;
+      if(!invoiceMap[key]){
+        invoiceMap[key]={
+          payment:s.payment,
+          invoiceTotal:0,
+          partPayment:s.partPayment||0,  // same on all lines of invoice
+          depositApplied:0
+        };
       }
-      invoiceCreditMap[key].total+=s.total;
-      invoiceCreditMap[key].depositApplied+=s.depositApplied||0;
+      invoiceMap[key].invoiceTotal+=s.total;
+      invoiceMap[key].depositApplied+=s.depositApplied||0;
     });
-    var totalCredit=Object.values(invoiceCreditMap).reduce(function(a,inv){
+    // Step 2: Calculate unpaid credit per invoice
+    var totalCredit=Object.values(invoiceMap).reduce(function(a,inv){
+      var gross=inv.invoiceTotal;
+      var dep=inv.depositApplied||0;
       if(inv.payment==='credit'){
-        return a+Math.max(0,inv.total-(inv.depositApplied||0));
+        return a+Math.max(0,gross-dep);
       } else {
-        return a+Math.max(0,inv.total-(inv.partPayment||0)-(inv.depositApplied||0));
+        // part: customer paid partPayment upfront, rest is owed
+        return a+Math.max(0,gross-(inv.partPayment||0)-dep);
       }
     },0);
-    // Subtract all credit payments made
+    // Step 3: Subtract credit payments recorded
     var totalPaid=(DB.creditPayments||[]).filter(function(p){
       return p.custId===cust.id;
     }).reduce(function(a,p){return a+(p.amount||0);},0);
-    // Add opening balance
+    // Step 4: Add opening balance
     var openBal=Math.max(0,cust.openingBalance||0);
     var newBalance=Math.max(0,openBal+totalCredit-totalPaid);
+    console.log(cust.name+': openBal='+openBal+' credit='+totalCredit+' paid='+totalPaid+' → '+newBalance+' (was '+(cust.creditBalance||0)+')');
     if(Math.abs(newBalance-(cust.creditBalance||0))>0.5){
-      console.log('Fixing '+cust.name+': was '+(cust.creditBalance||0)+' → '+newBalance);
       cust.creditBalance=newBalance;
       fixed++;
     }
