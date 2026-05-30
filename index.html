@@ -4228,8 +4228,9 @@ async function sendTwilioWhatsApp(){
     phone=phone.replace(/^\+/,'');
     try{
       var resp=await fetch(proxyUrl,{method:'POST',headers:headers,body:'From='+encodeURIComponent(TWILIO_FROM)+'&To='+encodeURIComponent('whatsapp:+'+phone)+'&Body='+encodeURIComponent(text)});
-      var data=await resp.json();
-      results.push({name:c.name,phone:c.phone,status:data.sid?'✅ Sent':'❌ '+(data.message||'Failed')});
+      var rawText=await resp.text();
+      var data={};try{data=JSON.parse(rawText);}catch(e){data={_raw:rawText};}
+      results.push({name:c.name,phone:c.phone,status:data.sid?'✅ Sent':'❌ '+(data.message||data.error_message||rawText.substring(0,80)||'Failed')});
     }catch(err){results.push({name:c.name,phone:c.phone,status:'❌ Error: '+err.message});}
     await new Promise(function(r){setTimeout(r,300);});
   }
@@ -4260,8 +4261,10 @@ async function sendTermiiSMS(){
     phone=phone.replace(/^\+/,'');
     try{
       var resp=await fetch('https://greatchid-inventory.valentineahize.workers.dev?url='+encodeURIComponent(TERMII_BASE+'/api/sms/send'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:phone,from:TERMII_SENDER,sms:text,type:'plain',api_key:apiKey,channel:'generic'})});
-      var data=await resp.json();
-      results.push({name:c.name,phone:c.phone,status:(data.message_id||data.messageId||data.code==='ok'||data.status==='Message Sent')?'✅ Sent':'❌ '+(data.message||'Failed')});
+      var rawText=await resp.text();
+      var data={};try{data=JSON.parse(rawText);}catch(e){data={_raw:rawText,status:resp.status};}
+      var success=resp.status===200&&(data.message_id||data.messageId||data.code==='ok'||data.status==='Message Sent'||(rawText&&rawText.length>0&&!rawText.includes('error')));
+      results.push({name:c.name,phone:c.phone,status:success?'✅ Sent':'❌ '+(data.message||data.error||rawText.substring(0,80)||'Failed')});
     }catch(err){results.push({name:c.name,phone:c.phone,status:'❌ Error: '+err.message});}
     await new Promise(function(r){setTimeout(r,200);});
   }
