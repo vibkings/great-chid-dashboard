@@ -13010,12 +13010,6 @@ function saveDemoSale(mode){
   if(!demoItems.length){showToast('Add items first.');return;}
   if(window._demoSaving){return;}
   window._demoSaving=true;
-  // Open window IMMEDIATELY before any other code - bypasses popup blocker
-  var printWin=null;
-  if(mode==='print'){
-    printWin=window.open('','_blank','width=700,height=900');
-    if(printWin)printWin.document.write('<html><body><p style="font-family:Arial;padding:20px">Loading invoice...</p></body></html>');
-  }
   var invNum=generateDemoInvoiceNum();
   var printName=(document.getElementById('demo-print-name')||{}).value||'';
   var grandTotal=demoItems.reduce(function(a,l){return a+l.total;},0);
@@ -13026,22 +13020,20 @@ function saveDemoSale(mode){
   DB.demoSales.push(record);
   DB.demoInvoiceCounter=(DB.demoInvoiceCounter||1)+1;
   saveData();
-  if(printWin){
-    printDemoInvoice(record,printWin);
-  }
   demoItems=[];
   window._demoSub='list';
   window._demoSaving=false;
   renderPanel();
   showToast('✅ Demo invoice '+invNum+' saved.');
+  if(mode==='print'){
+    printDemoInvoice(record,null);
+  }
 }
 
 function reprintDemoInvoice(id){
   var record=(DB.demoSales||[]).find(function(d){return String(d.id)===String(id);});
   if(!record){showToast('Demo invoice not found.');return;}
-  var w=window.open('','_blank','width=700,height=900');
-  if(!w){alert('Please allow popups for this site to print.');return;}
-  printDemoInvoice(record,w);
+  printDemoInvoice(record,null);
 }
 
 function printDemoInvoice(record, win){
@@ -13166,23 +13158,32 @@ function printDemoInvoice(record, win){
   '</body></html>';
 
 
-  // Use Blob URL - most reliable cross-browser print approach
-  try {
-    var blob=new Blob([html],{type:'text/html'});
-    var url=URL.createObjectURL(blob);
-    var w=win||window.open('','_blank','width=700,height=900');
-    if(!w){alert('Please allow popups for this site to print.');return;}
-    w.location.href=url;
-    var cleanup=function(){try{URL.revokeObjectURL(url);}catch(e){}};
-    setTimeout(function(){
-      try{w.focus();w.print();setTimeout(cleanup,60000);}
-      catch(e){console.error('Print error:',e);cleanup();}
-    },800);
-  } catch(e) {
-    // Fallback: direct write
-    var w2=win||window.open('','_blank','width=700,height=900');
-    if(w2){w2.document.open();w2.document.write(html);w2.document.close();setTimeout(function(){w2.focus();w2.print();},500);}
+  // Inject invoice into current page as print-only div, then window.print()
+  var old=document.getElementById('demo-print-overlay');
+  if(old)old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='demo-print-overlay';
+  overlay.innerHTML=html;
+  overlay.style.cssText='display:none';
+  document.body.appendChild(overlay);
+  // Add print-only CSS to show only this overlay when printing
+  var styleEl=document.getElementById('demo-print-style');
+  if(!styleEl){
+    styleEl=document.createElement('style');
+    styleEl.id='demo-print-style';
+    styleEl.textContent='@media print{body>*:not(#demo-print-overlay){display:none!important}#demo-print-overlay{display:block!important}}';
+    document.head.appendChild(styleEl);
   }
+  overlay.style.display='block';
+  setTimeout(function(){
+    window.print();
+    setTimeout(function(){
+      overlay.remove();
+      styleEl.remove();
+    },1000);
+  },300);
+  // Close passed window if it was opened
+  if(win){try{win.close();}catch(e){}}
 }
 function deleteDemoSale(id){
   if(!isAdmin()){alert('Admin only.');return;}
