@@ -4216,6 +4216,7 @@ async function sendTwilioWhatsApp(){
   var statusEl=document.getElementById('msg-send-status'),resultsEl=document.getElementById('msg-results');
   if(statusEl)statusEl.textContent='Sending...';if(resultsEl)resultsEl.innerHTML='';
   var results=[],url='https://api.twilio.com/2010-04-01/Accounts/'+sid+'/Messages.json';
+  var proxyUrl='https://corsproxy.io/?'+encodeURIComponent(url);
   var headers={'Authorization':'Basic '+btoa(sid+':'+token),'Content-Type':'application/x-www-form-urlencoded'};
   for(var i=0;i<selected.length;i++){
     var c=selected[i];
@@ -4226,7 +4227,7 @@ async function sendTwilioWhatsApp(){
     if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
     phone=phone.replace(/^\+/,'');
     try{
-      var resp=await fetch(url,{method:'POST',headers:headers,body:'From='+encodeURIComponent(TWILIO_FROM)+'&To='+encodeURIComponent('whatsapp:+'+phone)+'&Body='+encodeURIComponent(text)});
+      var resp=await fetch(proxyUrl,{method:'POST',headers:headers,body:'From='+encodeURIComponent(TWILIO_FROM)+'&To='+encodeURIComponent('whatsapp:+'+phone)+'&Body='+encodeURIComponent(text)});
       var data=await resp.json();
       results.push({name:c.name,phone:c.phone,status:data.sid?'✅ Sent':'❌ '+(data.message||'Failed')});
     }catch(err){results.push({name:c.name,phone:c.phone,status:'❌ Error: '+err.message});}
@@ -4258,7 +4259,7 @@ async function sendTermiiSMS(){
     if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
     phone=phone.replace(/^\+/,'');
     try{
-      var resp=await fetch(TERMII_BASE+'/api/sms/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:phone,from:TERMII_SENDER,sms:text,type:'plain',api_key:apiKey,channel:'generic'})});
+      var resp=await fetch('https://corsproxy.io/?'+encodeURIComponent(TERMII_BASE+'/api/sms/send'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:phone,from:TERMII_SENDER,sms:text,type:'plain',api_key:apiKey,channel:'generic'})});
       var data=await resp.json();
       results.push({name:c.name,phone:c.phone,status:(data.message_id||data.messageId||data.code==='ok'||data.status==='Message Sent')?'✅ Sent':'❌ '+(data.message||'Failed')});
     }catch(err){results.push({name:c.name,phone:c.phone,status:'❌ Error: '+err.message});}
