@@ -1344,7 +1344,7 @@ function fixCustomerCreditBalances(){
     // Step 1: Group sales by invoice (to avoid multiplying partPayment by line item count)
     var invoiceMap={};
     (DB.sales||[]).filter(function(s){
-      return s.custId===cust.id&&(s.payment==='credit'||s.payment==='part');
+      return String(s.custId)===String(cust.id)&&(s.payment==='credit'||s.payment==='part');
     }).forEach(function(s){
       var key=s.invoiceNum||s.invoiceId||s.id;
       if(!invoiceMap[key]){
@@ -1371,7 +1371,7 @@ function fixCustomerCreditBalances(){
     },0);
     // Step 3: Subtract credit payments recorded
     var totalPaid=(DB.creditPayments||[]).filter(function(p){
-      return p.custId===cust.id;
+      return String(p.custId)===String(cust.id);
     }).reduce(function(a,p){return a+(p.amount||0);},0);
     // Step 4: Add opening balance
     var openBal=Math.max(0,cust.openingBalance||0);
