@@ -4060,7 +4060,7 @@ function generateAIMessage(){
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
       contents:[{parts:[{text:prompt}]}],
-      generationConfig:{maxOutputTokens:300,temperature:0.8}
+      generationConfig:{maxOutputTokens:800,temperature:0.8}
     })
   }).then(function(r){
     return r.text().then(function(raw){
