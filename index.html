@@ -2954,6 +2954,21 @@ function renderPanel(){
       });
     });
   }
+  // Event delegation for demo sales print/delete buttons
+  if(activeTab==='demosales'){
+    p.querySelectorAll('.demo-print-btn').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var id=this.closest('tr').getAttribute('data-demoid');
+        reprintDemoInvoice(id);
+      });
+    });
+    p.querySelectorAll('.demo-del-btn').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var id=this.closest('tr').getAttribute('data-demoid');
+        deleteDemoSale(id);
+      });
+    });
+  }
   // Restore focus and cursor position for search inputs after re-render
   var activeSearch=null;
   if(activeTab==='inventory'&&invSearch)activeSearch='inv-search';
@@ -12857,15 +12872,16 @@ function buildDemoSales(){
   if(demoSub==='list'){
     var records=(DB.demoSales||[]).slice().reverse();
     var rows=records.length?records.map(function(d){
-      return '<tr>'+
+      return '<tr data-demoid="'+d.id+'">'+
         '<td>'+d.date+'</td>'+
         '<td><b>'+d.invoiceNum+'</b></td>'+
         '<td>'+esc(d.printName||'Walk-in')+'</td>'+
         '<td style="font-size:11px">'+d.items.map(function(l){return esc(l.name)+' x'+l.qty;}).join(', ')+'</td>'+
         '<td style="text-align:right"><b>'+fmt(d.grandTotal)+'</b></td>'+
         '<td>'+d.by+'</td>'+
-        '<td><button class="btn sm" onclick="reprintDemoInvoice(\''+d.id+'\')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">Print</button>'+
-            (isAdmin()?'<button class="btn danger sm" onclick="deleteDemoSale(\''+d.id+'\')" style="font-size:11px;margin-left:4px">🗑️</button>':'')+
+        '<td style="display:flex;gap:4px">'+
+          '<button class="btn sm demo-print-btn" style="color:#1a237e;border-color:#93c5fd;font-size:11px">Print</button>'+
+          (isAdmin()?'<button class="btn danger sm demo-del-btn" style="font-size:11px">🗑️</button>':'')+
         '</td>'+
       '</tr>';
     }).join(''):null;
@@ -13140,7 +13156,7 @@ function printDemoInvoice(record){
 }
 
 function reprintDemoInvoice(id){
-  var record=(DB.demoSales||[]).find(function(d){return d.id===id;});
+  var record=(DB.demoSales||[]).find(function(d){return String(d.id)===String(id);});
   if(!record){showToast('Demo invoice not found.');return;}
   printDemoInvoice(record);
 }
@@ -13148,7 +13164,7 @@ function reprintDemoInvoice(id){
 function deleteDemoSale(id){
   if(!isAdmin()){alert('Admin only.');return;}
   showConfirm({title:'Delete demo sale?',msg:'This will permanently remove this demo invoice.',type:'danger',confirmLabel:'Delete'},function(){
-    DB.demoSales=(DB.demoSales||[]).filter(function(d){return d.id!==id;});
+    DB.demoSales=(DB.demoSales||[]).filter(function(d){return String(d.id)!==String(id);});
     saveData();renderPanel();
   });
 }
