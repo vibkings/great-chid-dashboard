@@ -3977,24 +3977,68 @@ function generateAIMessage(){
   var textEl=document.getElementById('ai-msg-text');
   if(!btn)return;
   btn.disabled=true;btn.textContent='⏳ Generating...';
-  if(status)status.textContent='';
-  var typeLabels={credit_reminder:'a professional but friendly WhatsApp credit payment reminder',promo:'an exciting promotional offer message',new_stock:'a new stock arrival announcement',greeting:'a warm general greeting',thank_you:'a thank you message after purchase',follow_up:'a follow-up message after a recent purchase',custom:'a WhatsApp business message based on this context: '+context};
-  var prompt='You are a business messaging assistant for Great Chid Electro, a Nigerian electrical materials and doors shop. Write '+typeLabels[msgType]+' for a customer'+(custName?' named '+custName:'')+'. '+(context&&msgType!=='custom'?'Additional context: '+context+'. ':'')+
-    'Requirements: Professional but warm Nigerian business tone. WhatsApp-ready (use emojis appropriately). 3-5 sentences max. End with shop name. Do not include any explanation, just the message.';
+  if(status)status.textContent='Connecting to Claude...';
+  if(result)result.style.display='none';
+
+  var typeLabels={
+    credit_reminder:'a professional but friendly WhatsApp credit payment reminder',
+    promo:'an exciting promotional offer message',
+    new_stock:'a new stock arrival announcement',
+    greeting:'a warm general greeting',
+    thank_you:'a thank you message after purchase',
+    follow_up:'a follow-up message after a recent purchase',
+    custom:'a WhatsApp business message based on this context: '+context
+  };
+  var prompt='You are a business messaging assistant for Great Chid Electro, a Nigerian electrical materials and doors shop in Ogbomoso. Write '+typeLabels[msgType]+' for a customer'+(custName?' named '+custName:'')+'. '+(context&&msgType!=='custom'?'Additional context: '+context+'. ':'')+
+    'Requirements: Professional but warm Nigerian business tone. WhatsApp-ready format. Use relevant emojis. 3-5 sentences max. Sign off with "Great Chid Electro". Write ONLY the message, no explanation or preamble.';
+
   fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
-    headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:prompt}]})
-  }).then(function(r){return r.json();}).then(function(data){
-    var msg=data.content&&data.content[0]&&data.content[0].text?data.content[0].text:'Could not generate message.';
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key':'',
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:'claude-haiku-4-5-20251001',
+      max_tokens:300,
+      messages:[{role:'user',content:prompt}]
+    })
+  }).then(function(r){
+    if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'API error '+r.status);});
+    return r.json();
+  }).then(function(data){
+    var msg=data.content&&data.content[0]&&data.content[0].text?data.content[0].text.trim():'';
+    if(!msg)throw new Error('Empty response from Claude');
     if(textEl)textEl.textContent=msg;
     if(result)result.style.display='block';
     if(status)status.textContent='✅ Done';
   }).catch(function(e){
-    if(status)status.textContent='❌ Error: '+e.message;
+    // Fallback: generate a template message locally
+    var fallback=generateFallbackMessage(custName,msgType,context);
+    if(textEl)textEl.textContent=fallback;
+    if(result)result.style.display='block';
+    if(status)status.textContent='⚠️ Used local template (Claude unavailable)';
+    console.warn('Claude API error:',e.message);
   }).finally(function(){
     btn.disabled=false;btn.textContent='✨ Generate message';
   });
+}
+
+function generateFallbackMessage(name,type,context){
+  var n=name||'Valued Customer';
+  var shop='Great Chid Electro';
+  var templates={
+    credit_reminder:'Dear '+n+', 👋 We hope you are doing well! We would like to kindly remind you about your outstanding balance with us. Kindly visit our store or make payment at your earliest convenience. We value your continued patronage. Thank you! — '+shop,
+    promo:'Hello '+n+'! 🎉 We have exciting offers available at '+shop+' right now! Visit us today and enjoy great deals on electrical materials, doors, and more. '+(context||'Limited time offer!')+'  Don\'t miss out! — '+shop,
+    new_stock:'Hello '+n+'! 📦 Great news! We just received new stock at '+shop+'. '+(context||'Visit us today to see our latest products.')+'  We look forward to serving you! — '+shop,
+    greeting:'Hello '+n+'! 👋 Warm greetings from all of us at '+shop+'. We truly appreciate your patronage and look forward to serving you again soon. Have a wonderful day! — '+shop,
+    thank_you:'Dear '+n+', 🙏 Thank you so much for your recent purchase at '+shop+'! We truly appreciate your business and hope you are satisfied with your items. Please don\'t hesitate to reach out if you need anything. — '+shop,
+    follow_up:'Hello '+n+'! 😊 We hope you are enjoying your recent purchase from '+shop+'. '+(context||'Please let us know if you need anything else.')+'  We are always here to serve you! — '+shop,
+    custom:context||('Hello '+n+'! Warm greetings from '+shop+'. Thank you for your continued patronage. We look forward to serving you again soon!')
+  };
+  return templates[type]||templates.greeting;
 }
 
 function copyAIMessage(){
