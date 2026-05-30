@@ -3967,9 +3967,93 @@ var TERMII_BASE='https://v3.api.termii.com';
 var TERMII_SENDER='great chid';
 function getTermiiApiKey(){return (DB.settings&&DB.settings.termiiApiKey)||'';}
 
+function generateAIMessage(){
+  var custName=(document.getElementById('ai-msg-cust')||{}).value||'';
+  var msgType=(document.getElementById('ai-msg-type')||{}).value||'greeting';
+  var context=(document.getElementById('ai-msg-context')||{}).value||'';
+  var btn=document.getElementById('ai-gen-btn');
+  var status=document.getElementById('ai-gen-status');
+  var result=document.getElementById('ai-msg-result');
+  var textEl=document.getElementById('ai-msg-text');
+  if(!btn)return;
+  btn.disabled=true;btn.textContent='⏳ Generating...';
+  if(status)status.textContent='';
+  var typeLabels={credit_reminder:'a professional but friendly WhatsApp credit payment reminder',promo:'an exciting promotional offer message',new_stock:'a new stock arrival announcement',greeting:'a warm general greeting',thank_you:'a thank you message after purchase',follow_up:'a follow-up message after a recent purchase',custom:'a WhatsApp business message based on this context: '+context};
+  var prompt='You are a business messaging assistant for Great Chid Electro, a Nigerian electrical materials and doors shop. Write '+typeLabels[msgType]+' for a customer'+(custName?' named '+custName:'')+'. '+(context&&msgType!=='custom'?'Additional context: '+context+'. ':'')+
+    'Requirements: Professional but warm Nigerian business tone. WhatsApp-ready (use emojis appropriately). 3-5 sentences max. End with shop name. Do not include any explanation, just the message.';
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(data){
+    var msg=data.content&&data.content[0]&&data.content[0].text?data.content[0].text:'Could not generate message.';
+    if(textEl)textEl.textContent=msg;
+    if(result)result.style.display='block';
+    if(status)status.textContent='✅ Done';
+  }).catch(function(e){
+    if(status)status.textContent='❌ Error: '+e.message;
+  }).finally(function(){
+    btn.disabled=false;btn.textContent='✨ Generate message';
+  });
+}
+
+function copyAIMessage(){
+  var text=(document.getElementById('ai-msg-text')||{}).textContent||'';
+  navigator.clipboard.writeText(text).then(function(){showToast('✅ Message copied to clipboard');}).catch(function(){
+    // Fallback
+    var ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);showToast('✅ Copied');
+  });
+}
+
+function useAIMessage(){
+  var text=(document.getElementById('ai-msg-text')||{}).textContent||'';
+  var ta=document.getElementById('msg-text');
+  if(ta){ta.value=text;showToast('✅ Message applied to template');}
+  else{showToast('Switch to the messaging section below first');}
+}
+
 function buildMessagingPanel(){
   var custs=DB.customers.filter(function(c){return c.phone;});
   var noPhone=DB.customers.filter(function(c){return !c.phone;});
+
+  // ── AI Message Generator ────────────────────────────────────
+  var aiSection=
+    '<div style="background:linear-gradient(135deg,#e8eaf6,#f3e5f5);border:1.5px solid #9c27b0;border-radius:12px;padding:16px;margin-bottom:1.5rem">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'+
+        '<span style="font-size:18px">✨</span>'+
+        '<b style="font-size:14px;color:#6a1b9a">AI Message Generator</b>'+
+        '<span style="font-size:11px;color:#9c27b0;background:#f3e5f5;padding:2px 8px;border-radius:10px;border:1px solid #ce93d8">Powered by Claude</span>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+        '<div class="form-group" style="margin:0"><label style="font-size:11px">Customer name (optional)</label>'+
+          '<input type="text" id="ai-msg-cust" placeholder="e.g. Mr David" style="width:100%;font-size:13px"></div>'+
+        '<div class="form-group" style="margin:0"><label style="font-size:11px">Message type</label>'+
+          '<select id="ai-msg-type" style="width:100%;font-size:13px">'+
+            '<option value="credit_reminder">💳 Credit payment reminder</option>'+
+            '<option value="promo">🎉 Promo / special offer</option>'+
+            '<option value="new_stock">📦 New stock arrival</option>'+
+            '<option value="greeting">👋 General greeting</option>'+
+            '<option value="thank_you">🙏 Thank you message</option>'+
+            '<option value="follow_up">📞 Follow-up after purchase</option>'+
+            '<option value="custom">✏️ Custom (describe below)</option>'+
+          '</select></div>'+
+      '</div>'+
+      '<div class="form-group" style="margin-bottom:10px"><label style="font-size:11px">Extra context (optional)</label>'+
+        '<input type="text" id="ai-msg-context" placeholder="e.g. owes ₦12,900 since last month, amount owed, product name, etc." style="width:100%;font-size:13px">'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;align-items:center">'+
+        '<button onclick="generateAIMessage()" id="ai-gen-btn" style="padding:9px 20px;background:#9c27b0;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✨ Generate message</button>'+
+        '<span id="ai-gen-status" style="font-size:12px;color:#9c27b0"></span>'+
+      '</div>'+
+      '<div id="ai-msg-result" style="display:none;margin-top:12px">'+
+        '<div style="background:#fff;border:1px solid #ce93d8;border-radius:8px;padding:12px;font-size:13px;line-height:1.6;white-space:pre-wrap;color:#333" id="ai-msg-text"></div>'+
+        '<div style="display:flex;gap:8px;margin-top:8px">'+
+          '<button onclick="copyAIMessage()" style="padding:6px 14px;background:#9c27b0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">📋 Copy</button>'+
+          '<button onclick="useAIMessage()" style="padding:6px 14px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">✅ Use as template</button>'+
+          '<button onclick="generateAIMessage()" style="padding:6px 14px;background:none;border:1px solid #9c27b0;color:#9c27b0;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">🔄 Regenerate</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
   var tplBtns=Object.keys(MSG_TEMPLATES).map(function(k){
     var t=MSG_TEMPLATES[k],active=msgTemplateKey===k;
     return '<button onclick="setMsgTemplate(\''+k+'\')" style="padding:7px 12px;border-radius:8px;border:1.5px solid '+(active?'#1a237e':'#cbd5e1')+';background:'+(active?'#1a237e':'#fff')+';color:'+(active?'#fff':'#374151')+';font-size:12px;font-weight:600;cursor:pointer">'+t.label+'</button>';
@@ -4027,6 +4111,7 @@ function buildMessagingPanel(){
     '<button onclick="sendTermiiSMS()" style="padding:11px 24px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">📱 Send SMS to all selected</button>';
 
   return '<p class="sec-title">📲 Customer Messaging</p>'+
+    aiSection+
     channelToggle+credSection+
     '<p style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin-bottom:8px">1. Choose a message template</p>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+tplBtns+'</div>'+
@@ -7124,6 +7209,8 @@ function voidInvoice(invoiceKey){
   });
 }
 function buildSales(){
+  // Generate invoice number ONCE per render — prevents gaps from double-calling
+  var _nextInvNum=generateInvoiceNum();
   // ── Partial/Pending supply section ──
   var partialSales=DB.sales.filter(function(s){return s.supplyStatus==='partial'||s.supplyStatus==='pending';});
   var pendingByInvoice={};
@@ -7355,7 +7442,7 @@ function buildSales(){
     '<p class="sec-title">New invoice</p>'+
     '<div style="background:var(--amber-bg);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;color:var(--amber);margin-bottom:1rem"><b>Rules:</b> Invoice number required. Walk-in customers: cash only. Credit sales: registered customers with credit limit only.</div>'+
     '<div class="fg c2" style="margin-bottom:.5rem"><div class="form-group"><label>Invoice number <span style="color:var(--danger)">*</span> (required)</label>'+
-    '<input type="text" id="s-inv-num" placeholder="Auto-generated" readonly style="background:var(--amber-bg);cursor:default" onfocus="this.value=generateInvoiceNum()" value="'+generateInvoiceNum()+'">'+
+    '<input type="text" id="s-inv-num" placeholder="Auto-generated" readonly style="background:var(--amber-bg);cursor:default" onfocus="if(!this.value)this.value=\''+_nextInvNum+'\'" value="'+_nextInvNum+'">'+
     '<div id="s-inv-dup-warn" style="display:none;margin-top:4px;background:var(--danger-bg);border:1px solid #f5c2c7;border-radius:6px;padding:6px 10px;font-size:12px;color:var(--danger);font-weight:600">'+
     '⛔ This invoice number already exists! Check the Sales ledger before posting.</div>'+
     '</div>'+
@@ -13019,6 +13106,7 @@ function saveDemoSale(mode){
   var record={id:uid(),invoiceNum:invNum,printName:printName||'Walk-in',items:JSON.parse(JSON.stringify(demoItems)),grandTotal:grandTotal,date:date,month:month,by:DB.currentUser?DB.currentUser.name:'Admin'};
   DB.demoSales.push(record);
   DB.demoInvoiceCounter=(DB.demoInvoiceCounter||1)+1;
+  logActivity('Demo Sale','Invoice '+invNum+' — '+(printName||'Walk-in')+' — '+fmt(grandTotal)+' ('+record.items.length+' item'+(record.items.length!==1?'s':'')+')',DB.currentUser?DB.currentUser.name:'Admin');
   saveData();
   demoItems=[];
   window._demoSub='list';
