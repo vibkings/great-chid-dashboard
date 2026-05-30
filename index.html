@@ -4965,10 +4965,10 @@ function printCustomerInvoice(invNum,custId){
   var invNet=s0.payment==='credit'?Math.max(0,grandTotal-depApplied):s0.payment==='part'?Math.max(0,grandTotal-partPaid-depApplied):0;
   // Use live creditBalance — most accurate source of truth
   var liveCredit2=cust?Math.max(0,cust.creditBalance||0):0;
-  // liveCredit2 = current total outstanding (already includes this invoice)
-  // prevInvTotal = what they owed before this invoice
-  var prevInvTotal=liveCredit2-invNet;  // may be negative if they made payments
-  var outstandingBal=liveCredit2;       // always the true current balance
+  // liveCredit2 = current creditBalance (already includes this invoice's contribution)
+  // If s0.prevCreditBalance was stamped at sale time, use it for accurate previous balance
+  var prevInvTotal=s0.prevCreditBalance!=null?Math.max(0,s0.prevCreditBalance):Math.max(0,liveCredit2-invNet);
+  var outstandingBal=prevInvTotal>0?prevInvTotal+invNet:liveCredit2;
   function doPrint(withOutstanding){
     var _printTotal=s0.depositTotal||grandTotal;var html=buildInvoiceHTML({invoiceNum:invNum,custName:s0.printName||(cust?cust.name:'Unknown'),custAddr:cust?cust.address||'':'',day:day,month:mon,year:yr,rows:rows+emptyRows,itemCount:invSales.length,grandTotal:_printTotal,payment:s0.payment,payMode:s0.payMode,depTopupMode:s0.depTopupMode||null,depositApplied:depApplied||0,bankId:s0.bankId,posId:s0.posId,splitPayment:s0.splitPayment||null,seller:s0.seller,pendingSupply:s0.pendingSupply||false,wasEverPending:s0.wasEverPending||false,supplyDate:s0.supplyDate||null,
       partPayment:partPaid,
@@ -6094,7 +6094,8 @@ function submitInvoice(){
       suppliedQty:pendingSupply?0:pi.supplied,
       pendingQty:pendingSupply?l.qty:pi.pending,
       supplyStatus:(pendingSupply||pi.pending===l.qty)?'pending':pi.pending>0?'partial':'supplied',
-      supplyDate:(pendingSupply||pi.pending>0)?null:date
+      supplyDate:(pendingSupply||pi.pending>0)?null:date,
+      prevCreditBalance:payment==='credit'||payment==='part'?_prevCreditBalance:null
     });
   });
   var cashReceived = (payment==='cash'||payment==='split'||payment==='deposit') ? grandTotal : (payment==='part' ? partPayment : 0);
@@ -6151,6 +6152,9 @@ function submitInvoice(){
   // Update registered customer
   if(custId){
     var regC=DB.customers.find(function(c){return c.id==custId;});
+    // Stamp the customer's credit balance BEFORE this invoice is added
+    // so the print function can always show accurate previous balance
+    var _prevCreditBalance=regC?Math.max(0,regC.creditBalance||0):0;
     if(regC){
       regC.totalPurchases+=invoiceItems.length;
       regC.totalSpent+=grandTotal;
