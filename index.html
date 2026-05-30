@@ -3996,9 +3996,7 @@ function generateAIMessage(){
     method:'POST',
     headers:{
       'Content-Type':'application/json',
-      'x-api-key':'',
-      'anthropic-version':'2023-06-01',
-      'anthropic-dangerous-direct-browser-access':'true'
+      'anthropic-version':'2023-06-01'
     },
     body:JSON.stringify({
       model:'claude-haiku-4-5-20251001',
@@ -4006,8 +4004,15 @@ function generateAIMessage(){
       messages:[{role:'user',content:prompt}]
     })
   }).then(function(r){
-    if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message?e.error.message:'API error '+r.status);});
-    return r.json();
+    return r.text().then(function(raw){
+      if(!r.ok){
+        var errMsg='API error '+r.status;
+        try{var e=JSON.parse(raw);errMsg=e.error&&e.error.message?e.error.message:errMsg;}catch(x){}
+        console.error('Claude API raw error response:',raw);
+        throw new Error(errMsg);
+      }
+      try{return JSON.parse(raw);}catch(x){throw new Error('Invalid JSON from Claude: '+raw.substring(0,120));}
+    });
   }).then(function(data){
     var msg=data.content&&data.content[0]&&data.content[0].text?data.content[0].text.trim():'';
     if(!msg)throw new Error('Empty response from Claude');
@@ -4019,7 +4024,7 @@ function generateAIMessage(){
     var fallback=generateFallbackMessage(custName,msgType,context);
     if(textEl)textEl.textContent=fallback;
     if(result)result.style.display='block';
-    if(status)status.textContent='⚠️ Used local template (Claude unavailable)';
+    if(status)status.textContent='⚠️ Used local template — Claude error: '+e.message;
     console.warn('Claude API error:',e.message);
   }).finally(function(){
     btn.disabled=false;btn.textContent='✨ Generate message';
@@ -4262,10 +4267,12 @@ async function sendTermiiSMS(){
     try{
       var resp=await fetch('https://greatchid-inventory.valentineahize.workers.dev?url='+encodeURIComponent(TERMII_BASE+'/api/sms/send'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:phone,from:TERMII_SENDER,sms:text,type:'plain',api_key:apiKey,channel:'generic'})});
       var rawText=await resp.text();
-      var data={};try{data=JSON.parse(rawText);}catch(e){data={_raw:rawText,status:resp.status};}
-      var success=resp.status===200&&(data.message_id||data.messageId||data.code==='ok'||data.status==='Message Sent'||(rawText&&rawText.length>0&&!rawText.includes('error')));
-      results.push({name:c.name,phone:c.phone,status:success?'✅ Sent':'❌ '+(data.message||data.error||rawText.substring(0,80)||'Failed')});
-    }catch(err){results.push({name:c.name,phone:c.phone,status:'❌ Error: '+err.message});}
+      console.log('Termii raw ['+c.name+'] HTTP '+resp.status+':', rawText);
+      var data={};try{data=JSON.parse(rawText);}catch(e){console.warn('Termii JSON parse failed:',rawText);data={_raw:rawText,httpStatus:resp.status};}
+      var success=resp.status===200&&!!(data.message_id||data.messageId||data.code==='ok'||data.status==='Message Sent');
+      var errDetail=data.message||data.error||data.description||(data._raw?data._raw.substring(0,100):'HTTP '+resp.status);
+      results.push({name:c.name,phone:c.phone,status:success?'✅ Sent':'❌ '+errDetail});
+    }catch(err){console.error('Termii fetch error ['+c.name+']:',err);results.push({name:c.name,phone:c.phone,status:'❌ Error: '+err.message});}
     await new Promise(function(r){setTimeout(r,200);});
   }
   var sent=results.filter(function(r){return r.status.startsWith('✅');}).length;
