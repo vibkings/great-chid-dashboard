@@ -1337,57 +1337,62 @@ function fixSupplierDepositOwed(){
   }
 }
 
-function fixCustomerCreditBalances(){
-  if(!confirm('This will rebuild ALL customer credit balances from scratch using actual sales and payment records. Continue?'))return;
-  var fixed=0;
-  DB.customers.forEach(function(cust){
-    // Step 1: Group sales by invoice (to avoid multiplying partPayment by line item count)
-    var invoiceMap={};
-    (DB.sales||[]).filter(function(s){
-      return String(s.custId)===String(cust.id)&&(s.payment==='credit'||s.payment==='part');
-    }).forEach(function(s){
-      var key=s.invoiceNum||s.invoiceId||s.id;
-      if(!invoiceMap[key]){
-        invoiceMap[key]={
-          payment:s.payment,
-          invoiceTotal:0,
-          partPayment:s.partPayment||0,  // same on all lines of invoice
-          depositApplied:0
-        };
-      }
-      invoiceMap[key].invoiceTotal+=s.total;
-      invoiceMap[key].depositApplied+=s.depositApplied||0;
+function showManualCreditAdjust(){
+  // Build customer list with current balances
+  var creditCusts=DB.customers.filter(function(c){return (c.creditBalance||0)>0||true;}).sort(function(a,b){return (b.creditBalance||0)-(a.creditBalance||0);});
+  var rows=creditCusts.map(function(c){
+    return '<tr>'+
+      '<td style="font-size:13px">'+esc(c.name)+'</td>'+
+      '<td style="font-size:13px;color:#c0392b;font-weight:700">'+fmt(c.creditBalance||0)+'</td>'+
+      '<td><input type="number" id="adj-'+c.id+'" placeholder="New balance" style="width:130px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px" min="0"></td>'+
+      '</tr>';
+  }).join('');
+
+  var html=
+    '<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center" id="credit-adj-modal">'+
+    '<div style="background:#fff;border-radius:12px;padding:24px;width:90%;max-width:560px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+    '<b style="font-size:15px">Adjust Customer Credit Balance</b>'+
+    '<button data-action="close-credit-adj" style="background:none;border:none;font-size:20px;cursor:pointer;color:#666">×</button>'+
+    '</div>'+
+    '<p style="font-size:12px;color:#666;margin-bottom:12px">Enter the correct balance for any customer. Leave blank to keep unchanged. Only enter what the customer currently owes.</p>'+
+    '<div class="tbl-wrap" style="max-height:400px;overflow-y:auto">'+
+    '<table><thead><tr><th>Customer</th><th>Current Balance</th><th>New Balance (₦)</th></tr></thead>'+
+    '<tbody>'+rows+'</tbody></table></div>'+
+    '<div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">'+
+    '<button data-action="close-credit-adj" style="padding:10px 20px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-size:13px">Cancel</button>'+
+    '<button onclick="applyManualCreditAdjust()" style="padding:10px 20px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✅ Save Changes</button>'+
+    '</div>'+
+    '</div></div>';
+
+  document.body.insertAdjacentHTML('beforeend',html);
+  // Wire close buttons
+  document.querySelectorAll('[data-action="close-credit-adj"]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var m=document.getElementById('credit-adj-modal');
+      if(m)m.remove();
     });
-    // Step 2: Calculate unpaid credit per invoice
-    var totalCredit=Object.values(invoiceMap).reduce(function(a,inv){
-      var gross=inv.invoiceTotal;
-      var dep=inv.depositApplied||0;
-      if(inv.payment==='credit'){
-        return a+Math.max(0,gross-dep);
-      } else {
-        // part: customer paid partPayment upfront, rest is owed
-        return a+Math.max(0,gross-(inv.partPayment||0)-dep);
-      }
-    },0);
-    // Step 3: Subtract credit payments recorded
-    var totalPaid=(DB.creditPayments||[]).filter(function(p){
-      return String(p.custId)===String(cust.id);
-    }).reduce(function(a,p){return a+(p.amount||0);},0);
-    // Step 4: Add opening balance
-    var openBal=Math.max(0,cust.openingBalance||0);
-    var newBalance=Math.max(0,openBal+totalCredit-totalPaid);
-    console.log(cust.name+': openBal='+openBal+' credit='+totalCredit+' paid='+totalPaid+' → '+newBalance+' (was '+(cust.creditBalance||0)+')');
-    if(Math.abs(newBalance-(cust.creditBalance||0))>0.5){
-      cust.creditBalance=newBalance;
-      fixed++;
-    }
+  });
+}
+
+function applyManualCreditAdjust(){
+  var fixed=0;
+  DB.customers.forEach(function(c){
+    var inp=document.getElementById('adj-'+c.id);
+    if(!inp||inp.value.trim()==='')return;
+    var newBal=parseFloat(inp.value);
+    if(isNaN(newBal)||newBal<0)return;
+    console.log('Adjusting '+c.name+': '+fmt(c.creditBalance||0)+' → '+fmt(newBal));
+    c.creditBalance=newBal;
+    fixed++;
   });
   if(fixed>0){
     saveData();
-    showToast('✅ Fixed '+fixed+' customer balance(s). Reload to see updated figures.');
+    document.getElementById('credit-adj-modal').remove();
+    showToast('✅ Updated '+fixed+' customer balance(s).');
     renderApp();
   } else {
-    showToast('ℹ️ All customer balances are already correct.');
+    showToast('ℹ️ No changes made — enter at least one new balance.');
   }
 }
 
@@ -2221,8 +2226,8 @@ function buildSettings(){
     '<p style="font-size:13px;color:#666;margin-bottom:10px">Fix supplier owed amounts: recalculates owedToSupplier for all suppliers accounting for deposit applications.</p>'+
     '<button class="btn" style="font-size:13px;padding:8px 14px;background:#1a237e;color:#fff;border-color:#1a237e;margin-top:4px" onclick="fixSupplierDepositOwed()">🔧 Fix Supplier Balances</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
-    '<p style="font-size:13px;color:#666;margin-bottom:10px">Fix customer credit balances: rebuilds every customer\'s outstanding balance from scratch using actual sales and payment records.</p>'+
-    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#c0392b;color:#fff;border-color:#c0392b;margin-top:4px" onclick="fixCustomerCreditBalances()">🔧 Fix Customer Credit Balances</button>':'');
+    '<p style="font-size:13px;color:#666;margin-bottom:10px">Manually adjust a customer\'s credit balance — use this to correct a specific customer without affecting others.</p>'+
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#c0392b;color:#fff;border-color:#c0392b;margin-top:4px" onclick="showManualCreditAdjust()">🔧 Adjust Customer Credit Balance</button>':'');
 }
 
 function renderAuth(){
