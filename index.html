@@ -5082,6 +5082,10 @@ function buildInvoiceHTML(inv){
       '<tr style="background:#fff5f5"><td colspan="4" style="text-align:right;font-size:9px;color:#c0392b;font-weight:700">DISCOUNT</td><td colspan="2" class="right" style="font-size:10px;color:#c0392b;font-weight:700">- '+fmt(inv.invoiceDiscAmt)+'</td></tr>'
     :'')+
     '<tr class="tr"><td colspan="4" style="text-align:right;font-size:10px">'+(inv.invoiceDiscAmt>0?'NET TOTAL':'TOTAL')+'</td><td colspan="2" class="right">'+fmt(inv.grandTotal)+'</td></tr>'+
+    (inv.payment!=='credit'&&inv.grandTotal>0?
+      '<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d;font-weight:700">AMOUNT PAID</td><td colspan="2" class="right" style="font-size:10px;color:#15803d;font-weight:800">'+fmt(inv.payment==='part'?inv.partPayment||0:inv.grandTotal-(inv.depositApplied||0))+'</td></tr>'+
+      (inv.depositApplied>0?'<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d">DEPOSIT APPLIED</td><td colspan="2" class="right" style="font-size:10px;color:#15803d">'+fmt(inv.depositApplied)+'</td></tr>':'')
+    :'')+
     (inv.outstandingBal>0?
       (inv.prevInvTotal>0?'<tr style="background:#fff8f0"><td colspan="4" style="text-align:right;font-size:9px;color:#92400e;font-weight:600">PREVIOUS BALANCE</td><td colspan="2" class="right" style="font-size:10px;color:#92400e">'+fmt(inv.prevInvTotal)+'</td></tr>':'')+
       '<tr style="background:var(--danger-bg);border-top:2px solid #c0392b"><td colspan="4" style="text-align:right;font-size:10px;color:#c0392b;font-weight:800">TOTAL OUTSTANDING</td><td colspan="2" class="right" style="font-size:12px;color:#c0392b;font-weight:900">'+fmt(inv.outstandingBal)+'</td></tr>'
@@ -13006,6 +13010,12 @@ function saveDemoSale(mode){
   if(!demoItems.length){showToast('Add items first.');return;}
   if(window._demoSaving){return;}
   window._demoSaving=true;
+  // Open window IMMEDIATELY before any other code - bypasses popup blocker
+  var printWin=null;
+  if(mode==='print'){
+    printWin=window.open('','_blank','width=700,height=900');
+    if(printWin)printWin.document.write('<html><body><p style="font-family:Arial;padding:20px">Loading invoice...</p></body></html>');
+  }
   var invNum=generateDemoInvoiceNum();
   var printName=(document.getElementById('demo-print-name')||{}).value||'';
   var grandTotal=demoItems.reduce(function(a,l){return a+l.total;},0);
@@ -13016,11 +13026,9 @@ function saveDemoSale(mode){
   DB.demoSales.push(record);
   DB.demoInvoiceCounter=(DB.demoInvoiceCounter||1)+1;
   saveData();
-  // Print FIRST (must be synchronous from click event to avoid popup blocker)
-  if(mode==='print'){
-    printDemoInvoice(record);
+  if(printWin){
+    printDemoInvoice(record,printWin);
   }
-  // Then clear and close
   demoItems=[];
   window._demoSub='list';
   window._demoSaving=false;
@@ -13028,7 +13036,15 @@ function saveDemoSale(mode){
   showToast('✅ Demo invoice '+invNum+' saved.');
 }
 
-function printDemoInvoice(record){
+function reprintDemoInvoice(id){
+  var record=(DB.demoSales||[]).find(function(d){return String(d.id)===String(id);});
+  if(!record){showToast('Demo invoice not found.');return;}
+  var w=window.open('','_blank','width=700,height=900');
+  if(!w){alert('Please allow popups for this site to print.');return;}
+  printDemoInvoice(record,w);
+}
+
+function printDemoInvoice(record, win){
   var d=new Date();
   var pageSize='A5';
   var fontSize='11px';
@@ -13151,17 +13167,15 @@ function printDemoInvoice(record){
 
 
   // Use iframe to print - bypasses mobile popup blocker completely
-  var iframe=document.getElementById('demo-print-frame');
-  if(!iframe){
-    iframe=document.createElement('iframe');
-    iframe.id='demo-print-frame';
-    iframe.style.cssText='position:fixed;right:-9999px;bottom:0;width:1px;height:1px;border:none';
-    document.body.appendChild(iframe);
-  }
-  iframe.onload=function(){
-    try{iframe.contentWindow.focus();iframe.contentWindow.print();}catch(e){window.print();}
-  };
-  iframe.srcdoc=html;
+  // Use passed window or open new one
+  var w=win||window.open('','_blank','width=700,height=900');
+  if(!w){alert('Please allow popups for this site to print.');return;}
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){
+    try{w.focus();w.print();}catch(e){console.error('Print error:',e);}
+  },500);
 }
 function deleteDemoSale(id){
   if(!isAdmin()){alert('Admin only.');return;}
