@@ -3992,7 +3992,7 @@ function generateAIMessage(){
   var prompt='You are a business messaging assistant for Great Chid Electro, a Nigerian electrical materials and doors shop in Ogbomoso. Write '+typeLabels[msgType]+' for a customer'+(custName?' named '+custName:'')+'. '+(context&&msgType!=='custom'?'Additional context: '+context+'. ':'')+
     'Requirements: Professional but warm Nigerian business tone. WhatsApp-ready format. Use relevant emojis. 3-5 sentences max. Sign off with "Great Chid Electro". Write ONLY the message, no explanation or preamble.';
 
-  fetch('https://api.anthropic.com/v1/messages',{
+  fetch('https://greatchid-inventory.valentineahize.workers.dev?url='+encodeURIComponent('https://api.anthropic.com/v1/messages'),{
     method:'POST',
     headers:{
       'Content-Type':'application/json',
@@ -4216,7 +4216,7 @@ async function sendTwilioWhatsApp(){
   var statusEl=document.getElementById('msg-send-status'),resultsEl=document.getElementById('msg-results');
   if(statusEl)statusEl.textContent='Sending...';if(resultsEl)resultsEl.innerHTML='';
   var results=[],url='https://api.twilio.com/2010-04-01/Accounts/'+sid+'/Messages.json';
-  var proxyUrl='https://corsproxy.io/?'+encodeURIComponent(url);
+  var proxyUrl='https://greatchid-inventory.valentineahize.workers.dev?url='+encodeURIComponent(url);
   var headers={'Authorization':'Basic '+btoa(sid+':'+token),'Content-Type':'application/x-www-form-urlencoded'};
   for(var i=0;i<selected.length;i++){
     var c=selected[i];
@@ -4259,7 +4259,7 @@ async function sendTermiiSMS(){
     if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
     phone=phone.replace(/^\+/,'');
     try{
-      var resp=await fetch('https://corsproxy.io/?'+encodeURIComponent(TERMII_BASE+'/api/sms/send'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:phone,from:TERMII_SENDER,sms:text,type:'plain',api_key:apiKey,channel:'generic'})});
+      var resp=await fetch('https://greatchid-inventory.valentineahize.workers.dev?url='+encodeURIComponent(TERMII_BASE+'/api/sms/send'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:phone,from:TERMII_SENDER,sms:text,type:'plain',api_key:apiKey,channel:'generic'})});
       var data=await resp.json();
       results.push({name:c.name,phone:c.phone,status:(data.message_id||data.messageId||data.code==='ok'||data.status==='Message Sent')?'✅ Sent':'❌ '+(data.message||'Failed')});
     }catch(err){results.push({name:c.name,phone:c.phone,status:'❌ Error: '+err.message});}
