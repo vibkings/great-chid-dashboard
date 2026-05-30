@@ -1337,6 +1337,65 @@ function fixSupplierDepositOwed(){
   }
 }
 
+function fixCustomerCreditBalances(){
+  if(!confirm('This will rebuild ALL customer credit balances from scratch using actual sales and payment records. Continue?'))return;
+  var fixed=0;
+  DB.customers.forEach(function(cust){
+    // Sum all credit sales for this customer
+    var totalCreditSales=(DB.sales||[]).filter(function(s){
+      return s.custId===cust.id&&(s.payment==='credit'||s.payment==='part');
+    }).reduce(function(a,s){
+      if(s.payment==='credit'){
+        var dep=s.depositApplied||0;
+        return a+Math.max(0,s.total-dep);
+      } else {
+        // part payment — only unpaid portion
+        var partPaid=s.partPayment||0;
+        var dep=s.depositApplied||0;
+        return a+Math.max(0,s.total-partPaid-dep);
+      }
+    },0);
+    // Deduplicate — sum per invoice not per line item
+    var invoiceCreditMap={};
+    (DB.sales||[]).filter(function(s){
+      return s.custId===cust.id&&(s.payment==='credit'||s.payment==='part');
+    }).forEach(function(s){
+      var key=s.invoiceNum||s.id;
+      if(!invoiceCreditMap[key]){
+        invoiceCreditMap[key]={payment:s.payment,total:0,partPayment:s.partPayment||0,depositApplied:0};
+      }
+      invoiceCreditMap[key].total+=s.total;
+      invoiceCreditMap[key].depositApplied+=s.depositApplied||0;
+    });
+    var totalCredit=Object.values(invoiceCreditMap).reduce(function(a,inv){
+      if(inv.payment==='credit'){
+        return a+Math.max(0,inv.total-(inv.depositApplied||0));
+      } else {
+        return a+Math.max(0,inv.total-(inv.partPayment||0)-(inv.depositApplied||0));
+      }
+    },0);
+    // Subtract all credit payments made
+    var totalPaid=(DB.creditPayments||[]).filter(function(p){
+      return p.custId===cust.id;
+    }).reduce(function(a,p){return a+(p.amount||0);},0);
+    // Add opening balance
+    var openBal=Math.max(0,cust.openingBalance||0);
+    var newBalance=Math.max(0,openBal+totalCredit-totalPaid);
+    if(Math.abs(newBalance-(cust.creditBalance||0))>0.5){
+      console.log('Fixing '+cust.name+': was '+(cust.creditBalance||0)+' → '+newBalance);
+      cust.creditBalance=newBalance;
+      fixed++;
+    }
+  });
+  if(fixed>0){
+    saveData();
+    showToast('✅ Fixed '+fixed+' customer balance(s). Reload to see updated figures.');
+    renderApp();
+  } else {
+    showToast('ℹ️ All customer balances are already correct.');
+  }
+}
+
 function fixSupplierPaymentCategories(){
   var fixed=0;
   (DB.cashflow||[]).forEach(function(c){
@@ -2165,7 +2224,10 @@ function buildSettings(){
     '<button class="btn" style="font-size:13px;padding:8px 14px;background:#1a237e;color:#fff;border-color:#1a237e" onclick="fixSupplierPaymentCategories()">🔧 Fix Restocking Categories</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
     '<p style="font-size:13px;color:#666;margin-bottom:10px">Fix supplier owed amounts: recalculates owedToSupplier for all suppliers accounting for deposit applications.</p>'+
-    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#1a237e;color:#fff;border-color:#1a237e;margin-top:4px" onclick="fixSupplierDepositOwed()">🔧 Fix Supplier Balances</button>':'');
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#1a237e;color:#fff;border-color:#1a237e;margin-top:4px" onclick="fixSupplierDepositOwed()">🔧 Fix Supplier Balances</button>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
+    '<p style="font-size:13px;color:#666;margin-bottom:10px">Fix customer credit balances: rebuilds every customer\'s outstanding balance from scratch using actual sales and payment records.</p>'+
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#c0392b;color:#fff;border-color:#c0392b;margin-top:4px" onclick="fixCustomerCreditBalances()">🔧 Fix Customer Credit Balances</button>':'');
 }
 
 function renderAuth(){
