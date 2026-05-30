@@ -4966,7 +4966,7 @@ function printCustomerInvoice(invNum,custId){
   // Use live creditBalance — most accurate source of truth
   var liveCredit2=cust?Math.max(0,cust.creditBalance||0):0;
   var prevInvTotal=Math.max(0,liveCredit2-invNet);
-  var outstandingBal=liveCredit2;
+  var outstandingBal=prevInvTotal>0?prevInvTotal+invNet:liveCredit2;
   function doPrint(withOutstanding){
     var _printTotal=s0.depositTotal||grandTotal;var html=buildInvoiceHTML({invoiceNum:invNum,custName:s0.printName||(cust?cust.name:'Unknown'),custAddr:cust?cust.address||'':'',day:day,month:mon,year:yr,rows:rows+emptyRows,itemCount:invSales.length,grandTotal:_printTotal,payment:s0.payment,payMode:s0.payMode,depTopupMode:s0.depTopupMode||null,depositApplied:depApplied||0,bankId:s0.bankId,posId:s0.posId,splitPayment:s0.splitPayment||null,seller:s0.seller,pendingSupply:s0.pendingSupply||false,wasEverPending:s0.wasEverPending||false,supplyDate:s0.supplyDate||null,
       partPayment:partPaid,
@@ -5227,7 +5227,9 @@ function buildInvoiceHTML(inv){
       (inv.depositApplied>0?'<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d">DEPOSIT APPLIED</td><td colspan="2" class="right" style="font-size:10px;color:#15803d">'+fmt(inv.depositApplied)+'</td></tr>':'')
     :'')+
     (inv.outstandingBal>0?
-      (inv.prevInvTotal>0?'<tr style="background:#fff8f0"><td colspan="4" style="text-align:right;font-size:9px;color:#92400e;font-weight:600">PREVIOUS BALANCE</td><td colspan="2" class="right" style="font-size:10px;color:#92400e">'+fmt(inv.prevInvTotal)+'</td></tr>':'')+
+      (inv.prevInvTotal>0?'<tr style="background:#fff8f0"><td colspan="4" style="text-align:right;font-size:9px;color:#92400e;font-weight:600">PREVIOUS BALANCE</td><td colspan="2" class="right" style="font-size:10px;color:#92400e">'+fmt(inv.prevInvTotal)+'</td></tr>'+
+        '<tr style="background:#fff8f0"><td colspan="4" style="text-align:right;font-size:9px;color:#92400e;font-weight:600">THIS INVOICE</td><td colspan="2" class="right" style="font-size:10px;color:#92400e">'+fmt(inv.grandTotal)+'</td></tr>'
+      :'')+
       '<tr style="background:var(--danger-bg);border-top:2px solid #c0392b"><td colspan="4" style="text-align:right;font-size:10px;color:#c0392b;font-weight:800">TOTAL OUTSTANDING</td><td colspan="2" class="right" style="font-size:12px;color:#c0392b;font-weight:900">'+fmt(inv.outstandingBal)+'</td></tr>'
     :'')+
     '</tbody></table>'+
