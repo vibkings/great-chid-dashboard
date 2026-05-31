@@ -2939,9 +2939,13 @@ function showAddNewWarehouseGoodsModal(){
             '<input type="number" id="wng-cost" min="0" placeholder="0" style="margin-top:4px">'+
           '</div>'+
           '<div class="form-group" style="margin:0">'+
-            '<label>Note <span style="font-size:10px;color:var(--text3)">(optional)</span></label>'+
-            '<input type="text" id="wng-note" placeholder="e.g. From Lagos supplier, June delivery" style="margin-top:4px">'+
+            '<label>Selling Price (₦)</label>'+
+            '<input type="number" id="wng-sell" min="0" placeholder="0" style="margin-top:4px">'+
           '</div>'+
+        '</div>'+
+        '<div class="form-group" style="margin-bottom:.75rem">'+
+          '<label>Note <span style="font-size:10px;color:var(--text3)">(optional)</span></label>'+
+          '<input type="text" id="wng-note" placeholder="e.g. From Lagos supplier, June delivery" style="width:100%;margin-top:4px">'+
         '</div>'+
         '<div style="display:flex;gap:8px;margin-top:4px">'+
           '<button class="btn" onclick="document.getElementById(\'wh-newgoods-modal\').remove()">Cancel</button>'+
@@ -2962,22 +2966,25 @@ function saveNewWarehouseGoods(){
   var qty=parseInt(document.getElementById('wng-qty').value)||0;
   var minQty=parseInt(document.getElementById('wng-minqty').value)||0;
   var cost=parseFloat(document.getElementById('wng-cost').value)||0;
+  var sell=parseFloat(document.getElementById('wng-sell').value)||0;
   var note=(document.getElementById('wng-note').value||'').trim();
   if(!name){alert('Item name is required.');return;}
   if(qty<1){alert('Enter a valid quantity.');return;}
   if(catSel==='__new__'&&!catNew){alert('Enter a new category name.');return;}
   if(catSel==='__new__'&&catNew&&!DB.categories.includes(catNew))DB.categories.push(catNew);
-  // Check for duplicate name in warehouse
   var dupWh=DB.warehouse.find(function(w){return w.name.toLowerCase()===name.toLowerCase();});
   if(dupWh){alert('"'+name+'" already exists in the warehouse. Use "Add Existing Stock" to adjust its quantity.');return;}
+  var dupInv=DB.inventory.find(function(i){return i.name.toLowerCase()===name.toLowerCase();});
+  if(dupInv){alert('"'+name+'" already exists in Shop Inventory. Use "Add Existing Stock" to add it to the warehouse instead.');return;}
   var newId=uid();
   DB.warehouse.push({id:newId,name:name,cat:cat||'',qty:qty,minQty:minQty,cost:cost,supplierId:supId,warehouseOnly:true});
+  DB.inventory.push({id:newId,name:name,qty:0,cost:cost,sell:sell,minQty:minQty,supId:supId,cat:cat||''});
   DB.transferLog.push({id:uid(),date:new Date().toLocaleDateString(),direction:'to_warehouse',itemId:newId,itemName:name,itemCat:cat||'',qty:qty,waybill:'NEW-GOODS',note:note||'New goods added to warehouse',by:DB.currentUser.name});
-  logActivity('stock','📦 New goods added to warehouse: '+name+' (Qty: '+qty+')',{itemId:newId,qty:qty,note:note});
+  logActivity('stock','✅ New goods added: '+name+' (Wh. Qty: '+qty+', Shop Qty: 0)',{itemId:newId,qty:qty,note:note});
   saveData();
   document.getElementById('wh-newgoods-modal').remove();
   renderApp();
-  setTimeout(function(){alert('✅ "'+name+'" added to Warehouse.\nQty: '+qty+'\nIt will appear as an alert in Shop Inventory.');},100);
+  setTimeout(function(){alert('✅ "'+name+'" added!\n\nWarehouse Qty: '+qty+'\nShop Inventory Qty: 0 (Out of stock)\n\nTransfer Warehouse → Shop to stock the shop.');},100);
 }
 
 function editWhMinQty(itemId){
@@ -3591,18 +3598,24 @@ function buildInventory(){
   if(!canDo('inventory'))return '<div class="empty">Access denied.</div>';
 
   // ── Warehouse-Only Goods Alert ────────────────────────────
+  // Show items where warehouse has stock but shop inventory qty is 0
   var whOnlyItems=DB.warehouse.filter(function(w){
-    return w.warehouseOnly===true||!DB.inventory.find(function(i){return i.id===w.id;});
+    if(w.qty<=0)return false;
+    var shopItem=DB.inventory.find(function(i){return i.id===w.id;});
+    return !shopItem||(shopItem.qty===0);
   });
   var whOnlyBanner='';
   if(whOnlyItems.length&&!window._whOnlyDismissed){
     var whOnlyRows=whOnlyItems.map(function(w){
+      var shopItem=DB.inventory.find(function(i){return i.id===w.id;});
+      var shopQty=shopItem?shopItem.qty:0;
       return '<tr>'+
         '<td style="font-weight:600">'+esc(w.name)+'</td>'+
         '<td>'+(w.cat||'-')+'</td>'+
         '<td style="text-align:center;font-weight:700;color:#7c3aed">'+w.qty+'</td>'+
+        '<td style="text-align:center;color:#dc3545;font-weight:700">'+shopQty+'</td>'+
         '<td style="text-align:right;font-size:11px">'+(w.cost?fmt(w.cost):'-')+'</td>'+
-        '<td><button class="btn sm" onclick="switchTab(\'warehouse\')" style="font-size:10px;color:#7c3aed;border-color:#c4b5fd">🏭 View in Warehouse</button></td>'+
+        '<td><button class="btn sm" onclick="switchTab(\'warehouse\')" style="font-size:10px;color:#7c3aed;border-color:#c4b5fd">🏭 Transfer to Shop</button></td>'+
       '</tr>';
     }).join('');
     var whIsCollapsed=window._whOnlyCollapsed||false;
@@ -3611,8 +3624,8 @@ function buildInventory(){
         '<div style="display:flex;align-items:center;gap:8px">'+
           '<span style="font-size:18px">🏭</span>'+
           '<div>'+
-            '<div style="font-size:14px;font-weight:700;color:#5b21b6">'+whOnlyItems.length+' item'+(whOnlyItems.length>1?'s':'')+' available in Warehouse — not yet in Shop</div>'+
-            '<div style="font-size:11px;color:#7c3aed;margin-top:1px">Transfer these to the shop or add them to Shop Inventory</div>'+
+            '<div style="font-size:14px;font-weight:700;color:#5b21b6">'+whOnlyItems.length+' item'+(whOnlyItems.length>1?'s':'')+' in Warehouse with zero Shop stock — ready to transfer</div>'+
+            '<div style="font-size:11px;color:#7c3aed;margin-top:1px">These items appear in Shop Inventory with Qty 0. Transfer stock from Warehouse → Shop.</div>'+
           '</div>'+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px">'+
