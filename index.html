@@ -3653,10 +3653,9 @@ function buildOverview(){
   var returnsCount=(DB.salesReturns||[]).length;
 
   // ── Suppliers ────────────────────────────────────────────
-  var suppOwed=(DB.purchases||[]).filter(function(p){return p.payType==='credit'||p.payType==='part';}).reduce(function(a,p){
-    if(p.payType==='credit')return a+(p.grandTotal||0);
-    return a+Math.max(0,(p.grandTotal||0)-(p.amountPaid||0));
-  },0);
+  // Use owedToSupplier on each supplier record — the authoritative figure
+  // maintained by the purchases + payments system
+  var suppOwed=DB.suppliers.reduce(function(a,s){return a+(s.owedToSupplier||0);},0);
 
   // ── Helpers ───────────────────────────────────────────────
   function kpi(icon,label,val,sub,color,tab,pulse){
