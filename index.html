@@ -335,6 +335,7 @@ input.inline-edit{border:1.5px solid var(--primary);border-radius:5px;padding:4p
 /* ===== CONFIRMATION MODAL ===== */
 .confirm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99998;display:flex;align-items:center;justify-content:center;padding:1rem;animation:fadeIn .12s ease}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes ovPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
 .confirm-box{background:var(--white);border-radius:12px;padding:1.75rem 1.75rem 1.5rem;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.25);animation:slideUp .15s ease}
 @keyframes slideUp{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}
 .confirm-icon{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 1rem;flex-shrink:0}
@@ -390,7 +391,7 @@ var DB={
   ]
 };
 var ALL_PERMS={inventory:'Inventory',stockmgmt:'Stock Mgmt',invedit:'Edit Inventory',invdelete:'Delete Inventory',warehouse:'Warehouse',whstockadj:'Warehouse Stock Adjust',sales:'Sales',demosales:'Demo Sales',purchases:'Purchases',finance:'Financial Dashboard',expenses:'Expenses',suppliers:'Suppliers',customers:'Customers',creditcust:'Credit',reports:'Reports',settings:'Settings'};
-var activeTab='inventory',activeStockSub='count',activeCustSub='list',activeSupSub='list',reportTab='sales',reportDateFrom='',reportDateTo='',reportStaff='',saleCustomerType='registered',invSearch='',salesSearch='',purchaseSearch='',supplierSearch='',customerSearch='';
+var activeTab='overview',activeStockSub='count',activeCustSub='list',activeSupSub='list',reportTab='sales',reportDateFrom='',reportDateTo='',reportStaff='',saleCustomerType='registered',invSearch='',salesSearch='',purchaseSearch='',supplierSearch='',customerSearch='';
 var expFilterFrom='',expFilterTo='',expFilterCat='';
 var activeCountCat='';
 var countSession=[],countStarted=false;
@@ -2258,6 +2259,7 @@ function doLogin(){
 function doLogout(){DB.currentUser=null;renderAuth();}
 
 var TABS=[
+  {id:'overview',label:'Overview',perm:'inventory'},
   {id:'inventory',label:'Inventory',perm:'inventory'},
   {id:'stockmgmt',label:'Stock Mgmt',perm:'stockmgmt'},
   {id:'warehouse',label:'Warehouse',perm:'warehouse'},
@@ -2285,8 +2287,8 @@ var TABS=[
   {id:'users',label:'Users',perm:'users'}
 ];
 
-var NAV_ICONS={inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',demosales:'🎯',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋',supplieroverview:'📋',customeroverview:'👤',inventoryval:'🏷️',pandl:'📊',returnstrack:'↩️',proformas:'📄',productreport:'🔎',monthlysummary:'📅'};
-var NAV_LABELS={inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',demosales:'Demo Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',suppayments:'Supplier Payments',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing',supplieroverview:'Supplier Overview',customeroverview:'Customer Overview',inventoryval:'Inventory Valuation',pandl:'Profit & Loss',returnstrack:'Returns Tracker',proformas:'Proforma Invoices',productreport:'Product Report',monthlysummary:'Monthly Summary'};
+var NAV_ICONS={overview:'🏠',inventory:'📦',stockmgmt:'⚙️',warehouse:'🏭',sales:'🧾',demosales:'🎯',purchases:'🛒',expenses:'💸',finance:'📈',suppliers:'🚛',suppayments:'💳',customers:'👥',creditcust:'💳',reports:'📊',recyclebin:'🗑️',settings:'⚙️',users:'🛡️',activitylog:'🔍',closing:'📋',supplieroverview:'📋',customeroverview:'👤',inventoryval:'🏷️',pandl:'📊',returnstrack:'↩️',proformas:'📄',productreport:'🔎',monthlysummary:'📅'};
+var NAV_LABELS={overview:'Overview',inventory:'Inventory',stockmgmt:'Stock Management',warehouse:'Warehouse',sales:'Sales',demosales:'Demo Sales',purchases:'Purchases',expenses:'Expenses',finance:'Financial Dashboard',suppliers:'Suppliers',suppayments:'Supplier Payments',customers:'Customers',creditcust:'Credit',reports:'Reports',recyclebin:'Recycle Bin',settings:'Settings',users:'Users & Profile',activitylog:'Activity Log',closing:'Daily Closing',supplieroverview:'Supplier Overview',customeroverview:'Customer Overview',inventoryval:'Inventory Valuation',pandl:'Profit & Loss',returnstrack:'Returns Tracker',proformas:'Proforma Invoices',productreport:'Product Report',monthlysummary:'Monthly Summary'};
 var VERSION_NOTES=[
   {ver:'v27',date:'May 2026',title:'Confirmation popups & Recycle Bin',notes:[
     'Confirmation popups — every delete now shows a styled modal instead of plain browser confirm()',
@@ -2581,6 +2583,7 @@ function renderApp(){
     '</div>':'';
   var navHtml='';
   var sections=[
+    {label:'Overview',tabs:['overview']},
     {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases','proformas']},
     {label:'Demo',tabs:['demosales']},
     {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing','supplieroverview','customeroverview','inventoryval','pandl','returnstrack','productreport','monthlysummary']},
@@ -3154,7 +3157,7 @@ function filterWhTable(){
 function renderPanel(){
   var scrollY=window.scrollY||window.pageYOffset;
   var p=document.getElementById('panel-root');if(!p)return;
-  var map={inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,demosales:buildDemoSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas,productreport:buildProductReport,monthlysummary:(typeof buildMonthlyReport==='function'?buildMonthlyReport:function(){return '<div class="empty">Monthly Summary loading...</div>';})};
+  var map={overview:buildOverview,inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,demosales:buildDemoSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas,productreport:buildProductReport,monthlysummary:(typeof buildMonthlyReport==='function'?buildMonthlyReport:function(){return '<div class="empty">Monthly Summary loading...</div>';})};
   var content='';
   try{
     content=(map[activeTab]||function(){return '';})();
@@ -3592,6 +3595,160 @@ function importInventoryExcel(file){
   };
   reader.readAsArrayBuffer(file);
   }); // end loadXLSX
+}
+
+function buildOverview(){
+  var now=new Date();
+  var today=now.toLocaleDateString();
+  var curMonth=now.toISOString().slice(0,7);
+
+  // ── Stock Values ─────────────────────────────────────────
+  var shopVal=DB.inventory.reduce(function(a,i){return a+i.qty*i.cost;},0);
+  var whVal=DB.warehouse.reduce(function(a,w){return a+w.qty*(w.cost||0);},0);
+  var combinedVal=shopVal+whVal;
+  var shopItems=DB.inventory.length;
+  var whItems=DB.warehouse.length;
+  var shopLow=DB.inventory.filter(function(i){return i.qty>0&&i.qty<=i.minQty;}).length;
+  var shopOut=DB.inventory.filter(function(i){return i.qty===0;}).length;
+  var whLow=DB.warehouse.filter(function(w){return w.qty>0&&w.qty<=w.minQty;}).length;
+  var whOut=DB.warehouse.filter(function(w){return w.qty===0;}).length;
+  var whReadyToTransfer=DB.warehouse.filter(function(w){
+    if(w.qty<=0)return false;
+    var s=DB.inventory.find(function(i){return i.id===w.id;});
+    return !s||(s.qty===0);
+  }).length;
+
+  // ── Today's Sales ────────────────────────────────────────
+  var todaySales=DB.sales.filter(function(s){return s.date===today;});
+  var todayRev=todaySales.reduce(function(a,s){return a+s.total;},0);
+  var todayProfit=todaySales.reduce(function(a,s){return a+s.profit;},0);
+  var todayCount=todaySales.reduce(function(a,s){return a+(s.items?s.items.length:1);},0);
+
+  // ── This Month ───────────────────────────────────────────
+  var monthSales=DB.sales.filter(function(s){return (s.month||s.date.slice(0,7)||'')===curMonth;});
+  var monthRev=monthSales.reduce(function(a,s){return a+s.total;},0);
+  var monthProfit=monthSales.reduce(function(a,s){return a+s.profit;},0);
+
+  // ── Outstanding / Credit ─────────────────────────────────
+  var invMap={};
+  DB.sales.forEach(function(s){
+    var k=s.invoiceNum||s.id;
+    if(!invMap[k])invMap[k]={total:0,payment:s.payment,partPayment:s.partPayment||0,depositApplied:s.depositApplied||0};
+    invMap[k].total+=s.total;
+  });
+  var totalOutstanding=Object.values(invMap).reduce(function(a,inv){
+    if(inv.payment==='credit')return a+Math.max(0,inv.total-(inv.depositApplied||0));
+    if(inv.payment==='part')return a+Math.max(0,inv.total-(inv.partPayment||0)-(inv.depositApplied||0));
+    return a;
+  },0);
+  var creditCusts=DB.customers.filter(function(c){return (c.creditBalance||0)>0;}).length;
+
+  // ── Expenses this month ───────────────────────────────────
+  var monthExp=DB.cashflow.filter(function(c){
+    return c.type==='out'&&c.cat!=='Restock'&&c.cat!=='Supplier Payment'&&c.cat!=='Supplier Deposit'&&(c.month||'')===curMonth;
+  }).reduce(function(a,c){return a+c.amount;},0);
+
+  // ── Returns ───────────────────────────────────────────────
+  var returnsVal=(DB.salesReturns||[]).reduce(function(a,r){return a+(r.refundAmt||0);},0);
+  var returnsCount=(DB.salesReturns||[]).length;
+
+  // ── Suppliers ────────────────────────────────────────────
+  var suppOwed=(DB.purchases||[]).filter(function(p){return p.payType==='credit'||p.payType==='part';}).reduce(function(a,p){
+    if(p.payType==='credit')return a+(p.grandTotal||0);
+    return a+Math.max(0,(p.grandTotal||0)-(p.amountPaid||0));
+  },0);
+
+  // ── Helpers ───────────────────────────────────────────────
+  function kpi(icon,label,val,sub,color,tab,pulse){
+    var accent=color||'var(--primary)';
+    var pulseHtml=pulse?'<span style="position:absolute;top:10px;right:10px;width:8px;height:8px;border-radius:50%;background:'+accent+';animation:ovPulse 1.5s infinite"></span>':'';
+    var clickable=tab?'onclick="switchTab(\''+tab+'\')" style="cursor:pointer"':'style="cursor:default"';
+    return '<div class="mc" '+clickable+' title="'+(tab?'Go to '+tab:'')+'" style="border-top:3px solid '+accent+';padding-top:.85rem;position:relative">'+
+      pulseHtml+
+      '<div class="ml">'+icon+' '+label+'</div>'+
+      '<div class="mv" style="color:'+accent+';font-size:20px">'+val+'</div>'+
+      '<div class="ms">'+sub+'</div>'+
+    '</div>';
+  }
+  function section(title,color){
+    return '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:'+color+';margin:1.5rem 0 .75rem;padding-left:4px;border-left:3px solid '+color+';padding-left:10px">'+title+'</div>';
+  }
+  function pct(a,b){return b>0?'('+Math.round(a/b*100)+'%)':'';}
+
+  var monthName=now.toLocaleString('default',{month:'long',year:'numeric'});
+
+  var html=
+    // ── Header ──────────────────────────────────────────────
+    '<div style="background:linear-gradient(135deg,#1a237e 0%,#0d47a1 60%,#1565c0 100%);border-radius:var(--radius-lg);padding:1.5rem 1.75rem;margin-bottom:1.5rem;color:#fff;box-shadow:var(--shadow-lg);position:relative;overflow:hidden">'+
+      '<div style="position:absolute;right:-20px;top:-20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.05)"></div>'+
+      '<div style="position:absolute;right:40px;bottom:-30px;width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.04)"></div>'+
+      '<div style="font-size:22px;font-weight:800;margin-bottom:4px">Great Chid Electro</div>'+
+      '<div style="font-size:13px;opacity:.75">Business Overview &nbsp;·&nbsp; '+now.toLocaleDateString('default',{weekday:'long',year:'numeric',month:'long',day:'numeric'})+'</div>'+
+      '<div style="display:flex;gap:2rem;margin-top:1.1rem;flex-wrap:wrap">'+
+        '<div><div style="font-size:10px;opacity:.65;text-transform:uppercase;letter-spacing:.08em">Combined Stock Value</div><div style="font-size:26px;font-weight:800">'+fmt(combinedVal)+'</div></div>'+
+        '<div><div style="font-size:10px;opacity:.65;text-transform:uppercase;letter-spacing:.08em">Today\'s Revenue</div><div style="font-size:26px;font-weight:800">'+fmt(todayRev)+'</div></div>'+
+        '<div><div style="font-size:10px;opacity:.65;text-transform:uppercase;letter-spacing:.08em">Outstanding</div><div style="font-size:26px;font-weight:800">'+fmt(totalOutstanding)+'</div></div>'+
+      '</div>'+
+    '</div>'+
+
+    // ── Row 1: Stock Health ───────────────────────────────────
+    section('📦 Stock Health','#15803d')+
+    '<div class="metrics" style="grid-template-columns:repeat(4,1fr)">'+
+      kpi('🔵','Combined Stock Value',fmt(combinedVal),'Shop + Warehouse','#1565c0',null,false)+
+      kpi('🏬','Shop Stock Value',fmt(shopVal),shopItems+' items in shop','#0891b2','inventory',false)+
+      kpi('🏭','Warehouse Stock Value',fmt(whVal),whItems+' items in warehouse','#7c3aed','warehouse',false)+
+      kpi('⚠️','Transfer Ready',whReadyToTransfer+' item'+(whReadyToTransfer!==1?'s':''),'In warehouse, shop qty is 0',whReadyToTransfer>0?'#dc2626':'#15803d','warehouse',whReadyToTransfer>0)+
+    '</div>'+
+    '<div class="metrics" style="grid-template-columns:repeat(4,1fr);margin-top:10px">'+
+      kpi('🔴','Shop — Out of Stock',shopOut+' item'+(shopOut!==1?'s':''),'Need restocking',shopOut>0?'#dc2626':'#15803d','inventory',shopOut>0)+
+      kpi('🟡','Shop — Low Stock',shopLow+' item'+(shopLow!==1?'s':''),'At or below minimum',shopLow>0?'#d97706':'#15803d','inventory',shopLow>0)+
+      kpi('🔴','Warehouse — Out',whOut+' item'+(whOut!==1?'s':''),'Zero qty in warehouse',whOut>0?'#dc2626':'#15803d','warehouse',false)+
+      kpi('🟡','Warehouse — Low',whLow+' item'+(whLow!==1?'s':''),'At or below minimum',whLow>0?'#d97706':'#15803d','warehouse',false)+
+    '</div>'+
+
+    // ── Row 2: Sales ─────────────────────────────────────────
+    section('🧾 Sales Performance','#0d6efd')+
+    '<div class="metrics" style="grid-template-columns:repeat(4,1fr)">'+
+      kpi('📅','Today\'s Revenue',fmt(todayRev),todaySales.length+' invoice'+(todaySales.length!==1?'s':''),'#0d6efd','sales',false)+
+      kpi('💰','Today\'s Profit',fmt(todayProfit),pct(todayProfit,todayRev)+' margin',todayProfit>0?'#15803d':'#6c757d',null,false)+
+      kpi('📆','This Month Revenue',fmt(monthRev),monthName,'#0891b2','sales',false)+
+      kpi('📈','This Month Profit',fmt(monthProfit),pct(monthProfit,monthRev)+' margin',monthProfit>0?'#15803d':'#6c757d',null,false)+
+    '</div>'+
+
+    // ── Row 3: Financial ──────────────────────────────────────
+    section('📊 Financial Snapshot','#7c3aed')+
+    '<div class="metrics" style="grid-template-columns:repeat(4,1fr)">'+
+      kpi('🧾','Total Outstanding',fmt(totalOutstanding),'Unpaid invoices',totalOutstanding>0?'#dc2626':'#15803d','sales',totalOutstanding>0)+
+      kpi('💳','Customers on Credit',creditCusts+' customer'+(creditCusts!==1?'s':''),'With outstanding balance',creditCusts>0?'#d97706':'#15803d','creditcust',false)+
+      kpi('💸','Expenses This Month',fmt(monthExp),monthName,monthExp>0?'#dc2626':'#15803d','expenses',false)+
+      kpi('🚛','Owed to Suppliers',fmt(suppOwed),'Credit & part-payment',suppOwed>0?'#d97706':'#15803d','suppliers',suppOwed>0)+
+    '</div>'+
+
+    // ── Row 4: Returns ────────────────────────────────────────
+    section('↩️ Returns','#b45309')+
+    '<div class="metrics" style="grid-template-columns:repeat(4,1fr)">'+
+      kpi('↩️','Total Returns Value',fmt(returnsVal),returnsCount+' return record'+(returnsCount!==1?'s':''),'#b45309','returnstrack',false)+
+      kpi('📋','Return Records',returnsCount+' record'+(returnsCount!==1?'s':''),'All time','#92400e','returnstrack',false)+
+    '</div>'+
+
+    // ── Row 5: Alerts ─────────────────────────────────────────
+    section('🔔 Quick Actions','#dc2626')+
+    '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:1.5rem">'+
+      '<button class="btn" onclick="switchTab(\'inventory\')" style="padding:14px;font-size:13px;font-weight:700;color:#dc2626;border-color:#f5c2c7;background:#fff5f5;border-radius:var(--radius-lg);text-align:left">'+
+        '<span style="font-size:20px">📦</span> Shop Inventory &nbsp;<span style="float:right;font-size:11px;background:#dc2626;color:#fff;border-radius:20px;padding:2px 8px">'+shopItems+' items</span>'+
+      '</button>'+
+      '<button class="btn" onclick="switchTab(\'warehouse\')" style="padding:14px;font-size:13px;font-weight:700;color:#7c3aed;border-color:#c4b5fd;background:#f5f3ff;border-radius:var(--radius-lg);text-align:left">'+
+        '<span style="font-size:20px">🏭</span> Warehouse &nbsp;<span style="float:right;font-size:11px;background:#7c3aed;color:#fff;border-radius:20px;padding:2px 8px">'+whItems+' items</span>'+
+      '</button>'+
+      '<button class="btn" onclick="switchTab(\'sales\')" style="padding:14px;font-size:13px;font-weight:700;color:#0d6efd;border-color:#b6d4fe;background:#f0f4ff;border-radius:var(--radius-lg);text-align:left">'+
+        '<span style="font-size:20px">🧾</span> Sales &nbsp;<span style="float:right;font-size:11px;background:#0d6efd;color:#fff;border-radius:20px;padding:2px 8px">'+DB.sales.length+' records</span>'+
+      '</button>'+
+      '<button class="btn" onclick="switchTab(\'finance\')" style="padding:14px;font-size:13px;font-weight:700;color:#15803d;border-color:#a3cfbb;background:#f0fdf4;border-radius:var(--radius-lg);text-align:left">'+
+        '<span style="font-size:20px">📈</span> Financial Dashboard'+
+      '</button>'+
+    '</div>';
+
+  return html;
 }
 
 function buildInventory(){
