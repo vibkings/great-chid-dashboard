@@ -4938,7 +4938,13 @@ function printCustomerStatement(custId){
     if(!custInvs[k])custInvs[k]={type:'invoice',date:s.date,label:'Invoice #'+k,amount:s.total,partPayment:s.partPayment||0,payment:s.payment,mode:s.payment==='credit'?'Credit':'Part payment',by:s.seller};
     else{custInvs[k].amount+=s.total;}
   });
-  Object.values(custInvs).forEach(function(e){allEvents.push(e);});
+  Object.values(custInvs).forEach(function(e){
+    allEvents.push(e);
+    // For part payments, add a credit line for the upfront amount paid
+    if(e.payment==='part'&&e.partPayment>0){
+      allEvents.push({type:'payment',date:e.date,label:'Part payment — Invoice #'+(e.label.replace('Invoice #','')),amount:e.partPayment,mode:'Part payment (upfront)',by:e.by});
+    }
+  });
   var allPayments=(DB.creditPayments||[]).filter(function(p){return String(p.custId)==String(custId);});
   console.log('Statement payments for custId='+custId+':', allPayments.length, allPayments.map(function(p){return p.amount+' ('+p.payMode+') on '+p.date;}));
   allPayments.forEach(function(p){
