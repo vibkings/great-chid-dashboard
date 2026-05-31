@@ -4619,7 +4619,7 @@ function buildCustomers(){
           Object.values(txInvs).forEach(function(e){allTx.push(e);});
           custPays2.forEach(function(p){allTx.push({type:'payment',date:p.date,label:'Payment received'+(p.note?' - '+p.note:''),amount:p.amount,mode:payModeLabel(p),by:p.by});});
           var retMap2={};
-          (DB.salesReturns||[]).filter(function(r){return String(r.custId)==String(cust.id);}).forEach(function(r){var k=r.invoiceNum+'_'+r.date;if(!retMap2[k])retMap2[k]={type:'return',date:r.date,label:'Return - Invoice #'+r.invoiceNum,amount:0,refundType:r.refundType,mode:r.refundType==='cash'?'Cash refund':r.refundType==='credit'?'Store credit':'Exchange',by:r.by};retMap2[k].amount+=r.refundAmt||0;});
+          (DB.salesReturns||[]).filter(function(r){return String(r.custId)==String(cust.id);}).forEach(function(r){var k=r.invoiceNum+'_'+r.date;if(!retMap2[k])retMap2[k]={type:'return',date:r.date,label:'Return - Invoice #'+r.invoiceNum,amount:0,refundType:r.refundType,mode:r.refundType==='cash'?'Cash refund':r.refundType==='credit'?'Store credit (Return)':'Exchange (Return)',by:r.by};retMap2[k].amount+=r.refundAmt||0;});
           Object.values(retMap2).forEach(function(e){allTx.push(e);});
           allTx.sort(function(a,b){if(a.type==='opening')return -1;if(b.type==='opening')return 1;return parseSaleDate(a.date)-parseSaleDate(b.date);});
           var run=0;
@@ -4939,7 +4939,9 @@ function printCustomerStatement(custId){
     else{custInvs[k].amount+=s.total;}
   });
   Object.values(custInvs).forEach(function(e){allEvents.push(e);});
-  (DB.creditPayments||[]).filter(function(p){return String(p.custId)==String(custId);}).forEach(function(p){
+  var allPayments=(DB.creditPayments||[]).filter(function(p){return String(p.custId)==String(custId);});
+  console.log('Statement payments for custId='+custId+':', allPayments.length, allPayments.map(function(p){return p.amount+' ('+p.payMode+') on '+p.date;}));
+  allPayments.forEach(function(p){
     var isWO=p.payMode==='writeoff';
     allEvents.push({type:isWO?'writeoff':'payment',date:p.date,
       label:isWO?'✂ Write-off / Discount':'Payment received',
@@ -4948,7 +4950,7 @@ function printCustomerStatement(custId){
   var retMap={};
   (DB.salesReturns||[]).filter(function(r){return String(r.custId)==String(custId);}).forEach(function(r){
     var k=r.invoiceNum+'_'+r.date;
-    if(!retMap[k])retMap[k]={type:'return',date:r.date,label:'Return \u2014 Invoice #'+r.invoiceNum,amount:0,refundType:r.refundType,mode:r.refundType==='cash'?'Cash refund':r.refundType==='credit'?'Store credit':'Exchange',by:r.by};
+    if(!retMap[k])retMap[k]={type:'return',date:r.date,label:'Return \u2014 Invoice #'+r.invoiceNum,amount:0,refundType:r.refundType,mode:r.refundType==='cash'?'Cash refund':r.refundType==='credit'?'Store credit (Return)':'Exchange (Return)',by:r.by};
     retMap[k].amount+=r.refundAmt||0;
   });
   Object.values(retMap).forEach(function(e){allEvents.push(e);});
@@ -4956,11 +4958,10 @@ function printCustomerStatement(custId){
   var running=0;
   var rows=allEvents.map(function(e,i){
     if(e.type==='opening'||e.type==='invoice')running+=e.amount;
-    else if(e.type==='payment'||e.type==='writeoff')running-=e.amount;
-    else if(e.type==='return'&&(e.refundType==='credit'||e.refundType==='exchange'))running-=e.amount;
+    else if(e.type==='payment'||e.type==='writeoff'||e.type==='return')running-=e.amount;
     running=Math.round(running*100)/100;
     var dr=e.type==='invoice'||e.type==='opening'?fmt(e.amount):'';
-    var cr=(e.type==='payment'||e.type==='writeoff')||(e.type==='return'&&(e.refundType==='credit'||e.refundType==='exchange'))?fmt(e.amount):'';
+    var cr=(e.type==='payment'||e.type==='writeoff'||e.type==='return')?fmt(e.amount):'';
     return '<tr>'+
       '<td>'+e.date+'</td>'+
       '<td>'+e.label+'</td>'+
