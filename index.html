@@ -4955,8 +4955,10 @@ function printCustomerStatement(custId){
   });
   var retMap={};
   (DB.salesReturns||[]).filter(function(r){return String(r.custId)==String(custId);}).forEach(function(r){
-    var k=r.invoiceNum+'_'+r.date;
-    if(!retMap[k])retMap[k]={type:'return',date:r.date,label:'Return \u2014 Invoice #'+r.invoiceNum,amount:0,refundType:r.refundType,mode:r.refundType==='cash'?'Cash refund':r.refundType==='credit'?'Store credit (Return)':'Exchange (Return)',by:r.by};
+    // Normalize date to locale string so sorting works consistently
+    var normDate=(function(){var d=parseDate(r.date);return d?d.toLocaleDateString():r.date;})();
+    var k=r.invoiceNum+'_'+normDate;
+    if(!retMap[k])retMap[k]={type:'return',date:normDate,label:'Return \u2014 Invoice #'+r.invoiceNum,amount:0,refundType:r.refundType,mode:r.refundType==='cash'?'Cash refund':r.refundType==='credit'?'Store credit (Return)':'Exchange (Return)',by:r.by};
     retMap[k].amount+=r.refundAmt||0;
   });
   Object.values(retMap).forEach(function(e){allEvents.push(e);});
