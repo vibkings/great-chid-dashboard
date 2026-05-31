@@ -3630,17 +3630,9 @@ function buildOverview(){
   var monthProfit=monthSales.reduce(function(a,s){return a+s.profit;},0);
 
   // ── Outstanding / Credit ─────────────────────────────────
-  var invMap={};
-  DB.sales.forEach(function(s){
-    var k=s.invoiceNum||s.id;
-    if(!invMap[k])invMap[k]={total:0,payment:s.payment,partPayment:s.partPayment||0,depositApplied:s.depositApplied||0};
-    invMap[k].total+=s.total;
-  });
-  var totalOutstanding=Object.values(invMap).reduce(function(a,inv){
-    if(inv.payment==='credit')return a+Math.max(0,inv.total-(inv.depositApplied||0));
-    if(inv.payment==='part')return a+Math.max(0,inv.total-(inv.partPayment||0)-(inv.depositApplied||0));
-    return a;
-  },0);
+  // Use creditBalance on each customer — the live running balance
+  // maintained by the sales + credit payment system (same source as top bar)
+  var totalOutstanding=DB.customers.reduce(function(a,c){return a+(c.creditBalance||0);},0);
   var creditCusts=DB.customers.filter(function(c){return (c.creditBalance||0)>0;}).length;
 
   // ── Expenses this month ───────────────────────────────────
