@@ -7774,7 +7774,8 @@ function buildSales(){
           '<td>'+g.by+'</td>'+
           '<td style="white-space:nowrap">'+
             '<button class="btn sm" onclick="viewReturnDetail(\''+g.key+'\')" style="color:#1a237e;border-color:#93c5fd;font-size:11px;margin-right:3px">&#128065; View</button>'+
-            '<button class="btn sm" onclick="printReturnRecord(\''+g.key+'\')" style="color:#15803d;border-color:#86efac;font-size:11px">&#128438; Print</button>'+
+            '<button class="btn sm" onclick="printReturnRecord(\''+g.key+'\')" style="color:#15803d;border-color:#86efac;font-size:11px;margin-right:3px">&#128438; Print</button>'+
+            '<button class="btn sm" onclick="editReturnGroup(\''+g.key+'\')" style="color:#92400e;border-color:#fcd34d;font-size:11px">&#9998; Edit</button>'+
           '</td>'+
         '</tr>';
       }).join('');
@@ -7786,6 +7787,60 @@ function buildSales(){
         :'<div class="empty" style="padding:1.25rem">No returns for this period.</div>');
     })();
 }
+// ── Edit Return Group ───────────────────────────────────────
+function editReturnGroup(gKey){
+  var groups=window._retGroups||{};
+  var g=groups[gKey];
+  if(!g){alert('Return not found. Please refresh the page.');return;}
+  var m=document.createElement('div');
+  m.id='edit-ret-group-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  m.innerHTML=
+    '<div style="background:#fff;border-radius:12px;padding:24px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.3)">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+    '<b style="font-size:15px">✏️ Edit Return — Invoice #'+esc(g.invoiceNum||'—')+'</b>'+
+    '<button id="close-erg" style="background:none;border:none;font-size:22px;cursor:pointer">&times;</button>'+
+    '</div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Return Date</label>'+
+    '<input type="date" id="erg-date" value="'+(g.date||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reason</label>'+
+    '<input type="text" id="erg-reason" value="'+esc(g.reason||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>'+
+    '<div style="margin-bottom:20px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Refund Type</label>'+
+    '<select id="erg-refundtype" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px">'+
+    '<option value="cash"'+(g.refundType==='cash'?' selected':'')+'>Cash refund</option>'+
+    '<option value="credit"'+(g.refundType==='credit'?' selected':'')+'>Store credit</option>'+
+    '<option value="exchange"'+(g.refundType==='exchange'?' selected':'')+'>Exchange</option>'+
+    '</select></div>'+
+    '<p style="font-size:11px;color:#6b7280;margin-bottom:16px">This will update all '+g.items.length+' item(s) in this return.</p>'+
+    '<div style="display:flex;gap:10px;justify-content:flex-end">'+
+    '<button id="cancel-erg" style="padding:10px 20px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:13px">Cancel</button>'+
+    '<button id="save-erg" style="padding:10px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✅ Save Changes</button>'+
+    '</div></div>';
+  document.body.appendChild(m);
+  document.getElementById('close-erg').onclick=function(){m.remove();};
+  document.getElementById('cancel-erg').onclick=function(){m.remove();};
+  document.getElementById('save-erg').onclick=function(){
+    var newDate=document.getElementById('erg-date').value;
+    var newReason=document.getElementById('erg-reason').value.trim();
+    var newType=document.getElementById('erg-refundtype').value;
+    if(!newDate){alert('Please select a date.');return;}
+    // Update all items in the group
+    g.items.forEach(function(item){
+      var r=DB.salesReturns.find(function(x){return x.id===item.id;});
+      if(r){
+        r.date=newDate;
+        r.month=newDate.slice(0,7);
+        r.reason=newReason;
+        r.refundType=newType;
+      }
+    });
+    saveData();
+    m.remove();
+    showToast('✅ Return updated — '+g.items.length+' item(s) changed.');
+    renderApp();
+  };
+}
+
 // ── Return Record Detail Modal ───────────────────────────────
 function viewReturnDetail(gKey){
   var groups=window._retGroups||{};
@@ -10690,6 +10745,56 @@ var retSearch='';
 var retDateFrom='';
 var retDateTo='';
 
+function editReturn(rid){
+  var r=DB.salesReturns.find(function(x){return x.id==rid;});
+  if(!r){alert('Return not found.');return;}
+  var m=document.createElement('div');
+  m.id='edit-return-modal';
+  m.innerHTML=
+    '<div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem">'+
+    '<div style="background:#fff;border-radius:12px;padding:24px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.3)">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+    '<b style="font-size:15px">✏️ Edit Return</b>'+
+    '<button id="close-edit-return" style="background:none;border:none;font-size:22px;cursor:pointer;color:#666">&times;</button>'+
+    '</div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Date</label>'+
+    '<input type="date" id="er-date" value="'+(r.date||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Refund Amount (₦)</label>'+
+    '<input type="number" id="er-amount" value="'+(r.refundAmt||0)+'" min="0" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reason</label>'+
+    '<input type="text" id="er-reason" value="'+esc(r.reason||'')+'" placeholder="Return reason" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>'+
+    '<div style="margin-bottom:20px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Refund Type</label>'+
+    '<select id="er-refundtype" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px">'+
+    '<option value="cash"'+(r.refundType==='cash'?' selected':'')+'>Cash refund</option>'+
+    '<option value="credit"'+(r.refundType==='credit'?' selected':'')+'>Store credit</option>'+
+    '<option value="exchange"'+(r.refundType==='exchange'?' selected':'')+'>Exchange</option>'+
+    '</select></div>'+
+    '<div style="display:flex;gap:10px;justify-content:flex-end">'+
+    '<button id="cancel-edit-return" style="padding:10px 20px;border:1px solid #d1d5db;border-radius:8px;background:#fff;cursor:pointer;font-size:13px">Cancel</button>'+
+    '<button id="save-edit-return" style="padding:10px 20px;background:#1d4ed8;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✅ Save Changes</button>'+
+    '</div>'+
+    '</div></div>';
+  document.body.appendChild(m);
+  document.getElementById('close-edit-return').onclick=function(){m.remove();};
+  document.getElementById('cancel-edit-return').onclick=function(){m.remove();};
+  document.getElementById('save-edit-return').onclick=function(){
+    var newDate=document.getElementById('er-date').value;
+    var newAmt=parseFloat(document.getElementById('er-amount').value)||0;
+    var newReason=document.getElementById('er-reason').value.trim();
+    var newType=document.getElementById('er-refundtype').value;
+    if(!newDate){alert('Please select a date.');return;}
+    r.date=newDate;
+    r.month=newDate.slice(0,7);
+    r.refundAmt=newAmt;
+    r.reason=newReason;
+    r.refundType=newType;
+    saveData();
+    m.remove();
+    showToast('✅ Return updated.');
+    renderApp();
+  };
+}
+
 function buildReturnsTracker(){
   if(!canDo('sales')&&!canDo('reports'))return '<div class="empty">Access denied.</div>';
   var returns=DB.salesReturns||[];
@@ -10774,6 +10879,7 @@ function buildReturnsTracker(){
       '<td style="color:#6b7280;font-size:12px">'+(r.reason||'—')+'</td>'+
       '<td>'+(refundTypeBadge[r.refundType]||refundTypeBadge['cash'])+'</td>'+
       '<td style="color:#9ca3af;font-size:11px">'+(r.by||'—')+'</td>'+
+      '<td><button class="btn sm" onclick="editReturn(\''+r.id+'\')" style="font-size:11px;padding:3px 8px;color:#1d4ed8;border-color:#bfdbfe">✏️ Edit</button></td>'+
     '</tr>';
   }).join('');
 
