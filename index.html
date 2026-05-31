@@ -4962,6 +4962,7 @@ function printCustomerStatement(custId){
   Object.values(retMap).forEach(function(e){allEvents.push(e);});
   allEvents.sort(function(a,b){if(a.type==='opening')return -1;if(b.type==='opening')return 1;return parseSaleDate(a.date)-parseSaleDate(b.date);});
   var running=0;
+  function fmtStmtDate(d){if(!d||d==='—')return'—';var p=parseDate(d);if(p)return p.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});return d;}
   var rows=allEvents.map(function(e,i){
     if(e.type==='opening'||e.type==='invoice')running+=e.amount;
     else if(e.type==='payment'||e.type==='writeoff'||e.type==='return')running-=e.amount;
@@ -4969,7 +4970,7 @@ function printCustomerStatement(custId){
     var dr=e.type==='invoice'||e.type==='opening'?fmt(e.amount):'';
     var cr=(e.type==='payment'||e.type==='writeoff'||e.type==='return')?fmt(e.amount):'';
     return '<tr>'+
-      '<td>'+e.date+'</td>'+
+      '<td>'+fmtStmtDate(e.date)+'</td>'+
       '<td>'+e.label+'</td>'+
       '<td style="text-align:right;color:#c0392b">'+dr+'</td>'+
       '<td style="text-align:right;color:#15803d">'+cr+'</td>'+
@@ -7802,7 +7803,7 @@ function editReturnGroup(gKey){
     '<button id="close-erg" style="background:none;border:none;font-size:22px;cursor:pointer">&times;</button>'+
     '</div>'+
     '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Return Date</label>'+
-    '<input type="date" id="erg-date" value="'+(g.date||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>'+
+    '<input type="date" id="erg-date" value="'+(function(){var d=parseDate(g.date);return d?d.getFullYear()+'-'+(String(d.getMonth()+1).padStart(2,'0'))+'-'+(String(d.getDate()).padStart(2,'0')):'';})()+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>'+
     '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Reason</label>'+
     '<input type="text" id="erg-reason" value="'+esc(g.reason||'')+'" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:14px"></div>'+
     '<div style="margin-bottom:20px"><label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px">Refund Type</label>'+
@@ -7820,16 +7821,21 @@ function editReturnGroup(gKey){
   document.getElementById('close-erg').onclick=function(){m.remove();};
   document.getElementById('cancel-erg').onclick=function(){m.remove();};
   document.getElementById('save-erg').onclick=function(){
-    var newDate=document.getElementById('erg-date').value;
+    var newDateRaw=document.getElementById('erg-date').value;
     var newReason=document.getElementById('erg-reason').value.trim();
     var newType=document.getElementById('erg-refundtype').value;
-    if(!newDate){alert('Please select a date.');return;}
+    if(!newDateRaw){alert('Please select a date.');return;}
+    // Convert YYYY-MM-DD to system locale format (same as toLocaleDateString)
+    var dp=newDateRaw.split('-');
+    var newDateObj=new Date(parseInt(dp[0]),parseInt(dp[1])-1,parseInt(dp[2]));
+    var newDate=newDateObj.toLocaleDateString();
+    var newMonth=newDateRaw.slice(0,7);
     // Update all items in the group
     g.items.forEach(function(item){
       var r=DB.salesReturns.find(function(x){return x.id===item.id;});
       if(r){
         r.date=newDate;
-        r.month=newDate.slice(0,7);
+        r.month=newMonth;
         r.reason=newReason;
         r.refundType=newType;
       }
