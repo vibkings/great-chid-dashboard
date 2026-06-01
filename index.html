@@ -3838,7 +3838,7 @@ function importInventoryExcel(file){
 function buildOverview(){
   var now=new Date();
   var today=now.toLocaleDateString();
-  var curMonth=now.toISOString().slice(0,7);
+  var curMonth=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
 
   // ── Stock Values ─────────────────────────────────────────
   var shopVal=DB.inventory.reduce(function(a,i){return a+i.qty*i.cost;},0);
@@ -6695,7 +6695,7 @@ function submitInvoice(){
     month=invDateVal.slice(0,7);
   } else {
     date=new Date().toLocaleDateString();
-    month=new Date().toISOString().slice(0,7);
+    month=(function(){var _d=new Date();return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0');}());
   }
   var invoiceId=uid();
   var grandTotal=finalGrandTotal,grandProfit=0;
@@ -7808,7 +7808,7 @@ function processReturn(invoiceId){
     month=retDateVal.slice(0,7);
   } else {
     date=new Date().toLocaleDateString();
-    month=new Date().toISOString().slice(0,7);
+    month=(function(){var _d=new Date();return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0');}());
   }
   var totalRefund=0;
   var returnedItems=[];
@@ -9357,7 +9357,7 @@ function submitPurchase(){
   var puDateVal=puDateEl?puDateEl.value:'';
   var date,month;
   if(puDateVal){var dp=puDateVal.split('-');var cd=new Date(parseInt(dp[0]),parseInt(dp[1])-1,parseInt(dp[2]));date=cd.toLocaleDateString();month=puDateVal.slice(0,7);}
-  else{date=new Date().toLocaleDateString();month=new Date().toISOString().slice(0,7);}
+  else{date=new Date().toLocaleDateString();month=(function(){var _d=new Date();return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0');}());}
   var purchaseId=uid();
   var creditAmt=payType==='credit'?grandTotal:payType==='part'?(grandTotal-partAmt):0;
   var cashPaid=payType==='cash'?grandTotal:payType==='part'?partAmt:0;
@@ -10066,7 +10066,7 @@ function processPurchaseReturn(purchId){
   var returnType=document.getElementById('pur-type').value;
   var dateVal=document.getElementById('pur-date').value;
   var date=dateVal?new Date(dateVal).toLocaleDateString():new Date().toLocaleDateString();
-  var month=dateVal?dateVal.slice(0,7):new Date().toISOString().slice(0,7);
+  var month=dateVal?dateVal.slice(0,7):(function(){var _d=new Date();return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0');}());
 
   // Collect returned items
   var returnedItems=[];
@@ -10241,7 +10241,7 @@ function addExpense(){
   var exDateVal=exDateEl?exDateEl.value:'';
   var date,month;
   if(exDateVal){var dp=exDateVal.split('-');var cd=new Date(parseInt(dp[0]),parseInt(dp[1])-1,parseInt(dp[2]));date=cd.toLocaleDateString();month=exDateVal.slice(0,7);}
-  else{date=new Date().toLocaleDateString();month=new Date().toISOString().slice(0,7);}
+  else{date=new Date().toLocaleDateString();month=(function(){var _d=new Date();return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0');}());}
   DB.cashflow.push({id:uid(),desc:desc,amount:amt,type:'out',cat:cat,payMode:pm,bankId:bankId,posId:posId,date:date,month:month});
   saveData();renderApp();
 }
@@ -10323,7 +10323,9 @@ function addExpenseCat(){var inp=document.getElementById('ex-cat-new');if(!inp)r
 // ============================================================
 function buildFinance(){
   if(!canDo('finance'))return '<div class="empty">Access denied.</div>';
-  var now=new Date(),curMonth=now.toISOString().slice(0,7);
+  var now=new Date();
+  // Use local year/month — toISOString() shifts to UTC which gives wrong month in UTC+1
+  var curMonth=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   var finFilter=window._finFilter||'month';
   var finMonth=window._finMonth||curMonth;
   var finFrom=window._finFrom||'';
@@ -10392,7 +10394,8 @@ function buildFinance(){
   var monthOpts='';
   for(var i=0;i<24;i++){
     var d=new Date(now.getFullYear(),now.getMonth()-i,1);
-    var mv=d.toISOString().slice(0,7);
+    // Use local year/month — NOT toISOString() which converts to UTC and shifts the month
+    var mv=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
     monthOpts+='<option value="'+mv+'"'+(mv===finMonth?' selected':'')+'>'+d.toLocaleString('default',{month:'long',year:'numeric'})+'</option>';
   }
 
@@ -11984,7 +11987,7 @@ function saveSupplierDeposit(supId){
   var dateVal=document.getElementById('sdep-date').value;
   if(amount<=0){alert('Enter a valid amount.');return;}
   var dateStr=dateVal?(function(){var dp=dateVal.split('-');return new Date(+dp[0],+dp[1]-1,+dp[2]).toLocaleDateString();}()):new Date().toLocaleDateString();
-  var month=dateVal?dateVal.slice(0,7):new Date().toISOString().slice(0,7);
+  var month=dateVal?dateVal.slice(0,7):(function(){var _d=new Date();return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0');}());
   var dep={
     id:uid(), supId:sup.id, supName:sup.name,
     amount:amount, _origAmt:amount, payMode:mode, bankId:bankId||null, posId:posId||null,
@@ -12113,7 +12116,7 @@ function saveSupplierPayment(supId){
   var note=(document.getElementById('sp-note')||{}).value||'';
   var dateEl=document.getElementById('sp-date');
   var dateVal=dateEl&&dateEl.value?new Date(dateEl.value).toLocaleDateString():new Date().toLocaleDateString();
-  var month=dateEl&&dateEl.value?dateEl.value.slice(0,7):new Date().toISOString().slice(0,7);
+  var month=dateEl&&dateEl.value?dateEl.value.slice(0,7):(function(){var _d=new Date();return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0');}());
 
   var bank=bankId?(DB.banks||[]).find(function(b){return b.id==bankId;}):null;
   var pos=posId?(DB.posTerminals||[]).find(function(p){return p.id==posId;}):null;
@@ -13679,7 +13682,7 @@ function applyCommissionToDebt(custId){
   if(apply<=0){alert('Enter a valid amount.');return;}
   if(!confirm('Apply '+fmt(apply)+' commission to '+esc(cust.name)+'\'s outstanding debt of '+fmt(debt)+'?\n\nNew debt: '+fmt(Math.max(0,debt-apply))+'\nRemaining commission: '+fmt(commBal-apply)))return;
   var date=new Date().toLocaleDateString();
-  var month=new Date().toISOString().slice(0,7);
+  var month=(function(){var _d=new Date();return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0');}());
   // Reduce commission balance
   cust.commissionBalance=Math.max(0,commBal-apply);
   // Reduce credit balance (outstanding debt)
@@ -13707,7 +13710,7 @@ function applyCommissionAsDeposit(custId){
   if(apply<=0){alert('Enter a valid amount.');return;}
   if(!confirm('Convert '+fmt(apply)+' commission to store deposit for '+esc(cust.name)+'?\n\nThis will be available as a deposit balance to use on their next purchase.'))return;
   var date=new Date().toLocaleDateString();
-  var month=new Date().toISOString().slice(0,7);
+  var month=(function(){var _d=new Date();return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0');}());
   // Reduce commission balance
   cust.commissionBalance=Math.max(0,commBal-apply);
   // Add as customer deposit
@@ -13947,7 +13950,7 @@ function saveDemoSale(mode){
   var printName=(document.getElementById('demo-print-name')||{}).value||'';
   var grandTotal=demoItems.reduce(function(a,l){return a+l.total;},0);
   var date=new Date().toLocaleDateString();
-  var month=new Date().toISOString().slice(0,7);
+  var month=(function(){var _d=new Date();return _d.getFullYear()+'-'+String(_d.getMonth()+1).padStart(2,'0');}());
   if(!DB.demoSales)DB.demoSales=[];
   var record={id:uid(),invoiceNum:invNum,printName:printName||'Walk-in',items:JSON.parse(JSON.stringify(demoItems)),grandTotal:grandTotal,date:date,month:month,by:DB.currentUser?DB.currentUser.name:'Admin'};
   DB.demoSales.push(record);
