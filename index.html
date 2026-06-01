@@ -7939,38 +7939,6 @@ function buildSales(){
   var today=new Date().toLocaleDateString();
   var salesLedgerFilter=window._salesLedgerFilter||'today';
   var salesLedgerDate=window._salesLedgerDate||'';
-  var totalRev=0,totalProfit=0,creditTotal=0,cashS=0,posS=0,transS=0;
-  // Filter sales to match the current ledger filter (today / specific date / all)
-  var _kpiSales=DB.sales.filter(function(s){
-    if(salesLedgerFilter==='today')return s.date===today;
-    if(salesLedgerFilter==='date'&&salesLedgerDate){
-      var dp=salesLedgerDate.split('-');
-      var fd=new Date(parseInt(dp[0]),parseInt(dp[1])-1,parseInt(dp[2])).toLocaleDateString();
-      return s.date===fd;
-    }
-    return true; // 'all'
-  });
-  // Group by invoice to avoid double-counting split amounts across line items
-  var _salesInvMap={};
-  _kpiSales.forEach(function(s){
-    totalRev+=s.total;totalProfit+=s.profit;
-    var k=s.invoiceNum||s.id;
-    if(!_salesInvMap[k])_salesInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,total:0};
-    _salesInvMap[k].total+=s.total;
-  });
-  Object.values(_salesInvMap).forEach(function(g){
-    if(g.payment==='credit'){creditTotal+=g.total;return;}
-    if(g.payment==='deposit'||g.payMode==='deposit')return;
-    if(g.payMode==='split'&&g.splitPayment){
-      var _sp=g.splitPayment;
-      if(_sp.mode1==='pos')posS+=_sp.amt1;else if(_sp.mode1==='transfer')transS+=_sp.amt1;else cashS+=_sp.amt1;
-      if(_sp.mode2==='pos')posS+=_sp.amt2;else if(_sp.mode2==='transfer')transS+=_sp.amt2;else cashS+=_sp.amt2;
-      return;
-    }
-    if(g.payMode==='pos'){posS+=g.total;return;}
-    if(g.payMode==='transfer'){transS+=g.total;return;}
-    cashS+=g.total;
-  });
   var io=DB.inventory.filter(function(i){return i.qty>0;}).map(function(i){return '<option value="'+i.id+'">'+esc(i.name)+' ('+i.qty+')</option>';}).join('');
   var rco=DB.customers.map(function(c){
     var cl=c.creditLimit||0,cb=c.creditBalance||0,avail=cl>0?Math.max(0,cl-cb):0;
@@ -8136,8 +8104,17 @@ function buildSales(){
   if(_salesPage>0&&_allLedgerRows.length<=_salesPage*PAGE_SIZE){_salesPage=0;window._salesPage=0;}
   var ledger=pgSlice(_allLedgerRows,_salesPage).join('');
   var _salesPager=pgBar(_salesPage,_allLedgerRows.length,'_salesPage');
-  return '<div class="metrics" style="grid-template-columns:repeat(4,1fr)">'+mc('Revenue',fmt(totalRev),filterLabel,'')+mc('Profit',fmt(totalProfit),pct(totalProfit,totalRev)+' margin',totalProfit>=0?'green':'red')+mc('On credit',fmt(creditTotal),filterLabel,'amber')+mc('Invoices',invoiceKeys.length,filterLabel,'')+'</div>'+
-    '<div class="metrics" style="grid-template-columns:repeat(3,1fr)">'+mc('Cash',fmt(cashS),filterLabel,'')+mc('POS',fmt(posS),filterLabel,'')+mc('Transfer',fmt(transS),filterLabel,'')+'</div>'+
+  return '<div class="metrics" style="grid-template-columns:repeat(4,1fr)">'+
+    mc('Revenue',fmt(filteredRev),filterLabel,'')+
+    mc('Profit',fmt(filteredProfit),pct(filteredProfit,filteredRev)+' margin',filteredProfit>=0?'green':'red')+
+    mc('On credit',fmt(filteredCredit),filterLabel,'amber')+
+    mc('Invoices',invoiceKeys.length,filterLabel,'')+
+    '</div>'+
+    '<div class="metrics" style="grid-template-columns:repeat(3,1fr)">'+
+    mc('Cash',fmt(filteredCash),filterLabel,'')+
+    mc('POS',fmt(filteredPos),filterLabel,'')+
+    mc('Transfer',fmt(filteredTransfer),filterLabel,'')+
+    '</div>'+
     '<p class="sec-title">New invoice</p>'+
     '<div style="background:var(--amber-bg);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;color:var(--amber);margin-bottom:1rem"><b>Rules:</b> Invoice number required. Walk-in customers: cash only. Credit sales: registered customers with credit limit only.</div>'+
     '<div class="fg c2" style="margin-bottom:.5rem"><div class="form-group"><label>Invoice number <span style="color:var(--danger)">*</span> (required)</label>'+
