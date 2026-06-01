@@ -4839,6 +4839,8 @@ function buildCustomers(){
       var lifetimeProfit=custSales.reduce(function(a,s){return a+s.profit;},0);
       var avgInvoice=invKeys.length>0?lifetimeSpend/invKeys.length:0;
       var lastPurchDate=invKeys.length>0?invGroups[invKeys[0]].date:'Never';
+      // Pre-calculate returns total at profile scope (used in Net Goods Balance card)
+      var custTotalReturns=(DB.salesReturns||[]).filter(function(r){return String(r.custId)==String(cust.id);}).reduce(function(a,r){return a+(r.refundAmt||0);},0);
 
       // Top items by quantity
       var itemFreq={};
@@ -4947,8 +4949,10 @@ function buildCustomers(){
           var commPaid=(DB.commissionLedger||[]).filter(function(e){return String(e.custId)==String(cust.id)&&e.type==='paid';}).reduce(function(a,e){return a+(e.amount||0);},0);
           var commBal=commEarned-commPaid;
           var goodsBal=lifetimeSpend-commEarned;
+          var netGoodsBal=lifetimeSpend-custTotalReturns-commEarned;
           return mc('Commission paid',fmt(commPaid),'Paid out',commPaid>0?'green':'')+
-                 mc('Goods balance',fmt(goodsBal),'Purchases − Commission','blue');
+                 mc('Goods balance',fmt(goodsBal),'Purchases − Commission','blue')+
+                 mc('Net goods balance',fmt(netGoodsBal),'After returns & commission',netGoodsBal>=0?'green':'red');
         }())+
         '</div>'+
         creditBar+
@@ -5052,7 +5056,8 @@ function buildCustomers(){
             kpiCard('🎯','Total Earned',fmt(commEarned),'','#f59e0b')+
             kpiCard('💸','Total Paid Out',fmt(commPaid),'','#dc2626')+
             kpiCard('💰','Balance Due',fmt(commBal),commBal>0?'⚠️':'','#15803d')+
-            kpiCard('📦','Goods Balance',fmt(lifetimeSpend-commEarned),'After commission','#6366f1')+
+            kpiCard('📦','Goods Balance',fmt(lifetimeSpend-commEarned),'Purchases − Commission','#6366f1')+
+            kpiCard('🔄','Net Goods Balance',fmt(lifetimeSpend-custTotalReturns-commEarned),'After returns & commission','#0891b2')+
           '</div>'+
           '<div class="tbl-wrap"><table><thead><tr>'+
             '<th>Date</th><th>Invoice #</th><th>Description</th>'+
