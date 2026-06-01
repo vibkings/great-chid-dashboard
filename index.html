@@ -13716,7 +13716,7 @@ function filterDemoItemDd(val, showAll){
       'style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between" '+
       'onmouseover="this.style.background=\'var(--surface2)\'" onmouseout="this.style.background=\'#fff\'">'+
       '<span><b>'+esc(i.name)+'</b> <span style="color:#9ca3af;font-size:11px">'+(i.cat||'')+'</span></span>'+
-      '<span style="color:#15803d;font-size:12px;font-weight:600">'+fmt(i.sell)+' · '+i.qty+' in stock</span>'+
+      '<span style="color:#15803d;font-size:12px;font-weight:600">'+fmt(i.sell)+'</span>'+
     '</div>';
   }).join('');
   dd.style.display='block';
@@ -13743,11 +13743,10 @@ function addDemoItem(){
   var item=id?DB.inventory.find(function(i){return String(i.id)===String(id);}):DB.inventory.find(function(i){return i.name===name;});
   if(!item){showToast('Item not found in inventory.');return;}
   if(qty<=0){showToast('Enter a valid quantity.');return;}
-  if(qty>item.qty){showToast('Only '+item.qty+' in stock.');return;}
+  // Demo sales — no stock check. Items are shown for demo/quotation purposes only.
   // Auto-merge same item + same price
   var existing=demoItems.find(function(l){return l.itemId==item.id&&l.price===price;});
   if(existing){
-    if(existing.qty+qty>item.qty){showToast('Only '+item.qty+' in stock total.');return;}
     existing.qty+=qty;existing.total=existing.price*existing.qty;
   } else {
     demoItems.push({itemId:item.id,name:item.name,cost:item.cost,qty:qty,price:price,total:price*qty});
