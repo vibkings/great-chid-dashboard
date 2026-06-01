@@ -807,67 +807,73 @@ function startFirebaseListener() {
   if (fbPollTimer) clearInterval(fbPollTimer);
   updateSyncStatus('connecting');
 
-  // On initial connect — merge remote into local instead of replacing
-  // This prevents Firestore overwriting records saved while offline
+  // On initial connect — ALWAYS merge remote into local, never replace
+  // Every collection is merged by ID so no local record is ever lost
   fbPullAllRaw(function(remoteDB) {
     fbConnected = true;
     fbLastSync = new Date();
     fbLastSavedAt = new Date().toISOString();
 
     if (remoteDB) {
-      var localSales = DB.sales ? DB.sales.length : 0;
-      var remoteSales = remoteDB.sales ? remoteDB.sales.length : 0;
+      // ── Standard array collections: add remote records missing locally ──
+      var stdMergeCols = [
+        'sales','purchases','cashflow','creditPayments','deposits',
+        'salesReturns','adjLog','commissionLedger','proformas',
+        'supplierPayments','tillSessions','supplierDeposits',
+        'demoSales','activityLog','recycleBin','drafts',
+        'transferLog','stockCounts','warehouse'
+      ];
+      stdMergeCols.forEach(function(col) {
+        var remote = remoteDB[col] || [];
+        if (!DB[col]) DB[col] = [];
+        var localIds = {};
+        DB[col].forEach(function(rec) { if (rec.id) localIds[rec.id] = true; });
+        remote.forEach(function(rec) {
+          if (rec.id && !localIds[rec.id]) DB[col].push(rec);
+        });
+      });
 
-      // If remote has significantly more records than local, do a full replace
-      // (local is clearly stale — e.g. first load on a new device)
-      if (remoteSales > localSales + 5) {
-        // Full replace — remote is authoritative
-        var savedUser = DB.currentUser;
-        GCE_COLLECTIONS.forEach(function(colName) {
-          if (colName === 'meta') return;
-          var data = remoteDB[colName];
-          if (Array.isArray(data)) DB[colName] = data;
-          else if (data && typeof data === 'object' && colName === 'settings') DB.settings = data;
+      // ── Object/entity collections: add new remote records, keep local for existing ──
+      // This protects locally-added suppliers, customers, inventory items etc.
+      var objCols = ['customers','inventory','suppliers','users','banks','posTerminals','categories','expenseCats'];
+      objCols.forEach(function(col) {
+        var remote = remoteDB[col] || [];
+        if (!DB[col]) DB[col] = [];
+        var localMap = {};
+        DB[col].forEach(function(rec) { if (rec.id) localMap[rec.id] = true; });
+        remote.forEach(function(rec) {
+          if (rec.id && !localMap[rec.id]) DB[col].push(rec);
         });
-        if (remoteDB.invoiceCounter) DB.invoiceCounter = remoteDB.invoiceCounter;
-        if (remoteDB.invoiceYear) DB.invoiceYear = remoteDB.invoiceYear;
-        DB.currentUser = savedUser;
-      } else {
-        // Smart merge — add any remote records missing locally
-        var mergeCols = [
-          'sales','purchases','cashflow','creditPayments','deposits',
-          'salesReturns','adjLog','commissionLedger','proformas',
-          'supplierPayments','tillSessions','supplierDeposits',
-          'demoSales','activityLog','recycleBin','drafts',
-          'pendingDeliveries','transferLog','stockCounts','warehouse'
-        ];
-        mergeCols.forEach(function(col) {
-          var remote = remoteDB[col] || [];
-          if (!DB[col]) DB[col] = [];
-          var localIds = {};
-          DB[col].forEach(function(rec) { if (rec.id) localIds[rec.id] = true; });
-          var added = 0;
-          remote.forEach(function(rec) {
-            if (rec.id && !localIds[rec.id]) { DB[col].push(rec); added++; }
-          });
-          if (added > 0) console.log('Startup merge: added ' + added + ' missing records to ' + col);
-        });
-        // For object collections — add new records, keep local for existing ones
-        var objCols = ['customers','inventory','suppliers','users','banks','posTerminals','categories','expenseCats'];
-        objCols.forEach(function(col) {
-          var remote = remoteDB[col] || [];
-          if (!DB[col]) DB[col] = [];
-          var localMap = {};
-          DB[col].forEach(function(rec) { if (rec.id) localMap[rec.id] = true; });
-          remote.forEach(function(rec) {
-            if (rec.id && !localMap[rec.id]) DB[col].push(rec);
-          });
-        });
-        // Use whichever invoiceCounter is higher
-        if (remoteDB.invoiceCounter > (DB.invoiceCounter || 0)) {
-          DB.invoiceCounter = remoteDB.invoiceCounter;
+      });
+
+      // ── pendingDeliveries: merge with status promotion ──────────────
+      // Keep whichever status is more advanced (complete > partial > pending)
+      var statusRank = {pending:1, partial:2, complete:3};
+      var remotePD = remoteDB.pendingDeliveries || [];
+      if (!DB.pendingDeliveries) DB.pendingDeliveries = [];
+      var localPDMap = {};
+      DB.pendingDeliveries.forEach(function(rec, idx) { if (rec.id) localPDMap[rec.id] = idx; });
+      remotePD.forEach(function(rec) {
+        if (!rec.id) return;
+        if (localPDMap[rec.id] === undefined) {
+          DB.pendingDeliveries.push(rec);
+        } else {
+          var local = DB.pendingDeliveries[localPDMap[rec.id]];
+          var localRank = statusRank[local.status] || 1;
+          var remoteRank = statusRank[rec.status] || 1;
+          if (remoteRank > localRank) {
+            local.status = rec.status;
+            if (rec.qtyReceived !== undefined) local.qtyReceived = rec.qtyReceived;
+            if (rec.qtyPending !== undefined) local.qtyPending = rec.qtyPending;
+          }
         }
+      });
+
+      // Use whichever invoiceCounter is higher
+      if (remoteDB.invoiceCounter > (DB.invoiceCounter || 0)) {
+        DB.invoiceCounter = remoteDB.invoiceCounter;
       }
+      if (remoteDB.invoiceYear) DB.invoiceYear = remoteDB.invoiceYear;
     }
 
     updateSyncStatus('synced');
@@ -884,6 +890,8 @@ function startFirebaseListener() {
     renderApp();
   });
 
+  // ── Claim meta ownership immediately on connect ─────────────
+  // ── Claim meta ownership immediately on connect ─────────────
   // ── Claim meta ownership immediately on connect ─────────────
   // Overwrites any stale deviceId left by Force Push or other sessions
   var claimMeta = buildCollectionSnapshot('meta');
