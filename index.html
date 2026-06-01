@@ -9442,6 +9442,7 @@ function submitPurchase(){
   }
   // Save purchase record
   DB.purchases.push({id:purchaseId,invoiceNum:invNum,supId:supId,supName:sup?sup.name:'Unknown',items:JSON.parse(JSON.stringify(purchaseItems)),subtotal:subtotalPu,discAmt:puDiscAmt,grandTotal:grandTotal,payType:payType,payMode:pm,bankId:bankId,posId:posId,partAmt:partAmt,creditAmt:creditAmt,cashPaid:cashPaid,depApplied:depApplied,date:date,month:month,by:DB.currentUser.name});
+  logActivity('Purchase saved','Invoice #'+invNum+' — '+(sup?sup.name:'Unknown')+' — '+fmt(grandTotal)+' ('+purchaseItems.length+' item'+(purchaseItems.length!==1?'s':'')+')',payType);
   purchaseItems=[];
   saveData();
   var totalReceived=purchaseItems.length; // already cleared so use pendingLines count
@@ -12186,6 +12187,7 @@ function addSupplier(){
   if(dup){alert('Supplier already exists.');return;}
   var openingBal=parseFloat(document.getElementById('su-opening-bal').value)||0;
   DB.suppliers.push({id:uid(),name:name,contact:document.getElementById('su-contact').value.trim(),phone:document.getElementById('su-phone').value.trim(),address:document.getElementById('su-addr').value.trim(),totalPurchased:0,owedToSupplier:openingBal,openingBalance:openingBal,purchases:[]});
+  logActivity('Supplier added',name+(document.getElementById('su-phone').value.trim()?' — '+document.getElementById('su-phone').value.trim():'')+(openingBal>0?' — Opening balance: '+fmt(openingBal):''),'');
   saveData();renderApp();
 }
 function removeSupplier(id){
