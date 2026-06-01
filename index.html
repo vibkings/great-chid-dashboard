@@ -6806,10 +6806,17 @@ function printInvoice(inv){
   if(!inv)inv=DB._lastInvoice;
   if(!inv){alert('No invoice to print.');return;}
   var d=new Date(inv.date),day=d.getDate(),month2=d.getMonth()+1,year=d.getFullYear();
+  // Always read live supply status from DB.sales — snapshot may be stale after partial supplies
+  var liveSales=DB.sales.filter(function(s){return String(s.invoiceNum)===String(inv.invoiceNum);});
+  // Check if ANY item in the invoice is still pending/partial
+  var anyPending=liveSales.some(function(s){return s.supplyStatus==='pending'||s.supplyStatus==='partial';});
   var rows=inv.items.map(function(l,i){
-    var hasPartial=inv.pendingSupply&&((l.suppliedQty!==undefined&&l.pendingQty>0)||(l.supplyStatus==='partial'||l.supplyStatus==='pending'));
-    var suppliedQty=l.suppliedQty!==undefined?l.suppliedQty:l.qty;
-    var pendingQty=l.pendingQty!==undefined?l.pendingQty:0;
+    // Find live record for this item
+    var live=liveSales.find(function(s){return String(s.itemId)===String(l.itemId)||s.name===l.name;});
+    var liveStatus=live?live.supplyStatus:'supplied';
+    var suppliedQty=live&&live.suppliedQty!==undefined?live.suppliedQty:l.qty;
+    var pendingQty=live&&live.pendingQty!==undefined?live.pendingQty:0;
+    var hasPartial=liveStatus==='partial'||liveStatus==='pending';
     var qtyCell=hasPartial
       ?'<span style="color:#16a34a;font-weight:700">'+suppliedQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pendingQty+' pending</span>'
       :''+l.qty;
@@ -6826,7 +6833,7 @@ function printInvoice(inv){
   var _invPrintTotal=inv.payment==='deposit'?(inv.subtotalAll||(inv.grandTotal||0))-(inv.invoiceDiscAmt||0):inv.grandTotal;
   var _invSales=DB.sales.filter(function(s){return s.invoiceNum===inv.invoiceNum;});
   var _invDepApplied=inv.depositApplied||_invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
-  var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:inv.pendingSupply,wasEverPending:inv.wasEverPending||false,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:liveOutstanding,prevInvTotal:0});
+  var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:anyPending,wasEverPending:inv.wasEverPending||anyPending||false,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:liveOutstanding,prevInvTotal:0});
   // Show print mode dialog
   showPrintDialog(inv, html);
 }
@@ -6874,10 +6881,15 @@ function doPrint(mode, inv) {
     var itemCount=inv.items?inv.items.length:1;
     var forcedSize=mode==='a4'?'A4':'A5';
     var d=new Date(inv.date),day=d.getDate(),month2=d.getMonth()+1,year=d.getFullYear();
+    // Read live supply status from DB.sales
+    var liveSales2=DB.sales.filter(function(s){return String(s.invoiceNum)===String(inv.invoiceNum);});
+    var anyPending2=liveSales2.some(function(s){return s.supplyStatus==='pending'||s.supplyStatus==='partial';});
     var rows=inv.items.map(function(l,i){
-    var hasPartial=inv.pendingSupply&&((l.suppliedQty!==undefined&&l.pendingQty>0)||(l.supplyStatus==='partial'||l.supplyStatus==='pending'));
-      var suppliedQty=l.suppliedQty!==undefined?l.suppliedQty:l.qty;
-      var pendingQty=l.pendingQty!==undefined?l.pendingQty:0;
+      var live2=liveSales2.find(function(s){return String(s.itemId)===String(l.itemId)||s.name===l.name;});
+      var liveStatus2=live2?live2.supplyStatus:'supplied';
+      var suppliedQty=live2&&live2.suppliedQty!==undefined?live2.suppliedQty:l.qty;
+      var pendingQty=live2&&live2.pendingQty!==undefined?live2.pendingQty:0;
+      var hasPartial=liveStatus2==='partial'||liveStatus2==='pending';
       var qtyCell=hasPartial?'<span style="color:#16a34a;font-weight:700">'+suppliedQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pendingQty+' pending</span>':''+l.qty;
       return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(l.name)+'</td><td class="center">'+qtyCell+'</td><td class="right">'+fmt(l.price)+'</td>'+
              '<td class="right" style="background:var(--danger-bg);color:#c0392b">'+(l.discAmt>0?'-'+fmt(l.discAmt):'')+'</td>'+
@@ -6888,7 +6900,7 @@ function doPrint(mode, inv) {
     var invCust=inv.custId?DB.customers.find(function(c){return c.id==inv.custId;}):null;
     var liveOutstanding=invCust?Math.max(0,invCust.creditBalance||0):0;
     // Temporarily override pageSize in buildInvoiceHTML by passing forced size
-    html=buildInvoiceHTMLSized(inv,rows+emptyRows,forcedSize,liveOutstanding);
+    html=buildInvoiceHTMLSized(inv,rows+emptyRows,forcedSize,liveOutstanding,anyPending2);
   }
   var w=window.open('','_blank','width=700,height=900');
   w.document.write(html);w.document.close();
@@ -6901,13 +6913,14 @@ function doPrint(mode, inv) {
   }
 }
 
-function buildInvoiceHTMLSized(inv,rows,forcedSize,liveOutstanding){
+function buildInvoiceHTMLSized(inv,rows,forcedSize,liveOutstanding,livePending){
   // Reuse buildInvoiceHTML but override the page size detection
   var savedItems=inv.items;
   // Trick: temporarily set items length to force desired page size
   if(forcedSize==='A4') inv.items={length:20};
   else inv.items={length:10};
   var d=new Date(inv.date);
+  var anyPend=livePending!==undefined?livePending:inv.pendingSupply;
   var html2=buildInvoiceHTML({
     invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr||'',
     day:d.getDate(),month:d.getMonth()+1,year:d.getFullYear(),
@@ -6916,7 +6929,7 @@ function buildInvoiceHTMLSized(inv,rows,forcedSize,liveOutstanding){
     grandTotal:inv.grandTotal,payment:inv.payment,payMode:inv.payMode,
     depTopupMode:inv.depTopupMode||null,depositApplied:inv.depositApplied||0,
     bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,
-    seller:inv.seller,pendingSupply:inv.pendingSupply,wasEverPending:inv.wasEverPending||false,supplyDate:inv.supplyDate||null,
+    seller:inv.seller,pendingSupply:anyPend,wasEverPending:inv.wasEverPending||anyPend||false,supplyDate:inv.supplyDate||null,
     partPayment:inv.partPayment||0,outstandingBal:liveOutstanding,prevInvTotal:0
   });
   inv.items=savedItems;
@@ -6929,11 +6942,17 @@ function buildThermalHTML(inv){
   var isPartPay=inv.payment==='part';
   var partPaid=isPartPay?(inv.partPayment||0):0;
   var partBalance=isPartPay?Math.max(0,inv.grandTotal-partPaid):0;
+  // Read live supply status from DB.sales
+  var liveSalesT=DB.sales.filter(function(s){return String(s.invoiceNum)===String(inv.invoiceNum);});
   var itemRows=inv.items.map(function(l,i){
-    var hasPartial=inv.pendingSupply&&(l.suppliedQty!==undefined&&l.pendingQty>0);
-    var qtyStr=hasPartial?(l.suppliedQty||0)+' of '+l.qty:l.qty;
+    var liveT=liveSalesT.find(function(s){return String(s.itemId)===String(l.itemId)||s.name===l.name;});
+    var liveStatusT=liveT?liveT.supplyStatus:'supplied';
+    var hasPartial=liveStatusT==='partial'||liveStatusT==='pending';
+    var suppliedQty=liveT&&liveT.suppliedQty!==undefined?liveT.suppliedQty:l.qty;
+    var pendingQty=liveT&&liveT.pendingQty!==undefined?liveT.pendingQty:0;
+    var qtyStr=hasPartial?suppliedQty+' of '+l.qty:l.qty;
     return '<tr>'+
-      '<td style="padding:2px 0;font-size:11px">'+(i+1)+'. '+esc(l.name)+(hasPartial?'<br><span style="font-size:9px;color:#888">'+l.pendingQty+' pending</span>':'')+'</td>'+
+      '<td style="padding:2px 0;font-size:11px">'+(i+1)+'. '+esc(l.name)+(hasPartial?'<br><span style="font-size:9px;color:#888">'+pendingQty+' pending</span>':'')+'</td>'+
       '<td style="text-align:center;padding:2px 3px;font-size:11px">'+qtyStr+'</td>'+
       '<td style="text-align:right;padding:2px 0;font-size:11px">'+fmt(l.price)+'</td>'+
       '<td style="text-align:right;padding:2px 0;font-size:11px;font-weight:700">'+fmt(l.total)+'</td>'+
