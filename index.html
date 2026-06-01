@@ -891,10 +891,10 @@ function showSyncPopup(remoteTime, remoteSales) {
   var localSales = DB.sales.length;
   var localInv = DB.inventory.length;
   var remoteInv = (fbPendingSnapshot && fbPendingSnapshot._remoteInvCount != null) ? fbPendingSnapshot._remoteInvCount : (fbPendingSnapshot && fbPendingSnapshot.inventory ? fbPendingSnapshot.inventory.length : '?');
-  var sameDevice = false; // already filtered before calling this
+  var sameDevice = false;
   var popup = document.createElement('div');
   popup.id = 'fb-sync-popup';
-  popup.style.cssText = 'position:fixed;top:70px;right:20px;z-index:99999;background:var(--white);border:2px solid #0d6efd;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:18px 20px;max-width:360px;font-family:Inter,sans-serif';
+  popup.style.cssText = 'position:fixed;top:70px;right:20px;z-index:99999;background:var(--white);border:2px solid #0d6efd;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:18px 20px;max-width:380px;font-family:Inter,sans-serif';
   popup.innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
       '<span style="font-size:22px">&#128276;</span>' +
@@ -916,16 +916,127 @@ function showSyncPopup(remoteTime, remoteSales) {
         '<div style="font-size:11px;color:#6c757d">' + localInv + ' items</div>' +
       '</div>' +
     '</div>' +
-    '<div style="font-size:11.5px;color:#856404;background:var(--warning-bg);border-radius:6px;padding:7px 10px;margin-bottom:12px">' +
-      '&#9888; Syncing will <b>merge remote data</b> into your local copy. Your unsaved changes may be overwritten.' +
+    '<div style="font-size:11.5px;color:#166534;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:7px 10px;margin-bottom:8px">' +
+      '&#9989; <b>Smart Merge (recommended):</b> Adds any records from the remote that are missing locally. Nothing is deleted.' +
     '</div>' +
-    '<div style="display:flex;gap:8px">' +
-      '<button onclick="acceptFbSync()" style="flex:1;padding:9px;background:#0d6efd;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">&#10003; Accept &amp; Sync</button>' +
-      '<button onclick="dismissFbSync()" style="flex:1;padding:9px;background:var(--surface2);color:#495057;border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">&#10005; Keep mine</button>' +
+    '<div style="font-size:11.5px;color:#856404;background:var(--warning-bg);border-radius:6px;padding:7px 10px;margin-bottom:12px">' +
+      '&#9888; <b>Replace:</b> Overwrites your local copy entirely with the remote version. Local-only records may be lost.' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;flex-direction:column">' +
+      '<button onclick="mergeFbSync()" style="width:100%;padding:9px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">&#10003; Smart Merge (safe)</button>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button onclick="acceptFbSync()" style="flex:1;padding:8px;background:#0d6efd;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">&#8635; Replace with remote</button>' +
+        '<button onclick="dismissFbSync()" style="flex:1;padding:8px;background:var(--surface2);color:#495057;border:1px solid var(--border);border-radius:8px;font-size:12px;cursor:pointer">&#10005; Keep mine</button>' +
+      '</div>' +
     '</div>';
   document.body.appendChild(popup);
   updateSyncStatus('pending');
 }
+
+// ── Smart Merge: pull remote, add any records missing locally ────
+function mergeFbSync() {
+  if (!fbPendingSnapshot) return;
+  var p = document.getElementById('fb-sync-popup');
+  if (p) p.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:#16a34a">&#8987; Merging remote data safely...</div>';
+  var savedUser = DB.currentUser;
+  var pendingSavedAt = fbPendingSnapshot._savedAt;
+
+  // Pull fresh remote data then merge record by record
+  fbPullAllRaw(function(remoteDB) {
+    if (!remoteDB) {
+      if (p) p.remove();
+      showToast('❌ Could not fetch remote data.');
+      return;
+    }
+
+    var mergeStats = { added: 0, skipped: 0 };
+
+    // These are the array collections we merge by ID
+    var mergeCols = [
+      'sales','purchases','cashflow','creditPayments','deposits',
+      'salesReturns','adjLog','commissionLedger','proformas',
+      'supplierPayments','tillSessions','supplierDeposits',
+      'demoSales','activityLog','recycleBin','drafts',
+      'pendingDeliveries','transferLog','stockCounts','warehouse'
+    ];
+
+    mergeCols.forEach(function(col) {
+      var remote = remoteDB[col] || [];
+      var local = DB[col] || [];
+      // Build a set of existing local IDs for fast lookup
+      var localIds = {};
+      local.forEach(function(rec) { if (rec.id) localIds[rec.id] = true; });
+      // Add remote records that don't exist locally
+      remote.forEach(function(rec) {
+        if (rec.id && !localIds[rec.id]) {
+          DB[col].push(rec);
+          mergeStats.added++;
+        } else {
+          mergeStats.skipped++;
+        }
+      });
+    });
+
+    // For object collections (customers, inventory, suppliers etc.)
+    // merge by updating records where remote is newer (has more data)
+    var objCols = ['customers','inventory','suppliers','users','banks','posTerminals','categories','expenseCats'];
+    objCols.forEach(function(col) {
+      var remote = remoteDB[col] || [];
+      var local = DB[col] || [];
+      var localMap = {};
+      local.forEach(function(rec, idx) { if (rec.id) localMap[rec.id] = idx; });
+      remote.forEach(function(rec) {
+        if (!rec.id) return;
+        if (localMap[rec.id] === undefined) {
+          // Entirely new record — add it
+          DB[col].push(rec);
+          mergeStats.added++;
+        }
+        // If already exists locally — keep local version (it's more up to date)
+      });
+    });
+
+    // Use whichever invoiceCounter is higher
+    if (remoteDB.invoiceCounter > (DB.invoiceCounter || 0)) {
+      DB.invoiceCounter = remoteDB.invoiceCounter;
+    }
+
+    DB.currentUser = savedUser;
+    fbLastSavedAt = pendingSavedAt;
+    fbLastSync = new Date();
+    fbPendingSnapshot = null;
+    if (p) p.remove();
+    updateSyncStatus('synced');
+
+    // Save the merged result back to Firestore + localStorage
+    saveData();
+    renderApp();
+    showToast('✅ Smart merge complete! Added ' + mergeStats.added + ' missing record(s). ' + mergeStats.skipped + ' already up to date.');
+  });
+}
+
+// ── Pull all collections from Firestore into a plain object (no apply) ──
+function fbPullAllRaw(onDone) {
+  var cols = GCE_COLLECTIONS.slice();
+  var result = {};
+  var pending = cols.length;
+  cols.forEach(function(colName) {
+    fbGetCollection(colName, function(err, payload) {
+      if (!err && payload) {
+        if (colName === 'meta') {
+          result.invoiceCounter = payload.invoiceCounter || 1;
+          result.invoiceYear = payload.invoiceYear || new Date().getFullYear();
+        } else {
+          var data = payload.data !== undefined ? payload.data : payload;
+          result[colName] = Array.isArray(data) ? data : (data && typeof data === 'object' ? data : []);
+        }
+      }
+      pending--;
+      if (pending === 0) onDone(result);
+    });
+  });
+}
+
 
 function acceptFbSync() {
   if (!fbPendingSnapshot) return;
@@ -7825,6 +7936,9 @@ function buildSales(){
       '<div style="font-size:14px;font-weight:700;color:#92400e;margin-bottom:10px">&#9200; Pending Supply ('+pendingInvoices.length+' invoice'+(pendingInvoices.length>1?'s':'')+')</div>'+
       '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th style="text-align:center">Ordered</th><th style="text-align:center">Supplied</th><th style="text-align:center">Pending</th><th>Progress</th><th></th></tr></thead><tbody>'+pRows+'</tbody></table></div></div>';
   }
+  var today=new Date().toLocaleDateString();
+  var salesLedgerFilter=window._salesLedgerFilter||'today';
+  var salesLedgerDate=window._salesLedgerDate||'';
   var totalRev=0,totalProfit=0,creditTotal=0,cashS=0,posS=0,transS=0;
   // Filter sales to match the current ledger filter (today / specific date / all)
   var _kpiSales=DB.sales.filter(function(s){
@@ -7919,9 +8033,6 @@ function buildSales(){
   },70);
   var invoiceGroups={};
   DB.sales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invoiceGroups[k])invoiceGroups[k]={invoiceNum:s.invoiceNum||' - ',date:s.date,custName:s.custName,custId:s.custId,items:[],total:0,profit:0,payMode:s.payMode,bankId:s.bankId,posId:s.posId,payment:s.payment,seller:s.seller,_s:s};invoiceGroups[k].items.push(s);invoiceGroups[k].total+=s.total;invoiceGroups[k].profit+=s.profit;});
-  var today=new Date().toLocaleDateString();
-  var salesLedgerFilter=window._salesLedgerFilter||'today';
-  var salesLedgerDate=window._salesLedgerDate||'';
   var _salesSearchTerm=(salesSearch||'').toLowerCase().trim();
   var invoiceKeys=Object.keys(invoiceGroups).reverse().filter(function(k){
     var g=invoiceGroups[k];
@@ -8025,7 +8136,7 @@ function buildSales(){
   if(_salesPage>0&&_allLedgerRows.length<=_salesPage*PAGE_SIZE){_salesPage=0;window._salesPage=0;}
   var ledger=pgSlice(_allLedgerRows,_salesPage).join('');
   var _salesPager=pgBar(_salesPage,_allLedgerRows.length,'_salesPage');
-  return '<div class="metrics">'+mc('Revenue',fmt(totalRev),filterLabel,'')+mc('Profit',fmt(totalProfit),pct(totalProfit,totalRev)+' margin',totalProfit>=0?'green':'red')+mc('On credit',fmt(creditTotal),filterLabel,'amber')+mc('Invoices',invoiceKeys.length,filterLabel,'')+'</div>'+
+  return '<div class="metrics" style="grid-template-columns:repeat(4,1fr)">'+mc('Revenue',fmt(totalRev),filterLabel,'')+mc('Profit',fmt(totalProfit),pct(totalProfit,totalRev)+' margin',totalProfit>=0?'green':'red')+mc('On credit',fmt(creditTotal),filterLabel,'amber')+mc('Invoices',invoiceKeys.length,filterLabel,'')+'</div>'+
     '<div class="metrics" style="grid-template-columns:repeat(3,1fr)">'+mc('Cash',fmt(cashS),filterLabel,'')+mc('POS',fmt(posS),filterLabel,'')+mc('Transfer',fmt(transS),filterLabel,'')+'</div>'+
     '<p class="sec-title">New invoice</p>'+
     '<div style="background:var(--amber-bg);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;color:var(--amber);margin-bottom:1rem"><b>Rules:</b> Invoice number required. Walk-in customers: cash only. Credit sales: registered customers with credit limit only.</div>'+
