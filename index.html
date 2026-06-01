@@ -2234,7 +2234,30 @@ function buildSettings(){
     '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
     '<p style="font-size:13px;color:#666;margin-bottom:4px"><b>Sync Warehouse items → Shop Inventory</b></p>'+
     '<p style="font-size:12px;color:#666;margin-bottom:10px">Any warehouse item that has no matching entry in Shop Inventory will be added with Qty 0, so it appears in the shop and can be transferred or sold.</p>'+
-    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#7c3aed;color:#fff;border-color:#7c3aed;margin-top:4px" onclick="migrateWarehouseToInventory()">📦 Sync Warehouse → Shop Inventory</button>':'');
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#7c3aed;color:#fff;border-color:#7c3aed;margin-top:4px" onclick="migrateWarehouseToInventory()">📦 Sync Warehouse → Shop Inventory</button>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
+    '<p style="font-size:13px;color:#666;margin-bottom:4px"><b>Fix Invoice Counter</b></p>'+
+    '<p style="font-size:12px;color:#666;margin-bottom:10px">If the invoice number is stuck or showing a duplicate error, click this to reset the counter to the correct next available number.</p>'+
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#0d6efd;color:#fff;border-color:#0d6efd;margin-top:4px" onclick="fixInvoiceCounter()">🔢 Fix Invoice Counter</button>':'');
+}
+
+function fixInvoiceCounter(){
+  if(!isAdmin()){alert('Admin only.');return;}
+  var currentYear=new Date().getFullYear();
+  var prefix=String(currentYear)+'/';
+  var allNums=DB.sales
+    .filter(function(s){return s.invoiceNum&&String(s.invoiceNum).indexOf(prefix)===0;})
+    .map(function(s){return parseInt(String(s.invoiceNum).split('/')[1])||0;});
+  // Use unique numbers only — each invoice has multiple rows
+  var uniqueNums=[...new Set(allNums)];
+  var maxUsed=uniqueNums.length?Math.max.apply(null,uniqueNums):0;
+  var correctNext=maxUsed+1;
+  var old=DB.invoiceCounter||1;
+  DB.invoiceCounter=correctNext;
+  DB.invoiceYear=currentYear;
+  saveData();
+  alert('✅ Invoice counter fixed!\n\nWas: '+prefix+String(old).padStart(4,'0')+'\nNext invoice will be: '+prefix+String(correctNext).padStart(4,'0'));
+  renderApp();
 }
 
 function migrateWarehouseToInventory(){
@@ -13044,7 +13067,8 @@ function saveProfile(){
   var u=DB.currentUser;
   var name=document.getElementById('up-name').value.trim(),uname=document.getElementById('up-user').value.trim(),pass=document.getElementById('up-pass').value,pass2=document.getElementById('up-pass2').value;
   if(!name||!uname){alert('Name and username required.');return;}
-  var dup=DB.users.find(function(x){return x.username===uname&&x.id!==u.id;});if(dup){alert('Username taken.');return;}
+  var dup=DB.users.find(function(x){return x.username.toLowerCase()===uname.toLowerCase()&&x.id!==u.id;});
+  if(dup){alert('⛔ Username "'+uname+'" is already taken. Please choose a different username.');return;}
   if(pass&&pass!==pass2){alert('Passwords do not match.');return;}
   u.name=name;u.username=uname;if(pass)u.password=pass;
   var idx=DB.users.findIndex(function(x){return x.id===u.id;});if(idx>-1)DB.users[idx]=u;
@@ -13064,7 +13088,8 @@ function adminResetPassword(userId){
 function addUser(){
   var name=document.getElementById('nu-name').value.trim(),uname=document.getElementById('nu-user').value.trim(),pass=document.getElementById('nu-pass').value,role=document.getElementById('nu-role').value;
   if(!name||!uname||!pass){alert('All fields required.');return;}
-  var dup=DB.users.find(function(x){return x.username===uname;});if(dup){alert('Username already taken.');return;}
+  var dup=DB.users.find(function(x){return x.username.toLowerCase()===uname.toLowerCase();});
+  if(dup){alert('⛔ Username "'+uname+'" is already taken. Please choose a different username.');return;}
   var perms={};Object.keys(ALL_PERMS).forEach(function(p){perms[p]=false;});
   DB.users.push({id:uid(),name:name,username:uname,password:pass,role:role,permissions:perms});
   saveData();renderApp();
