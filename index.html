@@ -14337,9 +14337,14 @@ function buildProductReport(){
   (DB.sales||[]).forEach(function(s){
     if(String(s.itemId)===String(item.id)||s.name===item.name){
       var k=s.invoiceNum||s.id;
-      if(!saleGroups[k])saleGroups[k]={date:s.date,invoiceNum:k,custName:s.custName||'Walk-in',qty:0,total:0,salePrice:s.salePrice,payment:s.payment,seller:s.seller};
+      if(!saleGroups[k])saleGroups[k]={date:s.date,invoiceNum:k,custName:s.custName||'Walk-in',qty:0,suppliedQty:0,pendingQty:0,total:0,salePrice:s.salePrice,payment:s.payment,seller:s.seller,supplyStatus:s.supplyStatus||'supplied'};
       saleGroups[k].qty+=s.qty;
+      saleGroups[k].suppliedQty+=(s.suppliedQty!==undefined?s.suppliedQty:s.qty);
+      saleGroups[k].pendingQty+=(s.pendingQty||0);
       saleGroups[k].total+=s.total;
+      // If any row is partial/pending, mark the group accordingly
+      if(s.supplyStatus==='pending')saleGroups[k].supplyStatus='pending';
+      else if(s.supplyStatus==='partial'&&saleGroups[k].supplyStatus!=='pending')saleGroups[k].supplyStatus='partial';
     }
   });
   salesEvents=Object.values(saleGroups).sort(function(a,b){return parseSaleDate(b.date)-parseSaleDate(a.date);});
@@ -14356,7 +14361,9 @@ function buildProductReport(){
 
   // ── KPI calculations ─────────────────────────────────────────
   var totalPurchased=purchaseEvents.reduce(function(a,p){return a+(p.qtyReceived||0);},0);
-  var totalSold=salesEvents.reduce(function(a,s){return a+s.qty;},0);
+  var totalSold=salesEvents.reduce(function(a,s){return a+s.suppliedQty;},0);
+  var totalOrdered=salesEvents.reduce(function(a,s){return a+s.qty;},0);
+  var totalPending=salesEvents.reduce(function(a,s){return a+s.pendingQty;},0);
   var totalReturned=returnEvents.reduce(function(a,r){return a+r.qty;},0);
   var totalRevenue=salesEvents.reduce(function(a,s){return a+s.total;},0);
   var totalCostSpent=purchaseEvents.reduce(function(a,p){return a+p.total;},0);
@@ -14390,7 +14397,7 @@ function buildProductReport(){
     // KPI Cards
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">'+
       kpiCard('📦','Total Purchased',totalPurchased+' units','','#0ea5e9')+
-      kpiCard('🧾','Total Sold',totalSold+' units','','#6366f1')+
+      kpiCard('🧾','Total Supplied',totalSold+' units',(totalPending>0?totalPending+' pending':''),'#6366f1')+
       kpiCard('↩️','Total Returned',totalReturned+' units','','#f97316')+
       kpiCard('💰','Total Revenue',fmt(totalRevenue),'','#10b981')+
       kpiCard('💸','Total Cost Spent',fmt(totalCostSpent),'','#f59e0b')+
@@ -14435,13 +14442,13 @@ function buildProductReport(){
         '</div>':'')+
     '</div>'+
 
-    // SALES SECTION
     '<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;margin-bottom:16px">'+
-      '<p class="sec-title" style="margin:0 0 12px">🧾 Sales History ('+salesEvents.length+' invoices · '+totalSold+' units sold)</p>'+
+      '<p class="sec-title" style="margin:0 0 12px">🧾 Sales History ('+salesEvents.length+' invoices · '+totalSold+' supplied'+(totalPending>0?' · <span style="color:#dc2626">'+totalPending+' pending</span>':'')+')</p>'+
       (salesEvents.length?
         '<div class="tbl-wrap"><table><thead><tr>'+
           '<th>Date</th><th>Invoice #</th><th>Customer</th>'+
-          '<th style="text-align:center">Qty</th><th style="text-align:right">Sell Price</th>'+
+          '<th style="text-align:center">Ordered</th><th style="text-align:center">Supplied</th><th style="text-align:center">Pending</th>'+
+          '<th style="text-align:right">Sell Price</th>'+
           '<th style="text-align:right">Revenue</th><th style="text-align:right">Profit</th>'+
           '<th>Pay Type</th><th>Seller</th>'+
         '</tr></thead><tbody>'+
@@ -14450,11 +14457,16 @@ function buildProductReport(){
           var ptBadge=s.payment==='credit'?'<span style="background:var(--danger-bg);color:#dc2626;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">CREDIT</span>':
             s.payment==='part'?'<span style="background:var(--warning-bg);color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">PART</span>':
             '<span style="background:var(--success-bg);color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">PAID</span>';
-          return '<tr>'+
+          var supBadge=s.supplyStatus==='pending'?'<span style="background:#fef9c3;color:#92400e;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">⏳ PENDING</span>':
+            s.supplyStatus==='partial'?'<span style="background:#fff7ed;color:#c2410c;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">⚡ PARTIAL</span>':
+            '<span style="background:var(--success-bg);color:#15803d;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700">✅ SUPPLIED</span>';
+          return '<tr style="background:'+(s.supplyStatus==='pending'?'#fffbeb':s.supplyStatus==='partial'?'#fff7ed':'')+'">'+
             '<td>'+s.date+'</td>'+
             '<td><b>'+s.invoiceNum+'</b></td>'+
             '<td>'+s.custName+'</td>'+
             '<td style="text-align:center;font-weight:700">'+s.qty+'</td>'+
+            '<td style="text-align:center;font-weight:700;color:#15803d">'+s.suppliedQty+'</td>'+
+            '<td style="text-align:center;font-weight:700;color:'+(s.pendingQty>0?'#dc2626':'#9ca3af')+'">'+s.pendingQty+'</td>'+
             '<td style="text-align:right">'+fmt(s.salePrice||0)+'</td>'+
             '<td style="text-align:right;color:#6366f1;font-weight:600">'+fmt(s.total)+'</td>'+
             '<td style="text-align:right;color:'+(profit>=0?'#15803d':'#dc2626')+';font-weight:600">'+fmt(profit)+'</td>'+
@@ -14463,7 +14475,10 @@ function buildProductReport(){
           '</tr>';
         }).join('')+
         '<tfoot><tr style="background:var(--surface2);font-weight:700"><td colspan="3">TOTAL</td>'+
-          '<td style="text-align:center">'+totalSold+'</td><td></td>'+
+          '<td style="text-align:center">'+totalOrdered+'</td>'+
+          '<td style="text-align:center;color:#15803d">'+totalSold+'</td>'+
+          '<td style="text-align:center;color:#dc2626">'+totalPending+'</td>'+
+          '<td></td>'+
           '<td style="text-align:right;color:#6366f1">'+fmt(totalRevenue)+'</td>'+
           '<td style="text-align:right;color:'+profitColor+'">'+fmt(totalProfit)+'</td>'+
           '<td colspan="2"></td>'+
@@ -14530,7 +14545,8 @@ function buildProductReport(){
       '<table style="width:100%;font-size:13px"><colgroup><col style="width:60%"><col style="width:40%"></colgroup><tbody>'+
         '<tr style="background:#f8fafc"><td style="padding:8px 10px;color:#374151">Opening stock (estimated)</td><td style="padding:8px 10px;text-align:right;font-weight:600">'+Math.max(0,item.qty-totalPurchased+totalSold-totalReturned-netAdj)+' units</td></tr>'+
         '<tr><td style="padding:6px 10px;color:#0ea5e9">+ Total Received (purchases)</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#0ea5e9">+ '+totalPurchased+'</td></tr>'+
-        '<tr><td style="padding:6px 10px;color:#6366f1">− Total Sold</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#6366f1">− '+totalSold+'</td></tr>'+
+        '<tr><td style="padding:6px 10px;color:#6366f1">− Total Supplied (goods delivered)</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#6366f1">− '+totalSold+'</td></tr>'+
+        (totalPending>0?'<tr><td style="padding:6px 10px;color:#d97706">⏳ Pending supply (ordered, not yet delivered)</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#d97706">'+totalPending+' units</td></tr>':'')+
         '<tr><td style="padding:6px 10px;color:#f97316">+ Total Returned by customers</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#f97316">+ '+totalReturned+'</td></tr>'+
         '<tr><td style="padding:6px 10px;color:#8b5cf6">'+(netAdj>=0?'+':'')+'Net stock adjustments</td><td style="padding:6px 10px;text-align:right;font-weight:600;color:#8b5cf6">'+(netAdj>=0?'+':'')+netAdj+'</td></tr>'+
         '<tr style="background:var(--success-bg);border-top:2px solid #86efac"><td style="padding:10px;font-weight:700;color:#15803d">Current Stock</td><td style="padding:10px;text-align:right;font-weight:800;color:#15803d;font-size:16px">'+item.qty+' units</td></tr>'+
