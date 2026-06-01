@@ -7826,9 +7826,19 @@ function buildSales(){
       '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th style="text-align:center">Ordered</th><th style="text-align:center">Supplied</th><th style="text-align:center">Pending</th><th>Progress</th><th></th></tr></thead><tbody>'+pRows+'</tbody></table></div></div>';
   }
   var totalRev=0,totalProfit=0,creditTotal=0,cashS=0,posS=0,transS=0;
+  // Filter sales to match the current ledger filter (today / specific date / all)
+  var _kpiSales=DB.sales.filter(function(s){
+    if(salesLedgerFilter==='today')return s.date===today;
+    if(salesLedgerFilter==='date'&&salesLedgerDate){
+      var dp=salesLedgerDate.split('-');
+      var fd=new Date(parseInt(dp[0]),parseInt(dp[1])-1,parseInt(dp[2])).toLocaleDateString();
+      return s.date===fd;
+    }
+    return true; // 'all'
+  });
   // Group by invoice to avoid double-counting split amounts across line items
   var _salesInvMap={};
-  DB.sales.forEach(function(s){
+  _kpiSales.forEach(function(s){
     totalRev+=s.total;totalProfit+=s.profit;
     var k=s.invoiceNum||s.id;
     if(!_salesInvMap[k])_salesInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,total:0};
@@ -8015,8 +8025,8 @@ function buildSales(){
   if(_salesPage>0&&_allLedgerRows.length<=_salesPage*PAGE_SIZE){_salesPage=0;window._salesPage=0;}
   var ledger=pgSlice(_allLedgerRows,_salesPage).join('');
   var _salesPager=pgBar(_salesPage,_allLedgerRows.length,'_salesPage');
-  return '<div class="metrics">'+mc('Revenue',fmt(totalRev),'','')+mc('Profit',fmt(totalProfit),pct(totalProfit,totalRev)+' margin',totalProfit>=0?'green':'red')+mc('On credit',fmt(creditTotal),'','amber')+mc('Invoices',invoiceKeys.length,'','')+ '</div>'+
-    '<div class="metrics" style="grid-template-columns:repeat(3,1fr)">'+mc('Cash',fmt(cashS),'','')+mc('POS',fmt(posS),'','')+mc('Transfer',fmt(transS),'','')+ '</div>'+
+  return '<div class="metrics">'+mc('Revenue',fmt(totalRev),filterLabel,'')+mc('Profit',fmt(totalProfit),pct(totalProfit,totalRev)+' margin',totalProfit>=0?'green':'red')+mc('On credit',fmt(creditTotal),filterLabel,'amber')+mc('Invoices',invoiceKeys.length,filterLabel,'')+'</div>'+
+    '<div class="metrics" style="grid-template-columns:repeat(3,1fr)">'+mc('Cash',fmt(cashS),filterLabel,'')+mc('POS',fmt(posS),filterLabel,'')+mc('Transfer',fmt(transS),filterLabel,'')+'</div>'+
     '<p class="sec-title">New invoice</p>'+
     '<div style="background:var(--amber-bg);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;color:var(--amber);margin-bottom:1rem"><b>Rules:</b> Invoice number required. Walk-in customers: cash only. Credit sales: registered customers with credit limit only.</div>'+
     '<div class="fg c2" style="margin-bottom:.5rem"><div class="form-group"><label>Invoice number <span style="color:var(--danger)">*</span> (required)</label>'+
