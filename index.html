@@ -7468,16 +7468,44 @@ function onPurchasePayTypeChange(){
   }
 }
 
+
+// ── Supply Date Picker Modal ─────────────────────────────────
+function showSupplyDateModal(title, detail, onConfirm){
+  var old=document.getElementById('supply-date-modal');if(old)old.remove();
+  var today=new Date();
+  var todayISO=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var m=document.createElement('div');
+  m.id='supply-date-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem';
+  m.innerHTML=
+    '<div style="background:var(--white);border-radius:var(--radius-lg);padding:1.5rem;width:100%;max-width:400px;box-shadow:var(--shadow-lg)">'+
+    '<div style="font-size:15px;font-weight:700;margin-bottom:6px">'+title+'</div>'+
+    '<div style="font-size:12px;color:var(--text3);margin-bottom:1rem">'+detail+'</div>'+
+    '<div class="form-group" style="margin-bottom:1.25rem">'+
+      '<label>Date goods were received/supplied <span style="color:var(--danger)">*</span></label>'+
+      '<input type="date" id="supply-date-input" value="'+todayISO+'" max="'+todayISO+'" style="width:100%;margin-top:4px;font-size:14px">'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:4px">Leave as today or change to the actual date</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+      '<button id="supply-date-cancel" class="btn">Cancel</button>'+
+      '<button id="supply-date-confirm" class="btn primary">✓ Confirm</button>'+
+    '</div>'+
+    '</div>';
+  document.body.appendChild(m);
+  document.getElementById('supply-date-cancel').onclick=function(){m.remove();};
+  document.getElementById('supply-date-confirm').onclick=function(){
+    var v=document.getElementById('supply-date-input').value;
+    if(!v){alert('Please select a date.');return;}
+    var dp=v.split('-');
+    var d=new Date(parseInt(dp[0]),parseInt(dp[1])-1,parseInt(dp[2]));
+    var dateStr=d.toLocaleDateString();
+    m.remove();
+    onConfirm(dateStr);
+  };
+}
+
 function markAsSupplied(invoiceRef){
-  showConfirm({
-    type:'warning',
-    title:'Mark as supplied?',
-    msg:'This will deduct the quantities from inventory. This cannot be undone.',
-    detail:'Invoice #'+invoiceRef,
-    confirmLabel:'✓ Mark supplied',
-    cancelLabel:'Cancel'
-  },function(){
-  var supplyDate=new Date().toLocaleDateString();
+  showSupplyDateModal('Mark as Supplied — Invoice #'+invoiceRef,'This will deduct the quantities from inventory.',function(supplyDate){
   // Find all sales items belonging to this invoice using any matching field
   var items=DB.sales.filter(function(s){
     return String(s.invoiceId)===String(invoiceRef)||
@@ -7505,7 +7533,7 @@ function markAsSupplied(invoiceRef){
   saveData();
   renderApp();
   alert('✅ Goods marked as supplied on '+supplyDate+'. Stock has been deducted from inventory.');
-  }); // end showConfirm
+  });
 }
 
 function showReturnModal(invoiceId){
@@ -9601,10 +9629,8 @@ function repairMissingInventory(){
 function receiveAllDeliveries(invoiceNum){
   var pending=(DB.pendingDeliveries||[]).filter(function(d){return d.status!=='complete'&&(d.invoiceNum||d.id)==invoiceNum;});
   if(!pending.length){alert('No pending items for this invoice.');return;}
-  var itemList=pending.map(function(d){return d.itemName+' × '+d.qtyPending;}).join('\n');
-  if(!confirm('Receive ALL remaining items for Invoice #'+invoiceNum+'?\n\n'+itemList))return;
-  var now=new Date();
-  var date=now.toLocaleDateString();
+  var itemList=pending.map(function(d){return d.itemName+' × '+d.qtyPending;}).join(', ');
+  showSupplyDateModal('Receive All — Invoice #'+invoiceNum,itemList,function(date){
   pending.forEach(function(d){
     var qtyToReceive=d.qtyPending;
     if(qtyToReceive<=0)return;
@@ -9637,6 +9663,7 @@ function receiveAllDeliveries(invoiceNum){
   logActivity('Full delivery received','Invoice #'+invoiceNum+' — all items received from '+pending[0].supName,'purchase');
   saveData();renderPanel();
   showToast('✅ All items for Invoice #'+invoiceNum+' received and added to stock.');
+  }); // end showSupplyDateModal
 }
 
 function receiveDelivery(deliveryId){
@@ -9644,18 +9671,13 @@ function receiveDelivery(deliveryId){
   if(!d){alert('Delivery record not found.');return;}
 
   var remaining=d.qtyPending;
-  var qtyToReceive=parseInt(prompt(
-    'Receive delivery for: '+esc(d.itemName)+
-    '\nSupplier: '+esc(d.supName)+
-    '\nPending qty: '+remaining+
-    '\n\nHow many units are you receiving now?'
-    ,remaining));
-
+  var qtyInput=prompt('Receive delivery for: '+esc(d.itemName)+'\nSupplier: '+esc(d.supName)+'\nPending qty: '+remaining+'\n\nHow many units are you receiving now?',remaining);
+  if(qtyInput===null)return;
+  var qtyToReceive=parseInt(qtyInput);
   if(isNaN(qtyToReceive)||qtyToReceive<=0){return;}
-  if(qtyToReceive>remaining){
-    alert('Cannot receive more than pending qty ('+remaining+').');return;
-  }
+  if(qtyToReceive>remaining){alert('Cannot receive more than pending qty ('+remaining+').');return;}
 
+  showSupplyDateModal('Receive Delivery — '+esc(d.itemName),'Qty: '+qtyToReceive+' from '+esc(d.supName),function(receivedDate){
   // Update inventory stock
   var invItem=DB.inventory.find(function(i){return i.id==d.itemId;});
   if(invItem){
@@ -9664,7 +9686,7 @@ function receiveDelivery(deliveryId){
     DB.adjLog.push({id:uid(),itemId:invItem.id,itemName:invItem.name,
       type:'add',reason:'Pending delivery received — Invoice #'+d.invoiceNum+' from '+d.supName,
       before:before,change:qtyToReceive,after:invItem.qty,
-      date:new Date().toLocaleDateString(),by:DB.currentUser.name});
+      date:receivedDate,by:DB.currentUser.name});
   } else {
     // Item not in inventory yet — create it from pending delivery data
     var newItem={id:d.itemId||uid(),name:d.itemName,qty:qtyToReceive,
@@ -9674,17 +9696,17 @@ function receiveDelivery(deliveryId){
     DB.adjLog.push({id:uid(),itemId:newItem.id,itemName:newItem.name,
       type:'add',reason:'New item created from pending delivery — Invoice #'+d.invoiceNum+' from '+d.supName,
       before:0,change:qtyToReceive,after:qtyToReceive,
-      date:new Date().toLocaleDateString(),by:DB.currentUser.name});
+      date:receivedDate,by:DB.currentUser.name});
     showToast('📦 New inventory item created: '+d.itemName);
   }
 
   // Update delivery record
   d.qtyReceived=(d.qtyReceived||0)+qtyToReceive;
   d.qtyPending=d.qtyOrdered-d.qtyReceived;
-  d.lastReceivedDate=new Date().toLocaleDateString();
+  d.lastReceivedDate=receivedDate;
   if(d.qtyPending<=0){
     d.status='complete';
-    d.completedDate=new Date().toLocaleDateString();
+    d.completedDate=receivedDate;
   }
 
   // Update original purchase item received qty
@@ -9697,14 +9719,10 @@ function receiveDelivery(deliveryId){
     }
   }
 
-  logActivity('Delivery received',
-    d.itemName+' × '+qtyToReceive+' received from '+esc(d.supName)+' — Invoice #'+d.invoiceNum+
-    (d.qtyPending<=0?' (Fully delivered)':' ('+d.qtyPending+' still pending)'),
-    'purchase');
-
-  saveData();
-  renderPanel();
-  showToast('✅ '+qtyToReceive+' units of '+d.itemName+' added to stock.'+(d.qtyPending<=0?' Delivery complete!':' '+d.qtyPending+' still pending.'));
+  logActivity('Delivery received — '+d.itemName+' × '+qtyToReceive+' from '+d.supName+' on '+receivedDate,'Invoice #'+d.invoiceNum,'purchase');
+  saveData();renderPanel();
+  showToast('✅ '+qtyToReceive+' units of '+d.itemName+' received.');
+  }); // end showSupplyDateModal
 }
 
 function buildPurchases(){
@@ -14886,18 +14904,20 @@ function supplyAllNow(invoiceNum){
     confirmLabel:'✓ Supply all',
     cancelLabel:'Cancel'
   },function(){
+  showSupplyDateModal('Supply All — Invoice #'+invoiceNum,'Stock will be deducted from inventory.',function(supplyDate){
   canSupply.forEach(function(x){
     if(x.inv)x.inv.qty-=x.toSupply;
     var prevSupplied=x.sale.suppliedQty||0;
     x.sale.suppliedQty=prevSupplied+x.toSupply;
     x.sale.pendingQty=x.pending-x.toSupply;
-    if(x.sale.pendingQty<=0){x.sale.supplyStatus='supplied';x.sale.supplyDate=new Date().toLocaleDateString();x.sale.pendingSupply=false;}
+    if(x.sale.pendingQty<=0){x.sale.supplyStatus='supplied';x.sale.supplyDate=supplyDate;x.sale.pendingSupply=false;}
     else{x.sale.supplyStatus='partial';}
-    if(x.inv){DB.adjLog.push({id:uid(),itemId:x.inv.id,itemName:x.inv.name,type:'remove',reason:'Supplied — Invoice #'+invoiceNum,before:x.inv.qty+x.toSupply,change:-x.toSupply,after:x.inv.qty,date:new Date().toLocaleDateString(),by:DB.currentUser.name});}
+    if(x.inv){DB.adjLog.push({id:uid(),itemId:x.inv.id,itemName:x.inv.name,type:'remove',reason:'Supplied — Invoice #'+invoiceNum,before:x.inv.qty+x.toSupply,change:-x.toSupply,after:x.inv.qty,date:supplyDate,by:DB.currentUser.name});}
   });
   saveData();
-  alert('Supply completed for Invoice #'+invoiceNum+'!');
+  alert('Supply completed for Invoice #'+invoiceNum+' on '+supplyDate+'!');
   renderApp();
+  }); // end showSupplyDateModal
   }); // end showConfirm
 }
 
