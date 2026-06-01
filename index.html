@@ -807,11 +807,69 @@ function startFirebaseListener() {
   if (fbPollTimer) clearInterval(fbPollTimer);
   updateSyncStatus('connecting');
 
-  // Pull all collections from Firestore
-  fbPullAll(function() {
+  // On initial connect — merge remote into local instead of replacing
+  // This prevents Firestore overwriting records saved while offline
+  fbPullAllRaw(function(remoteDB) {
     fbConnected = true;
     fbLastSync = new Date();
     fbLastSavedAt = new Date().toISOString();
+
+    if (remoteDB) {
+      var localSales = DB.sales ? DB.sales.length : 0;
+      var remoteSales = remoteDB.sales ? remoteDB.sales.length : 0;
+
+      // If remote has significantly more records than local, do a full replace
+      // (local is clearly stale — e.g. first load on a new device)
+      if (remoteSales > localSales + 5) {
+        // Full replace — remote is authoritative
+        var savedUser = DB.currentUser;
+        GCE_COLLECTIONS.forEach(function(colName) {
+          if (colName === 'meta') return;
+          var data = remoteDB[colName];
+          if (Array.isArray(data)) DB[colName] = data;
+          else if (data && typeof data === 'object' && colName === 'settings') DB.settings = data;
+        });
+        if (remoteDB.invoiceCounter) DB.invoiceCounter = remoteDB.invoiceCounter;
+        if (remoteDB.invoiceYear) DB.invoiceYear = remoteDB.invoiceYear;
+        DB.currentUser = savedUser;
+      } else {
+        // Smart merge — add any remote records missing locally
+        var mergeCols = [
+          'sales','purchases','cashflow','creditPayments','deposits',
+          'salesReturns','adjLog','commissionLedger','proformas',
+          'supplierPayments','tillSessions','supplierDeposits',
+          'demoSales','activityLog','recycleBin','drafts',
+          'pendingDeliveries','transferLog','stockCounts','warehouse'
+        ];
+        mergeCols.forEach(function(col) {
+          var remote = remoteDB[col] || [];
+          if (!DB[col]) DB[col] = [];
+          var localIds = {};
+          DB[col].forEach(function(rec) { if (rec.id) localIds[rec.id] = true; });
+          var added = 0;
+          remote.forEach(function(rec) {
+            if (rec.id && !localIds[rec.id]) { DB[col].push(rec); added++; }
+          });
+          if (added > 0) console.log('Startup merge: added ' + added + ' missing records to ' + col);
+        });
+        // For object collections — add new records, keep local for existing ones
+        var objCols = ['customers','inventory','suppliers','users','banks','posTerminals','categories','expenseCats'];
+        objCols.forEach(function(col) {
+          var remote = remoteDB[col] || [];
+          if (!DB[col]) DB[col] = [];
+          var localMap = {};
+          DB[col].forEach(function(rec) { if (rec.id) localMap[rec.id] = true; });
+          remote.forEach(function(rec) {
+            if (rec.id && !localMap[rec.id]) DB[col].push(rec);
+          });
+        });
+        // Use whichever invoiceCounter is higher
+        if (remoteDB.invoiceCounter > (DB.invoiceCounter || 0)) {
+          DB.invoiceCounter = remoteDB.invoiceCounter;
+        }
+      }
+    }
+
     updateSyncStatus('synced');
     // Flush any pending offline saves
     var pending = localStorage.getItem(STORAGE_KEY+'_pending');
