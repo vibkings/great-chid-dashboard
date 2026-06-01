@@ -1171,7 +1171,9 @@ function applySnapshot(snapshot) {
     var yearPrefix=String(currentYr)+'/';
     var existing=DB.sales.filter(function(s){return s.invoiceNum&&String(s.invoiceNum).indexOf(yearPrefix)===0;});
     if(existing.length){
-      var maxSeq=existing.reduce(function(mx,s){return Math.max(mx,parseInvNum(s.invoiceNum));},0);
+      // Use unique invoice numbers only — each invoice has multiple rows (one per item)
+      var uniqueNums=[...new Set(existing.map(function(s){return parseInvNum(s.invoiceNum);}))];
+      var maxSeq=Math.max.apply(null,uniqueNums);
       DB.invoiceCounter=maxSeq+1;
     } else {
       DB.invoiceCounter=1;
@@ -5223,7 +5225,6 @@ function parseInvNum(n){
 }
 
 // Generate next invoice number in format YYYY/NNNN, resetting each year
-// Uses a pre-claim check to prevent duplicates when two users save simultaneously
 function generateInvoiceNum(){
   var now=new Date();
   var currentYear=now.getFullYear();
@@ -5231,15 +5232,10 @@ function generateInvoiceNum(){
     DB.invoiceCounter=1;
     DB.invoiceYear=currentYear;
   }
-  // Scan to find true max used
-  var prefix=String(currentYear)+'/';
-  var allNums=DB.sales
-    .filter(function(s){return s.invoiceNum&&String(s.invoiceNum).indexOf(prefix)===0;})
-    .map(function(s){return parseInt(String(s.invoiceNum).split('/')[1])||0;});
-  var maxUsed=allNums.length?Math.max.apply(null,allNums):0;
-  // Use whichever is higher — do NOT modify DB.invoiceCounter here
-  // Counter is only incremented by saveSale() after successful save
-  var next=Math.max(DB.invoiceCounter,maxUsed+1);
+  // Use DB.invoiceCounter as sole source of truth.
+  // Do NOT scan maxUsed from DB.sales — each invoice has multiple rows (one per item)
+  // so scanning maxUsed causes the counter to jump by the number of items per invoice.
+  var next=DB.invoiceCounter||1;
   var seq=String(next).padStart(4,'0');
   return currentYear+'/'+seq;
 }
