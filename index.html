@@ -9739,16 +9739,19 @@ function repairMissingInventory(){
   if(!missing.length){alert('No missing items found.');return;}
   var created=[];
   missing.forEach(function(d){
-    // Double-check by name in case it exists with different id
+    // Check by name — item may exist with different ID (e.g. created by receiveAllDeliveries already)
     var byName=DB.inventory.find(function(i){return i.name.toLowerCase()===d.itemName.toLowerCase();});
     if(byName){
-      // Item exists by name — just update the itemId reference and add qty
-      if(!byName.qty)byName.qty=0;
-      byName.qty+=d.qtyReceived;
-      d.itemId=byName.id; // fix the reference
-      created.push(d.itemName+' — added '+d.qtyReceived+' units to existing record');
+      // Item already exists by name — just fix the ID reference, do NOT add qty again
+      // The qty was already added when receiveAllDeliveries/receiveDelivery ran
+      d.itemId=byName.id;
+      DB.adjLog.push({id:uid(),itemId:byName.id,itemName:byName.name,type:'info',
+        reason:'Repair: linked delivery record to existing inventory item — Invoice #'+d.invoiceNum,
+        before:byName.qty,change:0,after:byName.qty,
+        date:new Date().toLocaleDateString(),by:DB.currentUser.name});
+      created.push(d.itemName+' — already in inventory (Qty: '+byName.qty+'). ID reference fixed, no qty change.');
     } else {
-      // Truly new — create inventory item
+      // Truly missing — create inventory item with received qty
       var newId=d.itemId||uid();
       var newItem={id:newId,name:d.itemName,qty:d.qtyReceived,
         cost:d.cost||0,sell:d.sell||d.cost||0,minQty:5,
@@ -9764,7 +9767,7 @@ function repairMissingInventory(){
   });
   saveData();
   renderPanel();
-  alert('✅ Repair complete!\n\n'+created.join('\n')+'\n\nCheck your inventory to confirm.');
+  alert('✅ Repair complete!\n\n'+created.join('\n')+'\n\nCheck your inventory to confirm quantities are correct.');
 }
 
 function receiveAllDeliveries(invoiceNum){
@@ -9998,8 +10001,17 @@ function buildPurchases(){
   // Check for completed deliveries where inventory item is missing (repair section)
   var missingInv=(DB.pendingDeliveries||[]).filter(function(d){
     if(d.qtyReceived<=0)return false;
-    var invItem=DB.inventory.find(function(i){return i.id==d.itemId;});
-    return !invItem; // received but not in inventory
+    // Check by ID first
+    var byId=DB.inventory.find(function(i){return i.id==d.itemId;});
+    if(byId)return false; // found by ID — not missing
+    // Also check by name — if exists by name, it's already in inventory (just ID mismatch)
+    var byName=DB.inventory.find(function(i){return i.name.toLowerCase()===d.itemName.toLowerCase();});
+    if(byName){
+      // Fix the ID reference silently so this stops appearing
+      d.itemId=byName.id;
+      return false; // not missing
+    }
+    return true; // truly missing from inventory
   });
   var repairSection=missingInv.length?
     '<div style="background:var(--danger-bg);border:2px solid #fca5a5;border-radius:10px;padding:14px;margin-top:12px">'+
