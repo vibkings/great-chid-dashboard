@@ -10375,11 +10375,12 @@ function buildPurchaseReturnsSection(){
 // ============================================================
 function buildExpenses(){
   if(!canDo('expenses'))return '<div class="empty">Access denied.</div>';
-  var catOpts=DB.expenseCats.map(function(c){return '<option value="'+c+'">'+c+'</option>';}).join('');
+  var catOpts=DB.expenseCats.filter(function(c){return c!=='Restock'&&c!=='Supplier Payment'&&c!=='Supplier Deposit'&&c!=='Change';}).map(function(c){return '<option value="'+c+'">'+c+'</option>';}).join('');
   var bankSubField=DB.banks.length?'<div class="form-group" id="ex-bank-wrap" style="display:none"><label>Which bank?</label><select id="ex-bankid"><option value="">Select bank...</option>'+bankOpts()+'</select></div>':'';
   var posSubField=DB.posTerminals.length?'<div class="form-group" id="ex-pos-wrap" style="display:none"><label>Which POS terminal?</label><select id="ex-posid"><option value="">Select terminal...</option>'+posOpts()+'</select></div>':'';
   var filtered=DB.cashflow.filter(function(c){
-    if(c.type!=='out'||c.cat==='Restock')return false;
+    if(c.type!=='out')return false;
+    if(c.cat==='Restock'||c.cat==='Supplier Payment'||c.cat==='Supplier Deposit'||c.cat==='Change')return false;
     if(expFilterFrom&&!dateInRange(c.date,expFilterFrom,''))return false;
     if(expFilterTo&&!dateInRange(c.date,'',expFilterTo))return false;
     if(expFilterCat&&c.cat!==expFilterCat)return false;
