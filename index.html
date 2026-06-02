@@ -3094,91 +3094,244 @@ function switchTab(t){activeTab=t;window._invPage=0;window._salesPage=0;window._
 })();
 function switchStockSub(s){activeStockSub=s;if(s!=='catcount')activeCountCat='';renderApp();}
 function switchCustSub(s){activeCustSub=s;renderApp();}
-function showTransferModal(direction){
-  var fromStore=direction==='to_warehouse'?DB.inventory:DB.warehouse;
-  var fromLabel=direction==='to_warehouse'?'Shop':'Warehouse';
-  var toLabel=direction==='to_warehouse'?'Warehouse':'Shop';
-  if(!fromStore.length){alert('No items in '+fromLabel+' to transfer.');return;}
-  var old=document.getElementById('transfer-modal');if(old)old.remove();
-  var m=document.createElement('div');
-  m.id='transfer-modal';
-  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem';
-  m.onclick=function(e){if(e.target===m)m.remove();};
-  window._trDir=direction;
-  window._trFromStore=fromStore;
-  window._trFromLabel=fromLabel;
-  function buildRows(filter){
-    var term=(filter||'').toLowerCase().trim();
-    var list=term?fromStore.filter(function(i){
-      return i.name.toLowerCase().indexOf(term)>-1||(i.cat||'').toLowerCase().indexOf(term)>-1;
-    }):fromStore;
-    if(!list.length){
-      return '<div style="padding:1.5rem;text-align:center;color:var(--text3);font-size:13px">'+
-        (term?'No items match "'+filter+'"':'No items found in '+fromLabel)+
-      '</div>';
-    }
-    return list.map(function(i){
-      var disabled=i.qty<=0;
-      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);opacity:'+(disabled?'0.5':'1')+'">'+
-        '<div style="flex:1">'+
-          '<div style="font-size:13px;font-weight:600">'+esc(i.name)+'</div>'+
-          '<div style="font-size:11px;color:var(--text3)">'+(i.cat||'No category')+' &nbsp;·&nbsp; Available: <b style="color:'+(disabled?'var(--danger)':'var(--success)')+'">'+i.qty+'</b></div>'+
-        '</div>'+
-        '<input type="number" id="tr-qty-'+i.id+'" placeholder="0" min="0" max="'+i.qty+'" '+(disabled?'disabled title="No stock available"':'')+' style="width:70px;font-size:13px;text-align:center;border-radius:var(--radius-sm);border:1px solid var(--border);padding:5px;'+(disabled?'background:var(--surface2);':'')+'">'+
-      '</div>';
-    }).join('');
-  }
-  window._buildTrRows=buildRows;
-  window._trDirection=direction;
-  m.innerHTML='<div style="background:var(--white);border-radius:var(--radius-lg);width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg)">'+
-    '<div style="background:var(--dark);padding:1rem 1.25rem;border-radius:var(--radius-lg) var(--radius-lg) 0 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'+
-    '<div><div style="font-size:14px;font-weight:700;color:#fff">🔄 '+fromLabel+' → '+toLabel+'</div>'+
-    '<div style="font-size:11.5px;color:rgba(255,255,255,.7);margin-top:2px">Enter qty to transfer for each item</div></div>'+
-    '<button onclick="document.getElementById(\'transfer-modal\').remove()" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button></div>'+
-    '<div style="padding:.75rem 1.25rem;border-bottom:1px solid var(--border);flex-shrink:0">'+
-    '<div style="position:relative"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3)">&#128269;</span>'+
-    '<input type="text" id="tr-search-input" placeholder="Search items by name or category..." oninput="var el=document.getElementById(\'tr-list\');if(el&&window._buildTrRows)el.innerHTML=window._buildTrRows(this.value||\'\')" style="padding-left:32px;width:100%;font-size:13px"></div></div>'+
-    '<div id="tr-list" style="overflow-y:auto;flex:1;padding:0 1.25rem">'+buildRows('')+'</div>'+
-    '<div style="padding:1rem 1.25rem;border-top:1px solid var(--border);flex-shrink:0">'+
-    '<div class="fg c2" style="margin-bottom:.75rem">'+
-      '<div class="form-group" style="margin:0"><label>Waybill No. <span style="color:var(--danger)">*</span></label>'+
-      '<input type="text" id="tr-waybill" placeholder="e.g. WB-2026-001" style="margin-top:4px"></div>'+
-      '<div class="form-group" style="margin:0"><label>Notes <span style="font-size:10px;color:var(--text3)">(optional)</span></label>'+
-      '<input type="text" id="tr-note" placeholder="e.g. Restocking warehouse" style="margin-top:4px"></div>'+
+// ── Transfer Cart (like sales invoice) ──────────────────────
+var _transferCart = []; // {itemId, name, cat, qty, available, direction}
+
+function viewWaybillDetail(waybill){
+  var items=(DB.transferLog||[]).filter(function(t){return (t.waybill||t.id)===waybill;});
+  if(!items.length){showToast('Waybill not found.','error');return;}
+  var g=items[0];
+  var isIn=g.direction==='to_warehouse';
+  var dirLabel=isIn?'Shop → Warehouse':'Warehouse → Shop';
+  var totalQty=items.reduce(function(a,t){return a+t.qty;},0);
+  var rows=items.map(function(t,i){
+    return '<tr>'+
+      '<td>'+(i+1)+'</td>'+
+      '<td><b>'+esc(t.itemName)+'</b></td>'+
+      '<td>'+(t.itemCat||'—')+'</td>'+
+      '<td style="text-align:center;font-weight:700">'+t.qty+'</td>'+
+    '</tr>';
+  }).join('');
+  showConfirm({
+    type:'info',
+    title:'📋 Waybill #'+waybill,
+    msg:'<div style="font-size:13px;margin-bottom:10px">'+
+      '<b>Date:</b> '+g.date+' &nbsp;|&nbsp; '+
+      '<b>Direction:</b> '+dirLabel+' &nbsp;|&nbsp; '+
+      '<b>By:</b> '+esc(g.by||'—')+
+      (g.note?'<br><b>Notes:</b> '+esc(g.note):'')+
     '</div>'+
-    '<div style="display:flex;gap:8px">'+
-    '<button class="btn" onclick="document.getElementById(\'transfer-modal\').remove()">Cancel</button>'+
-    '<button class="btn primary" onclick="processTransfer(\''+direction+'\')">🔄 Confirm Transfer</button>'+
-    '</div></div></div>';
+    '<div class="tbl-wrap"><table>'+
+      '<thead><tr><th>#</th><th>Item</th><th>Category</th><th style="text-align:center">Qty</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody>'+
+      '<tfoot><tr><td colspan="3" style="text-align:right;font-weight:700">Total</td><td style="text-align:center;font-weight:800">'+totalQty+'</td></tr></tfoot>'+
+    '</table></div>',
+    detail:'',
+    confirmLabel:'🖨️ Print',
+    cancelLabel:'Close'
+  },function(){
+    var w=window.open('','_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Waybill #'+waybill+'</title><style>body{font-family:Arial,sans-serif;padding:20px;max-width:600px;margin:0 auto}table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:8px;border:1px solid #ddd;font-size:12px}td{padding:8px;border:1px solid #ddd;font-size:13px}@media print{button{display:none}}</style></head><body>'+
+      '<h2>GREAT CHID ELECTRO — Warehouse Transfer</h2>'+
+      '<p><b>Waybill #:</b> '+waybill+' &nbsp;|&nbsp; <b>Date:</b> '+g.date+' &nbsp;|&nbsp; <b>Direction:</b> '+dirLabel+'</p>'+
+      (g.note?'<p><b>Notes:</b> '+esc(g.note)+'</p>':'')+
+      '<p><b>Recorded by:</b> '+esc(g.by||'—')+'</p>'+
+      '<table><thead><tr><th>#</th><th>Item</th><th>Category</th><th>Qty</th></tr></thead><tbody>'+rows+'</tbody>'+
+      '<tfoot><tr><td colspan="3" style="text-align:right;font-weight:700">TOTAL</td><td style="text-align:center;font-weight:800">'+totalQty+'</td></tr></tfoot></table>'+
+      '<br><button onclick="window.print()">🖨️ Print</button>'+
+      '</body></html>');
+    w.document.close();
+  });
+}
+
+function showTransferModal(direction){
+  var fromStore = direction==='to_warehouse' ? DB.inventory : DB.warehouse;
+  var fromLabel = direction==='to_warehouse' ? 'Shop' : 'Warehouse';
+  var toLabel   = direction==='to_warehouse' ? 'Warehouse' : 'Shop';
+  if(!fromStore.length){alert('No items in '+fromLabel+' to transfer.');return;}
+  _transferCart = [];
+  window._trDirection = direction;
+  window._trFromStore = fromStore;
+  window._trFromLabel = fromLabel;
+  window._trToLabel   = toLabel;
+  renderTransferModal();
+}
+
+function renderTransferModal(){
+  var direction = window._trDirection;
+  var fromStore = window._trFromStore;
+  var fromLabel = window._trFromLabel;
+  var toLabel   = window._trToLabel;
+  var old = document.getElementById('transfer-modal');if(old)old.remove();
+  var m = document.createElement('div');
+  m.id = 'transfer-modal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem';
+  m.onclick = function(e){if(e.target===m){m.remove();_transferCart=[];}};
+
+  // Cart rows
+  var cartRows = _transferCart.length ? _transferCart.map(function(l,i){
+    return '<tr>'+
+      '<td><b>'+esc(l.name)+'</b><div style="font-size:10px;color:var(--text3)">'+esc(l.cat||'')+'</div></td>'+
+      '<td class="td-center" style="color:var(--text3);font-size:12px">'+l.available+'</td>'+
+      '<td class="td-center"><b>'+l.qty+'</b></td>'+
+      '<td><button onclick="removeTransferCartItem('+i+')" style="background:none;border:none;color:var(--danger);font-size:16px;cursor:pointer">✕</button></td>'+
+    '</tr>';
+  }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:12px;font-size:13px">No items added yet — search above to add</td></tr>';
+
+  var total = _transferCart.reduce(function(a,l){return a+l.qty;},0);
+
+  m.innerHTML =
+    '<div style="background:var(--white);border-radius:var(--radius-lg);width:100%;max-width:580px;max-height:92vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg)">'+
+    // Header
+    '<div style="background:var(--dark);padding:1rem 1.25rem;border-radius:var(--radius-lg) var(--radius-lg) 0 0;display:flex;justify-content:space-between;align-items:center;flex-shrink:0">'+
+      '<div><div style="font-size:14px;font-weight:700;color:#fff">🔄 '+fromLabel+' → '+toLabel+'</div>'+
+      '<div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:2px">Add items to transfer cart then confirm</div></div>'+
+      '<button onclick="document.getElementById(\'transfer-modal\').remove();_transferCart=[];" style="background:none;border:none;color:#fff;font-size:20px;cursor:pointer">&times;</button>'+
+    '</div>'+
+    // Search + add
+    '<div style="padding:.75rem 1.25rem;border-bottom:1px solid var(--border);flex-shrink:0">'+
+      '<div style="display:flex;gap:8px;align-items:flex-end">'+
+        '<div style="flex:1">'+
+          '<label style="font-size:11px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px">Search & Add Item</label>'+
+          '<div style="position:relative">'+
+            '<span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px">🔍</span>'+
+            '<input type="text" id="tr-item-search" placeholder="Type item name..." oninput="filterTrItemDd(this.value)" autocomplete="off" style="padding-left:32px;width:100%;font-size:13px">'+
+            '<div id="tr-item-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);max-height:200px;overflow-y:auto;z-index:100"></div>'+
+          '</div>'+
+        '</div>'+
+        '<div style="width:80px">'+
+          '<label style="font-size:11px;font-weight:700;color:var(--text2);display:block;margin-bottom:4px">Qty</label>'+
+          '<input type="number" id="tr-item-qty" min="1" value="1" style="width:100%;text-align:center;font-size:13px">'+
+        '</div>'+
+        '<button onclick="addToTransferCart()" class="btn primary" style="align-self:flex-end;white-space:nowrap">+ Add</button>'+
+      '</div>'+
+      '<input type="hidden" id="tr-item-id">'+
+    '</div>'+
+    // Cart table
+    '<div style="overflow-y:auto;flex:1;padding:.75rem 1.25rem">'+
+      '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
+        '<thead><tr style="border-bottom:1px solid var(--border)">'+
+          '<th style="text-align:left;padding:6px 8px;font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase">Item</th>'+
+          '<th style="text-align:center;padding:6px 8px;font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase">Available</th>'+
+          '<th style="text-align:center;padding:6px 8px;font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase">Transfer Qty</th>'+
+          '<th></th>'+
+        '</tr></thead>'+
+        '<tbody>'+cartRows+'</tbody>'+
+        (_transferCart.length?'<tfoot><tr style="border-top:2px solid var(--border)">'+
+          '<td colspan="2" style="text-align:right;font-weight:700;padding:8px">Total units:</td>'+
+          '<td style="text-align:center;font-weight:800;font-size:15px;padding:8px">'+total+'</td><td></td>'+
+        '</tr></tfoot>':'')+
+      '</table>'+
+    '</div>'+
+    // Footer — waybill + date + confirm
+    '<div style="padding:1rem 1.25rem;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface)">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:.75rem">'+
+        '<div class="form-group" style="margin:0"><label>Waybill No. <span style="color:var(--danger)">*</span></label>'+
+          '<input type="text" id="tr-waybill" placeholder="e.g. WB-2026-001" style="margin-top:4px"></div>'+
+        '<div class="form-group" style="margin:0"><label>Date (blank = today)</label>'+
+          '<input type="date" id="tr-date" style="margin-top:4px"></div>'+
+      '</div>'+
+      '<div class="form-group" style="margin-bottom:.75rem"><label>Notes (optional)</label>'+
+        '<input type="text" id="tr-note" placeholder="e.g. Weekly restock" style="margin-top:4px"></div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<button class="btn" onclick="document.getElementById(\'transfer-modal\').remove();_transferCart=[];">Cancel</button>'+
+        '<button class="btn primary" onclick="processTransfer(\''+direction+'\')" '+ (!_transferCart.length?'disabled':'')+'>🔄 Confirm Transfer ('+total+' units)</button>'+
+      '</div>'+
+    '</div>'+
+    '</div>';
   document.body.appendChild(m);
 }
+
+function filterTrItemDd(val){
+  var dd = document.getElementById('tr-item-dd');if(!dd)return;
+  var term = (val||'').toLowerCase().trim();
+  if(!term){dd.style.display='none';return;}
+  var fromStore = window._trFromStore||[];
+  var matches = fromStore.filter(function(i){
+    return i.qty>0&&(i.name.toLowerCase().indexOf(term)>-1||(i.cat||'').toLowerCase().indexOf(term)>-1);
+  }).slice(0,20);
+  if(!matches.length){dd.style.display='none';return;}
+  dd.innerHTML = matches.map(function(i){
+    return '<div data-id="'+i.id+'" data-name="'+esc(i.name)+'" data-cat="'+esc(i.cat||'')+'" data-avail="'+i.qty+'"'+
+      ' style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;font-size:13px"'+
+      ' onmouseover="this.style.background=\'var(--surface)\'" onmouseout="this.style.background=\'\'"'+
+      ' onmousedown="selectTrItem(this)">'+
+      '<span><b>'+esc(i.name)+'</b> <span style="font-size:11px;color:var(--text3)">'+esc(i.cat||'')+'</span></span>'+
+      '<span style="color:var(--success);font-size:12px;font-weight:600">'+i.qty+' available</span>'+
+    '</div>';
+  }).join('');
+  dd.style.display='block';
+}
+
+function selectTrItem(el){
+  document.getElementById('tr-item-search').value = el.dataset.name.replace(/&quot;/g,'"');
+  document.getElementById('tr-item-id').value = el.dataset.id;
+  document.getElementById('tr-item-dd').style.display='none';
+  document.getElementById('tr-item-qty').focus();
+}
+
+function addToTransferCart(){
+  var id = document.getElementById('tr-item-id').value;
+  var name = document.getElementById('tr-item-search').value.trim();
+  var qty = parseInt(document.getElementById('tr-item-qty').value)||1;
+  var fromStore = window._trFromStore||[];
+  var item = id ? fromStore.find(function(i){return String(i.id)===String(id);}) :
+                  fromStore.find(function(i){return i.name.toLowerCase()===name.toLowerCase();});
+  if(!item){showToast('Item not found in '+window._trFromLabel+'.','error');return;}
+  if(qty<=0){showToast('Enter a valid quantity.','error');return;}
+  // Check available minus already in cart
+  var inCart = _transferCart.filter(function(l){return String(l.itemId)===String(item.id);}).reduce(function(a,l){return a+l.qty;},0);
+  if(inCart+qty > item.qty){showToast('Only '+item.qty+' available ('+inCart+' already in cart).','error');return;}
+  // Merge same item
+  var existing = _transferCart.find(function(l){return String(l.itemId)===String(item.id);});
+  if(existing){existing.qty+=qty;}
+  else{_transferCart.push({itemId:item.id,name:item.name,cat:item.cat||'',qty:qty,available:item.qty});}
+  // Reset search
+  document.getElementById('tr-item-search').value='';
+  document.getElementById('tr-item-id').value='';
+  document.getElementById('tr-item-qty').value='1';
+  renderTransferModal();
+}
+
+function removeTransferCartItem(idx){
+  _transferCart.splice(idx,1);
+  renderTransferModal();
+}
+
 function processTransfer(direction){
-  var fromStore=direction==='to_warehouse'?DB.inventory:DB.warehouse;
-  var toStore=direction==='to_warehouse'?DB.warehouse:DB.inventory;
-  var fromLabel=direction==='to_warehouse'?'Shop':'Warehouse';
-  var toLabel=direction==='to_warehouse'?'Warehouse':'Shop';
-  var note=document.getElementById('tr-note').value.trim();
-  var waybill=document.getElementById('tr-waybill').value.trim();
+  if(!_transferCart.length){alert('Add items to the transfer cart first.');return;}
+  var fromStore = window._trFromStore;
+  var toStore   = direction==='to_warehouse'?DB.warehouse:DB.inventory;
+  var fromLabel = window._trFromLabel;
+  var toLabel   = window._trToLabel;
+  var waybill   = document.getElementById('tr-waybill').value.trim();
   if(!waybill){alert('Please enter a Waybill Number.');return;}
-  var date=new Date().toLocaleDateString();
-  var transferred=[];
-  fromStore.forEach(function(fromItem){
-    var inp=document.getElementById('tr-qty-'+fromItem.id);
-    var qty=parseInt(inp?inp.value:0)||0;
+  var note      = document.getElementById('tr-note').value.trim();
+  var dateVal   = document.getElementById('tr-date').value;
+  var dateObj   = dateVal?(function(){var dp=dateVal.split('-');return new Date(+dp[0],+dp[1]-1,+dp[2]);}()):new Date();
+  var date      = dateObj.toLocaleDateString();
+  var transferred = [];
+  _transferCart.forEach(function(l){
+    var fromItem = fromStore.find(function(i){return String(i.id)===String(l.itemId);});
+    if(!fromItem)return;
+    var qty = Math.min(l.qty, fromItem.qty);
     if(qty<=0)return;
-    if(qty>fromItem.qty)qty=fromItem.qty;
-    var toItem=toStore.find(function(i){return i.name.toLowerCase()===fromItem.name.toLowerCase();});
+    // Deduct from source
+    fromItem.qty = Math.max(0, fromItem.qty-qty);
+    // Add to destination
+    var toItem = toStore.find(function(i){return i.name.toLowerCase()===fromItem.name.toLowerCase();});
     if(toItem){toItem.qty+=qty;}
-    else{toStore.push({id:uid(),name:fromItem.name,qty:qty,cost:fromItem.cost,sell:fromItem.sell,minQty:fromItem.minQty||1,supId:fromItem.supId,cat:fromItem.cat});}
-    fromItem.qty=Math.max(0,fromItem.qty-qty);
+    else{toStore.push({id:fromItem.id,name:fromItem.name,qty:qty,cost:fromItem.cost,sell:fromItem.sell||0,minQty:fromItem.minQty||1,supId:fromItem.supId||null,cat:fromItem.cat||''});}
+    // Log
+    DB.transferLog.push({id:uid(),date:date,direction:direction,itemId:fromItem.id,itemName:fromItem.name,itemCat:fromItem.cat||'',qty:qty,waybill:waybill,note:note,by:DB.currentUser.name});
     transferred.push({name:fromItem.name,qty:qty});
-    DB.transferLog.push({id:uid(),date:date,direction:direction,itemName:fromItem.name,itemCat:fromItem.cat||'',qty:qty,waybill:waybill,note:note,by:DB.currentUser.name});
   });
-  if(!transferred.length){alert('Enter at least one qty to transfer.');return;}
+  if(!transferred.length){alert('No items could be transferred — check stock availability.');return;}
+  _transferCart=[];
   saveData();
   document.getElementById('transfer-modal').remove();
   renderApp();
-  alert('✅ Transfer complete!\n\n'+transferred.map(function(t){return t.name+' × '+t.qty;}).join('\n')+'\n\n'+fromLabel+' → '+toLabel);
+  showToast('✅ Transfer complete! '+transferred.length+' item(s), Waybill: '+waybill,'success');
 }
 // ============================================================
 // WAREHOUSE — ADD EXISTING STOCK & EDIT MIN QTY
@@ -3484,23 +3637,31 @@ function buildWarehouse(){
       '<td>'+adjBtn+'</td></tr>';
   }).join(''):(wsTerm?'<tr><td colspan="8" class="empty">No items match "'+whSearch+'".</td></tr>':'<tr><td colspan="8" class="empty">Warehouse is empty. Transfer goods from the Shop to get started.</td></tr>');
 
-  // Transfer history with filter
+  // Transfer history — grouped by waybill
   var filterDir=window._whDirFilter||'all';
   var filteredLog=DB.transferLog.slice().reverse().filter(function(t){
     return filterDir==='all'||(filterDir==='in'&&t.direction==='to_warehouse')||(filterDir==='out'&&t.direction==='to_shop');
   });
-  var logRows=filteredLog.length?filteredLog.map(function(t){
-    var isIn=t.direction==='to_warehouse';
+  // Group by waybill
+  var waybillGroups={};
+  filteredLog.forEach(function(t){
+    var k=t.waybill||t.id;
+    if(!waybillGroups[k])waybillGroups[k]={waybill:k,date:t.date,direction:t.direction,items:[],by:t.by,note:t.note||''};
+    waybillGroups[k].items.push(t);
+  });
+  var logRows=Object.values(waybillGroups).length?Object.values(waybillGroups).map(function(g){
+    var isIn=g.direction==='to_warehouse';
+    var totalQty=g.items.reduce(function(a,t){return a+t.qty;},0);
+    var itemSummary=g.items.slice(0,2).map(function(t){return t.itemName+' ×'+t.qty;}).join(', ')+(g.items.length>2?' +'+( g.items.length-2)+' more':'');
     return '<tr>'+
-      '<td>'+t.date+'</td>'+
-      '<td><b>'+(t.waybill||'-')+'</b></td>'+
-      '<td>'+t.itemName+'</td>'+
-      '<td>'+(t.itemCat||'-')+'</td>'+
-      '<td style="text-align:center;font-weight:700;color:'+(isIn?'var(--success)':'var(--danger)')+'">'+t.qty+'</td>'+
+      '<td>'+g.date+'</td>'+
+      '<td><b>'+(g.waybill||'-')+'</b></td>'+
+      '<td style="font-size:12px;color:var(--text3)">'+itemSummary+'</td>'+
+      '<td style="text-align:center;font-weight:700">'+g.items.length+' items / '+totalQty+' units</td>'+
       '<td><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:'+(isIn?'var(--success-bg)':'var(--danger-bg)')+';color:'+(isIn?'var(--success)':'var(--danger)')+'">'+
-        (isIn?'⬇ Shop → Warehouse':'⬆ Warehouse → Shop')+'</span></td>'+
-      '<td style="font-size:11px">'+(t.note||'-')+'</td>'+
-      '<td>'+t.by+'</td>'+
+        (isIn?'⬇ Shop → WH':'⬆ WH → Shop')+'</span></td>'+
+      '<td>'+esc(g.by||'-')+'</td>'+
+      '<td><button onclick="viewWaybillDetail(\''+g.waybill+'\')" class="btn sm" style="font-size:11px">👁 View</button></td>'+
     '</tr>';
   }).join(''):'<tr><td colspan="7" class="empty">No transfers'+(filterDir!=='all'?' for this filter.':'.')+'</td></tr>';
 
@@ -3533,7 +3694,7 @@ function buildWarehouse(){
         '<button class="btn sm" onclick="window._whDirFilter=\'out\';renderApp()" style="'+(filterDir==='out'?'background:var(--danger);color:#fff;border-color:var(--danger)':'')+'">⬆ Out</button>'+
       '</div>'+
     '</div>'+
-    '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Waybill No.</th><th>Item</th><th>Category</th><th style="text-align:center">Qty</th><th>Direction</th><th>Notes</th><th>By</th></tr></thead><tbody>'+logRows+'</tbody></table></div>';
+    '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Waybill No.</th><th>Items</th><th style="text-align:center">Qty</th><th>Direction</th><th>By</th><th></th></tr></thead><tbody>'+logRows+'</tbody></table></div>';
 }
 function filterWhTable(){
   var term=whSearch.toLowerCase().trim();
