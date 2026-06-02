@@ -5977,8 +5977,7 @@ function buildInvoiceHTML(inv){
         '</div>'+
       '</div>'+
       '<div style="text-align:center;flex-shrink:0">'+
-        '<img src="https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=https://greatchidelectro.com&color=1a237e&bgcolor=ffffff" '+
-          'width="72" height="72" loading="eager" crossorigin="anonymous" alt="QR" style="display:block;border:1px solid #ddd;border-radius:4px;padding:2px">'+
+        '<canvas id="inv-qr-canvas" width="72" height="72" style="display:block;border:1px solid #ddd;border-radius:4px;padding:2px"></canvas>'+
         '<div style="font-size:7.5px;color:#6b7280;margin-top:3px;font-weight:700;letter-spacing:.5px">📱 SCAN ME</div>'+
         '<div style="font-size:6.5px;color:#9ca3af;">greatchidelectro.com</div>'+
       '</div>'+
@@ -6061,6 +6060,33 @@ function buildInvoiceHTML(inv){
     :'')+
     '</tbody></table>'+
     footerHTML+
+    '<script>'+
+    '(function(){'+
+    'var c=document.getElementById("inv-qr-canvas");'+
+    'if(!c)return;'+
+    'var ctx=c.getContext("2d");'+
+    'var url="https://greatchidelectro.com";'+
+    // Simple visual QR placeholder using a data pattern
+    'ctx.fillStyle="#ffffff";ctx.fillRect(0,0,72,72);'+
+    'ctx.fillStyle="#1a237e";'+
+    // Draw finder patterns (3 corners)
+    'function sq(x,y,s){ctx.fillRect(x,y,s,s);}'+
+    'function fp(x,y){sq(x,y,21);ctx.fillStyle="#fff";sq(x+3,y+3,15);ctx.fillStyle="#1a237e";sq(x+6,y+6,9);}'+
+    'var m=4;var mod=4;'+
+    'fp(m,m);fp(72-m-21,m);fp(m,72-m-21);'+
+    // Load qrcode.js from cdnjs for real QR
+    'var s=document.createElement("script");'+
+    's.src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";'+
+    's.onload=function(){'+
+      'c.style.display="none";'+
+      'var d=document.createElement("div");'+
+      'd.id="qr-real";'+
+      'c.parentNode.insertBefore(d,c);'+
+      'new QRCode(d,{text:url,width:68,height:68,colorDark:"#1a237e",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});'+
+    '};'+
+    'document.head.appendChild(s);'+
+    '})();'+
+    '<\/script>'+
     '</body></html>';
   return html;
 }
@@ -8277,7 +8303,12 @@ function buildSales(){
     filteredProfit+=g.profit;
     if(g.payment==='credit')filteredCredit+=g.total;
     else if(g.payment==='part')filteredPart+=g.total;
-    if(g.payMode==='cash')filteredCash+=g.total;
+    if(g.payMode==='split'&&g.splitPayment){
+      var sp=g.splitPayment;
+      function addFSplit(m,a){if(m==='pos')filteredPos+=a;else if(m==='transfer')filteredTransfer+=a;else filteredCash+=a;}
+      addFSplit(sp.mode1,sp.amt1||0);addFSplit(sp.mode2,sp.amt2||0);
+    }
+    else if(g.payMode==='cash')filteredCash+=g.total;
     else if(g.payMode==='pos')filteredPos+=g.total;
     else if(g.payMode==='transfer')filteredTransfer+=g.total;
   });
