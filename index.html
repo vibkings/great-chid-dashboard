@@ -4352,46 +4352,129 @@ function buildInventory(){
     '</div>';
   }
   var reorderItems=DB.inventory.filter(function(i){return i.qty<=i.minQty&&i.minQty>0;});
-  var reorderBySupplier={};
-  reorderItems.forEach(function(item){
-    var supId=item.supId||'__none__';
-    if(!reorderBySupplier[supId])reorderBySupplier[supId]={supId:supId,items:[]};
-    // Find last purchase record for this item
-    var lastPurch=DB.purchases.filter(function(p){return p.itemId==item.id||p.name===item.name;}).sort(function(a,b){return (b.date||'')>(a.date||'')?1:-1;})[0];
-    reorderBySupplier[supId].items.push({item:item,lastPurch:lastPurch});
-  });
-  var reorderGroups=Object.values(reorderBySupplier);
   var reorderAlert='';
-  if(reorderGroups.length>0){
-    var groupHtml=reorderGroups.map(function(g){
-      var sup=g.supId!=='__none__'?DB.suppliers.find(function(s){return s.id==g.supId;}):null;
-      var supName=sup?sup.name:'No supplier assigned';
+  if(reorderItems.length>0){
+    // ── Build per-item supplier price history ─────────────────
+    // For each item, find ALL suppliers who supplied it with their most recent price
+    function getItemSupplierHistory(item){
+      // Gather all purchase line items for this inventory item
+      var allLines=[];
+      DB.purchases.forEach(function(p){
+        (p.items||[]).forEach(function(l){
+          if(String(l.itemId||'')===String(item.id)||( l.name&&l.name.toLowerCase()===item.name.toLowerCase())){
+            allLines.push({supId:p.supId,supName:p.supName||getSupName(p.supId),cost:l.cost||0,date:p.date||''});
+          }
+        });
+      });
+      // Group by supplier — take most recent cost per supplier
+      var bySupplier={};
+      allLines.forEach(function(l){
+        var sid=l.supId||'__none__';
+        if(!bySupplier[sid]||l.date>bySupplier[sid].date){
+          bySupplier[sid]={supId:sid,supName:l.supName||'Unknown',cost:l.cost,date:l.date};
+        }
+      });
+      return Object.values(bySupplier).sort(function(a,b){return a.cost-b.cost;});
+    }
+
+    // ── Group reorder items by primary supplier ────────────────
+    var reorderBySupplier={};
+    reorderItems.forEach(function(item){
+      var history=getItemSupplierHistory(item);
+      var cheapest=history.length>0?history[0]:null; // already sorted cheapest first
+      var primarySupId=cheapest?cheapest.supId:(item.supId||'__none__');
+      var primarySupName=cheapest?cheapest.supName:(item.supId?getSupName(item.supId):'No supplier assigned');
+      if(!reorderBySupplier[primarySupId])reorderBySupplier[primarySupId]={supId:primarySupId,supName:primarySupName,items:[]};
+      var suggestedQty=Math.max(item.minQty*2,item.minQty-item.qty+item.minQty); // suggest 2x min or enough to restore to 2x min
+      reorderBySupplier[primarySupId].items.push({item:item,history:history,cheapest:cheapest,suggestedQty:suggestedQty});
+    });
+
+    var groupHtml=Object.values(reorderBySupplier).map(function(g){
+      var sup=g.supId!=='__none__'?DB.suppliers.find(function(s){return String(s.id)===String(g.supId);}):null;
       var supPhone=sup&&sup.phone?sup.phone:'';
+
       var itemHtml=g.items.map(function(r){
         var i=r.item;
-        var lp=r.lastPurch;
-        var shortage=i.minQty-i.qty;
+        var shortage=Math.max(0,i.minQty-i.qty);
+        var cheapest=r.cheapest;
+        var history=r.history;
+
+        // Build price comparison cells
+        var priceCell='<span style="color:#888;font-size:11px">No record</span>';
+        if(cheapest){
+          priceCell='<b style="color:#15803d">'+fmt(cheapest.cost)+'</b>'+
+            '<div style="font-size:9px;color:#6b7280">'+cheapest.date+'</div>';
+        }
+
+        // Multi-supplier indicator
+        var multiCell='';
+        if(history.length>1){
+          var otherCount=history.length-1;
+          multiCell='<div style="margin-top:3px;font-size:10px">';
+          history.slice(1).forEach(function(h){
+            var diff=cheapest?Math.round((h.cost-cheapest.cost)/cheapest.cost*100):0;
+            multiCell+='<span style="background:#fef9c3;color:#854d0e;padding:1px 5px;border-radius:4px;margin-right:3px;white-space:nowrap">'+
+              esc(h.supName)+': '+fmt(h.cost)+
+              (diff>0?' <span style="color:#dc2626">+'+diff+'%</span>':'')+
+            '</span>';
+          });
+          multiCell+='</div>';
+        }
+
         return '<tr>'+
-          '<td style="font-weight:600">'+esc(i.name)+'</td>'+
-          '<td style="text-align:center;color:'+( i.qty===0?'#dc2626':'#d97706')+';font-weight:700">'+i.qty+'</td>'+
-          '<td style="text-align:center">'+i.minQty+'</td>'+
+          '<td style="font-weight:600">'+
+            esc(i.name)+
+            '<div style="font-size:10px;color:#9ca3af">'+(i.cat||'')+'</div>'+
+          '</td>'+
+          '<td style="text-align:center;color:'+(i.qty===0?'#dc2626':'#d97706')+';font-weight:700">'+i.qty+
+            '<div style="font-size:9px;color:#9ca3af">of '+i.minQty+' min</div>'+
+          '</td>'+
           '<td style="text-align:center;color:#7c3aed;font-weight:700">'+shortage+'</td>'+
-          '<td style="text-align:right;font-size:11px">'+( lp?fmt(lp.cost)+' on '+lp.date:'No record')+'</td>'+
-          '<td><button class="btn sm" onclick="switchTab(\'purchases\')" style="font-size:10px;color:#1a237e;border-color:#93c5fd">&#128230; Restock</button></td>'+
+          '<td style="text-align:center;font-weight:700;color:#1a237e">'+r.suggestedQty+'</td>'+
+          '<td style="text-align:right">'+priceCell+
+            (cheapest&&history.length>1?'<div style="font-size:9px;color:#15803d;font-weight:600;margin-top:2px">✅ Cheapest of '+history.length+'</div>':'')+
+            multiCell+
+          '</td>'+
+          '<td>'+
+            '<button class="btn sm" onclick="switchTab(\'purchases\')" style="font-size:10px;color:#1a237e;border-color:#93c5fd">📦 Restock</button>'+
+          '</td>'+
         '</tr>';
       }).join('');
-      return '<div style="margin-bottom:12px">'+
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'+
-          '<div>'+
-            '<span style="font-size:13px;font-weight:700;color:var(--dark)">'+supName+'</span>'+
-            (supPhone?'<span style="font-size:11px;color:var(--text3);margin-left:8px">📞 '+supPhone+'</span>':'')+
+
+      // Estimated restock cost
+      var estCost=g.items.reduce(function(a,r){
+        return a+(r.cheapest?r.cheapest.cost*r.suggestedQty:0);
+      },0);
+
+      return '<div style="background:var(--white);border:1px solid #fde68a;border-radius:var(--radius-sm);margin-bottom:12px;overflow:hidden">'+
+        // Supplier header
+        '<div style="background:#fffbeb;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #fde68a">'+
+          '<div style="display:flex;align-items:center;gap:10px">'+
+            '<div style="background:#f59e0b;color:#fff;border-radius:6px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;flex-shrink:0">🚛</div>'+
+            '<div>'+
+              '<div style="font-size:13px;font-weight:800;color:#92400e">'+esc(g.supName)+'</div>'+
+              (supPhone?'<div style="font-size:11px;color:#b45309">📞 '+supPhone+'</div>':'')+
+            '</div>'+
           '</div>'+
-          '<span style="font-size:11px;color:#dc2626;font-weight:600">'+g.items.length+' item'+(g.items.length>1?'s':'')+' low/out</span>'+
+          '<div style="text-align:right">'+
+            '<div style="font-size:12px;font-weight:700;color:#dc2626">'+g.items.length+' item'+(g.items.length>1?'s':'')+' low/out</div>'+
+            (estCost>0?'<div style="font-size:11px;color:#92400e">Est. restock: <b>'+fmt(estCost)+'</b></div>':'')+
+          '</div>'+
         '</div>'+
-        '<div class="tbl-wrap" style="margin-bottom:0"><table>'+
-          '<thead><tr><th>Item</th><th style="text-align:center">Stock</th><th style="text-align:center">Min</th><th style="text-align:center">Need</th><th style="text-align:right">Last Cost</th><th></th></tr></thead>'+
-          '<tbody>'+itemHtml+'</tbody>'+
-        '</table></div>'+
+        // Items table
+        '<div class="tbl-wrap" style="margin:0">'+
+          '<table>'+
+            '<thead><tr>'+
+              '<th>Item</th>'+
+              '<th style="text-align:center">Stock</th>'+
+              '<th style="text-align:center">Need Now</th>'+
+              '<th style="text-align:center;color:#1a237e">Suggested Order</th>'+
+              '<th style="text-align:right">Best Price <span style="font-weight:400;font-size:10px">(+ alternatives)</span></th>'+
+              '<th></th>'+
+            '</tr></thead>'+
+            '<tbody>'+itemHtml+'</tbody>'+
+          '</table>'+
+        '</div>'+
       '</div>';
     }).join('');
 
@@ -4402,7 +4485,7 @@ function buildInventory(){
           '<span style="font-size:18px">🔔</span>'+
           '<div>'+
             '<div style="font-size:14px;font-weight:700;color:#92400e">Reorder Alerts — '+reorderItems.length+' item'+(reorderItems.length>1?'s':'')+' need restocking</div>'+
-            '<div style="font-size:11px;color:#b45309;margin-top:1px">Items at or below minimum stock level, grouped by supplier</div>'+
+            '<div style="font-size:11px;color:#b45309;margin-top:1px">Grouped by supplier · Best price highlighted · Alternatives shown</div>'+
           '</div>'+
         '</div>'+
         '<div style="display:flex;align-items:center;gap:8px">'+
@@ -4410,7 +4493,7 @@ function buildInventory(){
           '<button onclick="event.stopPropagation();document.getElementById(\'reorder-alert-wrap\').style.display=\'none\';window._reorderDismissed=true;" style="background:#f59e0b;border:none;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;color:#fff" title="Dismiss until next reload">✕ Close</button>'+
         '</div>'+
       '</div>'+
-      '<div id="reorder-body" style="padding:0 16px 16px;display:'+(isCollapsed?'none':'block')+'">'+
+      '<div id="reorder-body" style="padding:12px 14px;display:'+(isCollapsed?'none':'block')+'">'+
         groupHtml+
       '</div>'+
     '</div>';
