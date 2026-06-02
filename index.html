@@ -9785,9 +9785,35 @@ function printPurchaseRecord(id){
 // ============================================================
 // PURCHASES TAB
 // ============================================================
+function dismissRepairItem(deliveryId){
+  var d=(DB.pendingDeliveries||[]).find(function(x){return x.id==deliveryId;});
+  if(!d)return;
+  d.cancelledNoStock=true;
+  d.status='complete';
+  saveData();renderPanel();
+  showToast('✅ Item dismissed — will no longer appear in repair banner.','info');
+}
+
+function dismissRepairBanner(){
+  if(!confirm('Dismiss all items in the repair banner?\n\nThey will be marked as cancelled (no stock change) and won\'t appear again.'))return;
+  (DB.pendingDeliveries||[]).forEach(function(d){
+    if(d.qtyReceived>0&&!d.cancelledNoStock){
+      var byId=DB.inventory.find(function(i){return i.id==d.itemId;});
+      var byName=DB.inventory.find(function(i){return i.name&&d.itemName&&i.name.toLowerCase()===d.itemName.toLowerCase();});
+      if(!byId&&!byName){
+        d.cancelledNoStock=true;
+        d.status='complete';
+      }
+    }
+  });
+  saveData();renderPanel();
+  showToast('✅ Repair banner dismissed.','info');
+}
+
 function repairMissingInventory(){
   var missing=(DB.pendingDeliveries||[]).filter(function(d){
     if(d.qtyReceived<=0)return false;
+    if(d.cancelledNoStock)return false; // skip cancelled items
     return !DB.inventory.find(function(i){return i.id==d.itemId;});
   });
   if(!missing.length){alert('No missing items found.');return;}
@@ -10091,6 +10117,7 @@ function buildPurchases(){
   // Check for completed deliveries where inventory item is missing (repair section)
   var missingInv=(DB.pendingDeliveries||[]).filter(function(d){
     if(d.qtyReceived<=0)return false;
+    if(d.cancelledNoStock)return false; // explicitly cancelled — don't show in repair banner
     // Check by ID first
     var byId=DB.inventory.find(function(i){return i.id==d.itemId;});
     if(byId)return false; // found by ID — not missing
@@ -10104,17 +10131,23 @@ function buildPurchases(){
     return true; // truly missing from inventory
   });
   var repairSection=missingInv.length?
-    '<div style="background:var(--danger-bg);border:2px solid #fca5a5;border-radius:10px;padding:14px;margin-top:12px">'+
+    '<div id="repair-banner" style="background:var(--danger-bg);border:2px solid #fca5a5;border-radius:10px;padding:14px;margin-top:12px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
         '<div>'+
           '<p style="margin:0;font-weight:700;color:#dc2626;font-size:14px">⚠️ '+missingInv.length+' item(s) received but missing from inventory</p>'+
           '<p style="margin:4px 0 0;font-size:12px;color:#6b7280">These were received before the fix was applied. Click "Repair" to add them to inventory now.</p>'+
         '</div>'+
-        '<button onclick="repairMissingInventory()" style="padding:8px 16px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔧 Repair Now</button>'+
+        '<div style="display:flex;gap:8px;align-items:center">'+
+          '<button onclick="repairMissingInventory()" style="padding:8px 16px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🔧 Repair Now</button>'+
+          '<button onclick="dismissRepairBanner()" style="padding:8px 12px;background:#fff;color:#6b7280;border:1px solid #d1d5db;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer" title="Dismiss — mark all as cancelled (no stock change)">✖️ Cancel all</button>'+
+        '</div>'+
       '</div>'+
-      '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Supplier</th><th>Invoice</th><th style="text-align:center">Qty Received</th></tr></thead><tbody>'+
+      '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Supplier</th><th>Invoice</th><th style="text-align:center">Qty Received</th><th></th></tr></thead><tbody>'+
       missingInv.map(function(d){
-        return '<tr><td><b>'+esc(d.itemName)+'</b></td><td>'+esc(d.supName)+'</td><td>#'+(d.invoiceNum||'—')+'</td><td style="text-align:center;font-weight:700;color:#dc2626">'+d.qtyReceived+'</td></tr>';
+        return '<tr><td><b>'+esc(d.itemName)+'</b></td><td>'+esc(d.supName)+'</td><td>#'+(d.invoiceNum||'—')+'</td>'+
+          '<td style="text-align:center;font-weight:700;color:#dc2626">'+d.qtyReceived+'</td>'+
+          '<td><button onclick="dismissRepairItem(\''+d.id+'\')" style="padding:3px 8px;background:#fff;color:#6b7280;border:1px solid #d1d5db;border-radius:6px;font-size:11px;cursor:pointer" title="Dismiss this item">✖️</button></td>'+
+        '</tr>';
       }).join('')+
       '</tbody></table></div>'+
     '</div>':'';
