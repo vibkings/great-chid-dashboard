@@ -4419,12 +4419,48 @@ function buildInventory(){
   var totalVal=0,lowStock=0,outStock=0;
   DB.inventory.forEach(function(i){totalVal+=i.qty*i.cost;if(i.qty===0)outStock++;else if(i.qty<=i.minQty)lowStock++;});
   var outItems=[],lowItems=[],noCostItems=[],belowCostItems=[];
+  var outByCat={}, lowByCat={};
   DB.inventory.forEach(function(i){
-    if(i.qty===0)outItems.push(i.name);
-    else if(i.qty<=i.minQty)lowItems.push(i.name+' ('+i.qty+' left, min: '+i.minQty+')');
+    var cat = i.cat||'Uncategorised';
+    if(i.qty===0){
+      outItems.push(i.name);
+      if(!outByCat[cat])outByCat[cat]=[];
+      outByCat[cat].push({name:i.name,qty:0,minQty:i.minQty||5});
+    } else if(i.qty<=(i.minQty||5)){
+      lowItems.push(i.name+' ('+i.qty+' left)');
+      if(!lowByCat[cat])lowByCat[cat]=[];
+      lowByCat[cat].push({name:i.name,qty:i.qty,minQty:i.minQty||5});
+    }
     if(!i.cost||i.cost<=0)noCostItems.push(i.name);
     else if(i.sell<i.cost)belowCostItems.push(i.name+' (sell: '+fmt(i.sell)+' / cost: '+fmt(i.cost)+')');
   });
+  function alertGroupByCat(title,byCat,totalCount,type,icon){
+    if(!totalCount)return '';
+    var color=type==='danger'?'#58151c':'var(--warning-text)';
+    var bg=type==='danger'?'var(--danger-bg)':'var(--warning-bg)';
+    var border=type==='danger'?'#f1aeb5':'#ffe69c';
+    var cats=Object.keys(byCat).sort();
+    var catHtml=cats.map(function(cat){
+      var items=byCat[cat];
+      var itemRows=items.map(function(i){
+        return '<div style="padding:3px 0 3px 16px;border-bottom:1px solid '+border+';font-size:12px;display:flex;justify-content:space-between">'+
+          '<span>'+esc(i.name)+'</span>'+
+          (type==='warning'?'<span style="color:var(--warning-text);font-weight:600">'+i.qty+' left (min '+i.minQty+')</span>':'<span style="color:#dc2626;font-weight:700">Out</span>')+
+        '</div>';
+      }).join('');
+      return '<div style="margin-bottom:6px">'+
+        '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:'+color+';padding:5px 0 3px;border-bottom:2px solid '+border+'">'+
+          '📂 '+esc(cat)+' <span style="font-weight:400">('+items.length+')</span>'+
+        '</div>'+
+        itemRows+
+      '</div>';
+    }).join('');
+    return '<div style="background:'+bg+';border:1px solid '+border+';border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden">'+
+      '<div onclick="var p=this.nextElementSibling;p.style.display=p.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'.inv-chev\').style.transform=p.style.display===\'none\'?\'rotate(0deg)\':\'rotate(180deg)\';" style="display:flex;justify-content:space-between;align-items:center;padding:.55rem 1rem;cursor:pointer;user-select:none">'+
+      '<span style="font-size:12.5px;font-weight:700;color:'+color+'">'+icon+' '+title+' <span style="font-weight:400;font-size:11.5px">('+totalCount+' item'+(totalCount>1?'s':'')+' · '+cats.length+' categor'+(cats.length>1?'ies':'y')+')</span></span>'+
+      '<span class="inv-chev" style="font-size:11px;color:'+color+';transition:transform .2s">&#9660;</span></div>'+
+      '<div style="display:none;padding:.5rem 1rem .75rem;border-top:1px solid '+border+'">'+catHtml+'</div></div>';
+  }
   function alertGroup(title,items,type,icon){
     if(!items.length)return '';
     var color=type==='danger'?'#58151c':'var(--warning-text)';
@@ -4437,8 +4473,8 @@ function buildInventory(){
       '<span class="inv-chev" style="font-size:11px;color:'+color+';transition:transform .2s">&#9660;</span></div>'+
       '<div style="display:none;padding:.5rem 1rem .75rem;border-top:1px solid '+border+'">'+listHtml+'</div></div>';
   }
-  var alerts=alertGroup('Out of stock — Restock immediately',outItems,'danger','🔴')+
-    alertGroup('Low stock — Running low',lowItems,'warning','🟡')+
+  var alerts=alertGroupByCat('Out of stock — Restock immediately',outByCat,outItems.length,'danger','🔴')+
+    alertGroupByCat('Low stock — Running low',lowByCat,lowItems.length,'warning','🟡')+
     alertGroup('No cost price set — Cannot be sold',noCostItems,'danger','⚠️')+
     alertGroup('Selling below cost price — Fix prices',belowCostItems,'danger','⚠️');
   var supOpts=DB.suppliers.map(function(s){return '<option value="'+s.id+'">'+esc(s.name)+'</option>';}).join('');
@@ -11711,11 +11747,17 @@ function buildPandL(){
     invGroups[k].total+=(s.total||0);
     invGroups[k].cost+=((s.cost||0)*(s.qty||1));
   });
-  // For part-payment invoices use partPayment (actual cash received), not sale total
-  var grossRevenue=Object.values(invGroups).reduce(function(a,g){
-    if(g.payment==='credit')return a; // credit not received yet
+  // P&L on INVOICED basis — all sales including credit count as revenue
+  var grossRevenue=Object.values(invGroups).reduce(function(a,g){return a+g.total;},0);
+  var cashRevenue=Object.values(invGroups).reduce(function(a,g){
+    if(g.payment==='credit')return a;
     if(g.payment==='part')return a+(g.partPayment||0);
     return a+g.total;
+  },0);
+  var creditRevenue=Object.values(invGroups).reduce(function(a,g){
+    if(g.payment==='credit')return a+g.total;
+    if(g.payment==='part')return a+Math.max(0,g.total-(g.partPayment||0));
+    return a;
   },0);
   var cogs=Object.values(invGroups).reduce(function(a,g){return a+g.cost;},0);
   var grossProfit=grossRevenue-cogs;
