@@ -3102,7 +3102,8 @@ function viewWaybillDetail(waybill){
   if(!items.length){showToast('Waybill not found.','error');return;}
   var g=items[0];
   var isIn=g.direction==='to_warehouse';
-  var dirLabel=isIn?'Shop → Warehouse':'Warehouse → Shop';
+  var isExisting=waybill==='OPENING-STOCK'||waybill==='NEW-GOODS';
+  var dirLabel=isExisting?'Existing Stock Added':isIn?'Shop → Warehouse':'Warehouse → Shop';
   var totalQty=items.reduce(function(a,t){return a+t.qty;},0);
   var rows=items.map(function(t,i){
     return '<tr><td>'+(i+1)+'</td><td><b>'+esc(t.itemName)+'</b></td><td>'+(t.itemCat||'—')+'</td>'+
@@ -3119,7 +3120,7 @@ function viewWaybillDetail(waybill){
     'tr:nth-child(even) td{background:#f9f9f9}'+
     '.total-row td{font-weight:700;background:#eff6ff;border-top:2px solid #1a237e}'+
     '.dir-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;'+
-      (isIn?'background:#dcfce7;color:#15803d':'background:#fee2e2;color:#dc2626')+'}'+
+      (isExisting?'background:#eff6ff;color:#1a56db':isIn?'background:#dcfce7;color:#15803d':'background:#fee2e2;color:#dc2626')+'}'+
     '.footer{text-align:center;font-size:11px;color:#999;margin-top:20px}'+
     '@media print{button{display:none}}</style></head><body>'+
     '<div style="text-align:center;border-bottom:3px solid #1a237e;padding-bottom:12px;margin-bottom:16px">'+
@@ -3655,6 +3656,11 @@ function buildWarehouse(){
   });
   var logRows=Object.values(waybillGroups).length?Object.values(waybillGroups).map(function(g){
     var isIn=g.direction==='to_warehouse';
+    var isExisting=g.waybill==='OPENING-STOCK'||g.waybill==='NEW-GOODS';
+    var dirLabel=isExisting
+      ?'<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:#eff6ff;color:#1a56db">📦 Existing Stock</span>'
+      :'<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:'+(isIn?'var(--success-bg)':'var(--danger-bg)')+';color:'+(isIn?'var(--success)':'var(--danger)')+'">'+
+        (isIn?'⬇ Shop → WH':'⬆ WH → Shop')+'</span>';
     var totalQty=g.items.reduce(function(a,t){return a+t.qty;},0);
     var itemSummary=g.items.slice(0,2).map(function(t){return t.itemName+' ×'+t.qty;}).join(', ')+(g.items.length>2?' +'+( g.items.length-2)+' more':'');
     return '<tr>'+
@@ -3662,8 +3668,7 @@ function buildWarehouse(){
       '<td><b>'+(g.waybill||'-')+'</b></td>'+
       '<td style="font-size:12px;color:var(--text3)">'+itemSummary+'</td>'+
       '<td style="text-align:center;font-weight:700">'+g.items.length+' items / '+totalQty+' units</td>'+
-      '<td><span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;background:'+(isIn?'var(--success-bg)':'var(--danger-bg)')+';color:'+(isIn?'var(--success)':'var(--danger)')+'">'+
-        (isIn?'⬇ Shop → WH':'⬆ WH → Shop')+'</span></td>'+
+      '<td>'+dirLabel+'</td>'+
       '<td>'+esc(g.by||'-')+'</td>'+
       '<td><button onclick="viewWaybillDetail(\''+g.waybill+'\')" class="btn sm" style="font-size:11px">👁 View</button></td>'+
     '</tr>';
