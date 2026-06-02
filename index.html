@@ -9824,6 +9824,42 @@ function repairMissingInventory(){
   alert('✅ Repair complete!\n\n'+created.join('\n')+'\n\nCheck your inventory to confirm quantities are correct.');
 }
 
+function cancelPendingItem(deliveryId){
+  var d=(DB.pendingDeliveries||[]).find(function(x){return x.id==deliveryId;});
+  if(!d)return;
+  if(!confirm('Cancel this pending item?\n\n'+d.itemName+' × '+d.qtyPending+'\nSupplier: '+d.supName+'\n\nThis will mark it as received WITHOUT adding stock.\nUse this when goods were already received previously.'))return;
+  showSupplyDateModal('Cancel Pending — '+esc(d.itemName),'No stock will be added. Record only.',function(receivedDate){
+    d.status='complete';
+    d.qtyReceived=(d.qtyReceived||0)+d.qtyPending;
+    d.qtyPending=0;
+    d.completedDate=receivedDate;
+    d.cancelledNoStock=true;
+    DB.adjLog.push({id:uid(),itemId:d.itemId,itemName:d.itemName,type:'info',
+      reason:'Pending cancelled (no stock change) — already received — Invoice #'+d.invoiceNum,
+      before:'N/A',change:0,after:'N/A',date:receivedDate,by:DB.currentUser.name});
+    saveData();renderPanel();
+    showToast('✅ Pending item cancelled. No stock was added.','info');
+  });
+}
+
+function cancelAllPending(invoiceNum){
+  var pending=(DB.pendingDeliveries||[]).filter(function(d){return d.invoiceNum==invoiceNum&&d.status!=='complete';});
+  if(!pending.length){showToast('No pending items found.','error');return;}
+  var itemList=pending.map(function(d){return d.itemName+' × '+d.qtyPending;}).join(', ');
+  if(!confirm('Cancel ALL pending items for Invoice #'+invoiceNum+'?\n\n'+itemList+'\n\nNo stock will be added. Use this when goods were already received previously.'))return;
+  showSupplyDateModal('Cancel All Pending — Invoice #'+invoiceNum,itemList,function(receivedDate){
+    pending.forEach(function(d){
+      d.status='complete';
+      d.qtyReceived=(d.qtyReceived||0)+d.qtyPending;
+      d.qtyPending=0;
+      d.completedDate=receivedDate;
+      d.cancelledNoStock=true;
+    });
+    saveData();renderPanel();
+    showToast('✅ All pending items cancelled for Invoice #'+invoiceNum+'. No stock was added.','info');
+  });
+}
+
 function receiveAllDeliveries(invoiceNum){
   var pending=(DB.pendingDeliveries||[]).filter(function(d){return d.status!=='complete'&&(d.invoiceNum||d.id)==invoiceNum;});
   if(!pending.length){alert('No pending items for this invoice.');return;}
@@ -10113,6 +10149,7 @@ function buildPurchases(){
               '<div style="font-size:10px;color:#9ca3af;margin-top:2px">'+iPct+'%</div>'+
             '</div>'+
             '<button onclick="receiveDelivery(\''+d.id+'\')" style="padding:5px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✓ Receive</button>'+
+            '<button onclick="cancelPendingItem(\''+d.id+'\')" style="padding:5px 8px;background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap" title="Mark as cancelled — no stock change">✕ Cancel</button>'+
           '</div>';
         }).join('');
         return '<div style="background:var(--white);border:1px solid #fcd34d;border-radius:10px;margin-bottom:12px;overflow:hidden">'+
@@ -10129,6 +10166,7 @@ function buildPurchases(){
               '</div>'+
               '<span style="font-size:12px;font-weight:700;color:#92400e">'+pct+'%</span>'+
               '<button onclick="receiveAllDeliveries(\''+g.invoiceNum+'\')" style="padding:5px 12px;background:var(--white);color:#16a34a;border:1px solid #16a34a;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">□ Receive all</button>'+
+              '<button onclick="cancelAllPending(\''+g.invoiceNum+'\')" style="padding:5px 10px;background:var(--white);color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer" title="Cancel all — no stock change">✕ Cancel all</button>'+
             '</div>'+
           '</div>'+
           '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 120px 110px;gap:8px;padding:6px 12px;background:var(--surface2);font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">'+
