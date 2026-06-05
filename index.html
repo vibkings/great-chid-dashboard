@@ -10849,37 +10849,86 @@ function viewPurchaseRecord(id){
   var pu=DB.purchases.find(function(p){return p.id==id;});if(!pu)return;
   var rows=pu.items.map(function(l,i){
     return '<tr>'+
-      '<td style="text-align:center">'+(i+1)+'</td>'+
-      '<td><b>'+esc(l.name)+'</b></td>'+
-      '<td style="text-align:center">'+(l.qtyOrdered||l.qty||0)+'</td>'+
-      '<td style="text-align:right">'+fmt(l.cost)+'</td>'+
-      '<td style="text-align:right"><b>'+fmt(l.total)+'</b></td>'+
+      '<td style="text-align:center;width:30px">'+(i+1)+'</td>'+
+      '<td style="font-weight:600">'+esc(l.name)+'</td>'+
+      '<td style="text-align:center;width:60px">'+(l.qtyOrdered||l.qty||0)+'</td>'+
+      '<td style="text-align:right;width:110px">'+fmt(l.cost)+'</td>'+
+      '<td style="text-align:right;width:110px;font-weight:700">'+fmt(l.total)+'</td>'+
     '</tr>';
   }).join('');
-  var payModeStr=pu.payMode==='pos'?'POS':pu.payMode==='transfer'?'Bank Transfer'+(pu.bankId?' ('+getBankName(pu.bankId)+')':''):'Cash';
-  var payTypeStr=pu.payType==='credit'?'Credit':'Part Payment';
-  showConfirm({
-    type:'info',
-    title:'📋 Purchase Record — '+esc(pu.supName),
-    msg:
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;margin-bottom:12px;background:var(--surface);padding:10px;border-radius:8px">'+
-        '<div><span style="color:var(--text3);font-size:11px">SUPPLIER</span><br><b>'+esc(pu.supName)+'</b></div>'+
-        '<div><span style="color:var(--text3);font-size:11px">INVOICE #</span><br><b>'+(pu.invoiceNum||'—')+'</b></div>'+
-        '<div><span style="color:var(--text3);font-size:11px">DATE</span><br>'+pu.date+'</div>'+
-        '<div><span style="color:var(--text3);font-size:11px">PAYMENT TYPE</span><br>'+(pu.payType==='cash'?'Cash (fully paid)':payTypeStr)+' — '+payModeStr+'</div>'+
+  // Build payment label cleanly
+  var payTypeLabel=pu.payType==='credit'?'⚠ Credit (owed to supplier)':
+    pu.payType==='part'?'Part payment':
+    'Cash (fully paid)';
+  var payModeLabel2=pu.payMode==='pos'?'POS'+(pu.posId?' ('+getPosName(pu.posId)+')':''):
+    pu.payMode==='transfer'?'Bank Transfer'+(pu.bankId?' — '+getBankName(pu.bankId):''):
+    'Cash';
+  var old=document.getElementById('pu-view-overlay');if(old)old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='pu-view-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto';
+  overlay.innerHTML=
+    '<div style="background:var(--white);border-radius:14px;width:100%;max-width:620px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
+      '<div style="background:#1a237e;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0;position:sticky;top:0;z-index:1">'+
+        '<div>'+
+          '<div style="font-size:15px;font-weight:800;color:#fff">📋 Purchase Record</div>'+
+          '<div style="font-size:11px;color:rgba(255,255,255,.85);margin-top:2px">'+esc(pu.supName)+' · Invoice #'+(pu.invoiceNum||'—')+'</div>'+
+        '</div>'+
+        '<button onclick="document.getElementById(\'pu-view-overlay\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
       '</div>'+
-      '<div class="tbl-wrap">'+
-      '<table><thead><tr><th>#</th><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Cost</th><th style="text-align:right">Total</th></tr></thead>'+
-      '<tbody>'+rows+'</tbody>'+
-      '<tfoot><tr style="background:var(--info-bg);font-weight:700">'+
-        '<td colspan="4" style="text-align:right">GRAND TOTAL</td>'+
-        '<td style="text-align:right">'+fmt(pu.grandTotal)+'</td>'+
-      '</tr></tfoot></table></div>'+
-      '<div style="font-size:12px;color:var(--text3);margin-top:8px">Recorded by: '+esc(pu.by||'—')+'</div>',
-    detail:'',
-    confirmLabel:'🖨️ Print',
-    cancelLabel:'Close'
-  },function(){printPurchaseRecord(id);});
+      '<div style="padding:16px 18px">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">'+
+          '<div style="background:var(--surface2);border-radius:8px;padding:10px">'+
+            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Supplier</div>'+
+            '<div style="font-size:13px;font-weight:700;color:var(--text1)">'+esc(pu.supName)+'</div>'+
+          '</div>'+
+          '<div style="background:var(--surface2);border-radius:8px;padding:10px">'+
+            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Date</div>'+
+            '<div style="font-size:13px;font-weight:700;color:var(--text1)">'+pu.date+'</div>'+
+          '</div>'+
+          '<div style="background:var(--surface2);border-radius:8px;padding:10px">'+
+            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Recorded by</div>'+
+            '<div style="font-size:13px;font-weight:700;color:var(--text1)">'+esc(pu.by||'—')+'</div>'+
+          '</div>'+
+          '<div style="background:'+(pu.payType==='credit'?'#fff1f2':pu.payType==='part'?'#fff8e1':'#f0fdf4')+ ';border-radius:8px;padding:10px">'+
+            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Payment type</div>'+
+            '<div style="font-size:12px;font-weight:700;color:'+(pu.payType==='credit'?'#dc2626':pu.payType==='part'?'#92400e':'#15803d')+'">'+payTypeLabel+'</div>'+
+          '</div>'+
+          '<div style="background:var(--surface2);border-radius:8px;padding:10px">'+
+            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Payment mode</div>'+
+            '<div style="font-size:12px;font-weight:700;color:var(--text1)">'+payModeLabel2+'</div>'+
+          '</div>'+
+          '<div style="background:var(--primary-bg);border-radius:8px;padding:10px">'+
+            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Grand Total</div>'+
+            '<div style="font-size:16px;font-weight:900;color:#1a237e">'+fmt(pu.grandTotal)+'</div>'+
+          '</div>'+
+        '</div>'+
+        (pu.payType==='part'?
+          '<div style="background:#fff8e1;border:1px solid #fcd34d;border-radius:8px;padding:10px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">'+
+            '<div><span style="color:#92400e;font-weight:700">Paid now: </span>'+fmt(pu.partAmt||0)+'</div>'+
+            '<div><span style="color:#dc2626;font-weight:700">Owed to supplier: </span>'+fmt(pu.creditAmt||0)+'</div>'+
+          '</div>':'')+
+        '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
+          '<thead><tr style="background:#1a237e">'+
+            '<th style="color:#fff;padding:8px;text-align:center;width:35px">#</th>'+
+            '<th style="color:#fff;padding:8px;text-align:left">Item</th>'+
+            '<th style="color:#fff;padding:8px;text-align:center;width:65px">Qty</th>'+
+            '<th style="color:#fff;padding:8px;text-align:right;width:120px">Unit Cost</th>'+
+            '<th style="color:#fff;padding:8px;text-align:right;width:120px">Total</th>'+
+          '</tr></thead>'+
+          '<tbody>'+rows+'</tbody>'+
+          '<tfoot>'+
+            (pu.discAmt>0?'<tr style="background:#fff1f2"><td colspan="4" style="text-align:right;padding:7px;font-size:11px;color:#dc2626;font-weight:700">DISCOUNT</td><td style="text-align:right;padding:7px;color:#dc2626;font-weight:700">- '+fmt(pu.discAmt)+'</td></tr>':'')+
+            '<tr style="background:#e8eaf6"><td colspan="4" style="text-align:right;padding:8px;font-weight:800;font-size:13px">GRAND TOTAL</td><td style="text-align:right;padding:8px;font-weight:900;font-size:15px;color:#1a237e">'+fmt(pu.grandTotal)+'</td></tr>'+
+          '</tfoot>'+
+        '</table>'+
+        '<div style="display:flex;gap:8px;margin-top:14px">'+
+          '<button onclick="printPurchaseRecord(\''+id+'\');document.getElementById(\'pu-view-overlay\').remove()" style="flex:1;padding:10px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🖨️ Print</button>'+
+          '<button onclick="document.getElementById(\'pu-view-overlay\').remove()" style="padding:10px 20px;background:var(--surface2);color:var(--text1);border:none;border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
 }
 
 function printPurchaseRecord(id){
