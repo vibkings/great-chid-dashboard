@@ -5698,16 +5698,20 @@ async function sendTwilioWhatsApp(){
     if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
     phone=phone.replace(/^\+/,'');
     try{
-      // Use approved Meta template to avoid Error 63016 (outside messaging window)
-      // Template: great_chid_electro_global_doors_ltd with variable {{customer_name}}
-      var bodyStr='From='+encodeURIComponent(TWILIO_FROM)+
-        '&To='+encodeURIComponent('whatsapp:+'+phone)+
-        '&ContentSid='+encodeURIComponent(DB.settings&&DB.settings.twilioContentSid?DB.settings.twilioContentSid:'')+
-        '&ContentVariables='+encodeURIComponent(JSON.stringify({'1':c.name||'Valued Customer'}));
-      // Fallback to Body if no ContentSid configured
-      if(!DB.settings||!DB.settings.twilioContentSid){
+      var bodyStr;
+      var contentSid=DB.settings&&DB.settings.twilioContentSid?DB.settings.twilioContentSid:'';
+      if(contentSid){
+        // Use approved template — do NOT include Body (causes delivery failure)
+        bodyStr='From='+encodeURIComponent(TWILIO_FROM)+
+          '&To='+encodeURIComponent('whatsapp:+'+phone)+
+          '&ContentSid='+encodeURIComponent(contentSid)+
+          '&ContentVariables='+encodeURIComponent(JSON.stringify({'1':c.name||'Valued Customer'}));
+      } else {
+        // Fallback to free-form text (only works within 24hr window)
         var text=msgText.replace(/\{name\}/g,c.name).replace(/\{balance\}/g,c.creditBalance>0?fmt(c.creditBalance):'₦0');
-        bodyStr='From='+encodeURIComponent(TWILIO_FROM)+'&To='+encodeURIComponent('whatsapp:+'+phone)+'&Body='+encodeURIComponent(text);
+        bodyStr='From='+encodeURIComponent(TWILIO_FROM)+
+          '&To='+encodeURIComponent('whatsapp:+'+phone)+
+          '&Body='+encodeURIComponent(text);
       }
       var resp=await fetch(proxyUrl,{method:'POST',headers:headers,body:bodyStr});
       var rawText=await resp.text();
