@@ -2521,7 +2521,8 @@ function buildClosingReport(){
     (staffRows?'<div class="card" style="margin-bottom:1rem"><div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:10px">👤 By staff</div><div class="tbl-wrap"><table><thead><tr><th>Staff</th><th style="text-align:center">Invoices</th><th style="text-align:right">Sales</th><th style="text-align:right">Profit</th></tr></thead><tbody>'+staffRows+'</tbody></table></div></div>':'')+
     // Invoice list
     (invRows?'<div class="card"><div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:10px">🧾 Invoices ('+invList.length+')</div><div class="tbl-wrap"><table><thead><tr><th>#</th><th>Invoice</th><th>Customer</th><th>Type</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+invRows+'</tbody></table></div></div>':
-    '<div class="empty">No sales recorded for this date.</div>');
+    '<div class="empty">No sales recorded for this date.</div>')+
+    buildHeldChangeSection();
 }
 
 function setOpeningFloat(){
@@ -4667,6 +4668,19 @@ function buildOverview(){
         '<span style="font-size:20px">📈</span> Financial Dashboard'+
       '</button>'+
     '</div>';
+
+  // ── Held Change Alert ──────────────────────────────────────
+  var pendingHeld=(DB.heldChange||[]).filter(function(h){return h.status==='pending';});
+  if(pendingHeld.length){
+    var heldTotal=pendingHeld.reduce(function(a,h){return a+h.amount;},0);
+    html+='<div style="background:#fef9c3;border:1.5px solid #f59e0b;border-radius:12px;padding:12px 16px;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+      '<div>'+
+        '<div style="font-size:13px;font-weight:800;color:#92400e">🔒 Held Change — '+pendingHeld.length+' customer'+(pendingHeld.length!==1?'s':'')+' waiting</div>'+
+        '<div style="font-size:12px;color:#92400e;margin-top:2px">Total in till: <b>'+fmt(heldTotal)+'</b> — go to Daily Closing to pay out</div>'+
+      '</div>'+
+      '<button onclick="switchTab(\'closing\')" style="padding:7px 16px;background:#f59e0b;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">Go to Closing →</button>'+
+    '</div>';
+  }
 
   return html;
 }
@@ -9436,8 +9450,7 @@ function buildSales(){
         (rows?
           '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Invoice #</th><th>Customer</th><th>Items returned</th><th>Refund type</th><th>Reason</th><th style="text-align:right">Refund amt</th><th>By</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
         :'<div class="empty" style="padding:1.25rem">No returns for this period.</div>');
-    })()+
-    buildHeldChangeSection();
+    })();
 }
 // ── Edit Return Group ───────────────────────────────────────
 function buildHeldChangeSection(){
