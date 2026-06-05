@@ -10721,10 +10721,8 @@ function deletePurchaseQuotation(id){
 function buildPurchaseQuotationsSection(){
   var quots=(DB.purchaseQuotations||[]).slice().reverse();
   if(!quots.length)return '';
-  // Build global map for button access — avoids all attribute escaping issues
-  window._puqMap=quots;
   var today=new Date();today.setHours(0,0,0,0);
-  var rows=quots.map(function(q,idx){
+  var rows=quots.map(function(q){
     var reminderBadge='';
     if(q.reminderDate){
       var rd=new Date(q.reminderDate);rd.setHours(0,0,0,0);
@@ -10741,8 +10739,8 @@ function buildPurchaseQuotationsSection(){
       '<td style="text-align:right;font-weight:700;color:#1a237e">'+fmt(q.grandTotal)+'</td>'+
       '<td style="font-size:11px;color:var(--text3)">'+esc(q.notes||'—')+'</td>'+
       '<td style="text-align:center">'+
-        '<button onclick="viewPurchaseQuotation((window._puqMap||[])['+idx+']&&(window._puqMap||[])['+idx+'].id)" style="background:#1a237e;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;margin-right:4px">👁 View</button>'+
-        '<button onclick="deletePurchaseQuotation((window._puqMap||[])['+idx+']&&(window._puqMap||[])['+idx+'].id)" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">🗑️</button>'+
+        '<button data-qid="'+q.id+'" onclick="window._puqViewId=this.dataset.qid;viewPurchaseQuotation(window._puqViewId)" style="background:#1a237e;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;margin-right:4px">👁 View</button>'+
+        '<button data-qid="'+q.id+'" onclick="window._puqDelId=this.dataset.qid;deletePurchaseQuotation(window._puqDelId)" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">🗑️</button>'+
       '</td>'+
     '</tr>';
   }).join('');
@@ -11287,7 +11285,10 @@ function buildPurchases(){
       '<td>'+p.date+'</td>'+
       '<td><b>'+(p.invoiceNum||'-')+'</b></td>'+
       '<td>'+esc(p.supName)+'</td>'+
-      '<td style="font-size:11px">'+p.items.map(function(l){return l.name+' x'+(l.qtyReceived||l.qty);}).join(', ')+'</td>'+
+      '<td style="font-size:11px;max-width:200px">'+
+        (p.items[0]?esc(p.items[0].name+' ×'+(p.items[0].qtyReceived||p.items[0].qty)):'')+
+        (p.items.length>1?'<span style="color:#6b7280;font-style:italic"> ...+'+(p.items.length-1)+' more</span>':'')+
+      '</td>'+
       '<td style="text-align:center">'+totalItems+'</td>'+
       '<td style="text-align:right"><b>'+fmt(p.grandTotal)+'</b></td>'+
       '<td>'+payBadge+'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+puModeLabel+'</div></td>'+
