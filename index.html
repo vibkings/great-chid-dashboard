@@ -10860,7 +10860,8 @@ function viewPurchaseRecord(id){
   var payTypeLabel=pu.payType==='credit'?'⚠ Credit (owed to supplier)':
     pu.payType==='part'?'Part payment':
     'Cash (fully paid)';
-  var payModeLabel2=pu.payMode==='pos'?'POS'+(pu.posId?' ('+getPosName(pu.posId)+')':''):
+  var payModeLabel2=pu.payType==='credit'?'Credit':
+    pu.payMode==='pos'?'POS'+(pu.posId?' ('+getPosName(pu.posId)+')':''):
     pu.payMode==='transfer'?'Bank Transfer'+(pu.bankId?' — '+getBankName(pu.bankId):''):
     'Cash';
   var old=document.getElementById('pu-view-overlay');if(old)old.remove();
