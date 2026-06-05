@@ -262,7 +262,7 @@ input.inline-edit{border:1.5px solid var(--primary);border-radius:5px;padding:4p
 .perm-item input[type=checkbox]{width:14px;height:14px;cursor:pointer;accent-color:var(--primary)}
 .sale-summary{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.75rem;margin:8px 0;font-size:13px}
 .sale-summary-row{display:flex;justify-content:space-between;padding:3px 0;color:var(--text2)}
-.sale-summary-row.total{font-weight:700;border-top:1px solid var(--border);margin-top:5px;padding-top:7px;color:var(--dark)}
+.sale-summary-row.total{font-weight:700;border-top:1px solid var(--border);margin-top:5px;padding-top:7px;color:var(--text1);font-size:14px}
 .cust-bar-wrap{background:var(--surface3);border-radius:99px;height:6px;margin:8px 0 4px;overflow:hidden}
 .cust-bar{height:6px;border-radius:99px;transition:width .4s}
 .pay-form{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-top:10px}
@@ -376,7 +376,7 @@ var DB={
   users:[{id:1,name:'Admin',username:'admin',password:'admin123',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
   adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],commissionLedger:[],proformas:[],
-  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],
+  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
   invoiceCounter:1,demoInvoiceCounter:1,
@@ -624,6 +624,7 @@ function buildCollectionSnapshot(colName) {
     tillSessions: DB.tillSessions||[],
     supplierDeposits: DB.supplierDeposits||[],
     demoSales: DB.demoSales||[],
+    purchaseQuotations: DB.purchaseQuotations||[],
     demoInvoiceCounter: DB.demoInvoiceCounter||1,
     activityLog: (DB.activityLog||[]).slice(0,200), // limit to 200
     settings: DB.settings||{},
@@ -1364,6 +1365,7 @@ function applySnapshot(snapshot) {
   DB.tillSessions = snapshot.tillSessions || [];
   DB.supplierDeposits = snapshot.supplierDeposits || [];
   DB.demoSales = snapshot.demoSales || [];
+  DB.purchaseQuotations = snapshot.purchaseQuotations || [];
   DB.demoInvoiceCounter = snapshot.demoInvoiceCounter || DB.demoInvoiceCounter || 1;
   DB.recycleBin = snapshot.recycleBin || [];
   DB.drafts = snapshot.drafts || [];
@@ -1447,6 +1449,7 @@ function buildSnapshot() {
     tillSessions: DB.tillSessions || [],
     supplierDeposits: DB.supplierDeposits || [],
     demoSales: DB.demoSales || [],
+    purchaseQuotations: DB.purchaseQuotations || [],
     demoInvoiceCounter: DB.demoInvoiceCounter || 1,
     commissionLedger: DB.commissionLedger || [],
     proformas: DB.proformas || [],
@@ -10372,6 +10375,150 @@ function submitPurchase(){
   alert(successMsg);
   renderApp();
 }
+function generatePurchaseQuotation(){
+  if(!purchaseItems.length){alert('Add items first before generating a quotation.');return;}
+  var supId=document.getElementById('pu-supplier')?document.getElementById('pu-supplier').value:'';
+  var sup=DB.suppliers.find(function(s){return s.id==supId;});
+  var subtotal=purchaseItems.reduce(function(a,l){return a+(l.cost*(l.qtyOrdered||l.qty||1));},0);
+  var discTypeEl=document.getElementById('pu-disc-type');
+  var discValEl=document.getElementById('pu-disc-val');
+  var discType=discTypeEl?discTypeEl.value:'none';
+  var discVal=parseFloat(discValEl?discValEl.value:0)||0;
+  var discAmt=discType==='pct'?(subtotal*discVal/100):discType==='flat'?Math.min(discVal,subtotal):0;
+  var grandTotal=subtotal-discAmt;
+  var now=new Date();
+  var quoteNum='QUO-'+now.getFullYear()+'-'+String(Math.floor(Math.random()*9000)+1000);
+  var dateStr=now.toLocaleDateString();
+  // Build text summary for WhatsApp
+  var waLines=['📋 *PURCHASE QUOTATION*','','*Ref:* '+quoteNum,'*Date:* '+dateStr,'*Supplier:* '+(sup?sup.name:'—'),'','*Items:*'];
+  purchaseItems.forEach(function(l,i){
+    var qty=l.qtyOrdered||l.qty||1;
+    waLines.push((i+1)+'. '+l.name+' × '+qty+' @ '+fmt(l.cost)+' = '+fmt(l.cost*qty));
+  });
+  if(discAmt>0){waLines.push('');waLines.push('Subtotal: '+fmt(subtotal));waLines.push('Discount: - '+fmt(discAmt));}
+  waLines.push('');waLines.push('*BUDGET TOTAL: '+fmt(grandTotal)+'*');
+  waLines.push('');waLines.push('_Great Chid Electro (Nig.) & Global Doors Ltd_');
+  var waText=waLines.join('\n');
+  // Show save+reminder dialog
+  var old=document.getElementById('puq-overlay');if(old)old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='puq-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  overlay.innerHTML=
+    '<div style="background:var(--white);border-radius:14px;width:100%;max-width:440px;box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden">'+
+      '<div style="background:#1a237e;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
+        '<div>'+
+          '<div style="font-size:15px;font-weight:800;color:#fff">📋 Save Quotation</div>'+
+          '<div style="font-size:11px;color:rgba(255,255,255,.85);margin-top:2px">'+quoteNum+' · '+(sup?esc(sup.name):'No supplier')+'</div>'+
+        '</div>'+
+        '<button onclick="document.getElementById(\'puq-overlay\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
+      '</div>'+
+      '<div style="padding:16px 18px">'+
+        '<div style="background:var(--primary-bg);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">'+
+          '<div style="font-size:11px;color:#6b7280">Budget Total</div>'+
+          '<div style="font-size:20px;font-weight:900;color:#1a237e">'+fmt(grandTotal)+'</div>'+
+        '</div>'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:8px">Set reminder date (optional)</div>'+
+        '<input type="date" id="puq-reminder-date" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:14px">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:6px">Notes (optional)</div>'+
+        '<textarea id="puq-notes" rows="2" placeholder="e.g. Call supplier to confirm prices..." style="width:100%;padding:9px;border:1px solid var(--border);border-radius:8px;font-size:12px;resize:none;margin-bottom:14px"></textarea>'+
+        '<div style="display:flex;flex-direction:column;gap:8px">'+
+          '<button id="puq-save-btn" style="width:100%;padding:11px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💾 Save to device</button>'+
+          '<button id="puq-wa-btn" style="width:100%;padding:11px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">💬 Share via WhatsApp</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  // Store data for savePurchaseQuotation to read
+  window._pendingQuotation={quoteNum:quoteNum,dateStr:dateStr,supId:supId,supName:sup?sup.name:'—',items:JSON.parse(JSON.stringify(purchaseItems)),subtotal:subtotal,discAmt:discAmt,grandTotal:grandTotal};
+  // Fix buttons to use stored data
+  document.getElementById('puq-save-btn').onclick=function(){savePurchaseQuotation();};
+  document.getElementById('puq-wa-btn').onclick=function(){shareQuotationWhatsApp(waText);};
+}
+
+function savePurchaseQuotation(){
+  var q=window._pendingQuotation;if(!q)return;
+  var reminderDate=document.getElementById('puq-reminder-date')?document.getElementById('puq-reminder-date').value:'';
+  var notes=document.getElementById('puq-notes')?document.getElementById('puq-notes').value.trim():'';
+  if(!DB.purchaseQuotations)DB.purchaseQuotations=[];
+  DB.purchaseQuotations.push({
+    id:uid(),quoteNum:q.quoteNum,date:q.dateStr,
+    supId:q.supId,supName:q.supName,
+    items:q.items,subtotal:q.subtotal,discAmt:q.discAmt,grandTotal:q.grandTotal,
+    reminderDate:reminderDate||null,notes:notes||'',
+    status:'active',
+    by:DB.currentUser?DB.currentUser.name:'Admin'
+  });
+  saveData();
+  var el=document.getElementById('puq-overlay');if(el)el.remove();
+  renderApp();
+  alert('✅ Quotation '+q.quoteNum+' saved!'+(reminderDate?'\n\n🔔 Reminder set for '+reminderDate:''));
+}
+
+function shareQuotationWhatsApp(text){
+  var url='https://wa.me/?text='+encodeURIComponent(text);
+  window.open(url,'_blank');
+}
+
+function deletePurchaseQuotation(id){
+  showConfirm({
+    type:'danger',title:'Cancel quotation?',
+    msg:'This quotation will be permanently deleted.',
+    confirmLabel:'🗑️ Delete',cancelLabel:'Keep'
+  },function(){
+    DB.purchaseQuotations=(DB.purchaseQuotations||[]).filter(function(q){return q.id!==id;});
+    saveData();renderApp();
+  });
+}
+
+function buildPurchaseQuotationsSection(){
+  var quots=(DB.purchaseQuotations||[]).slice().reverse();
+  if(!quots.length)return '';
+  var today=new Date();today.setHours(0,0,0,0);
+  var rows=quots.map(function(q){
+    var reminderBadge='';
+    if(q.reminderDate){
+      var rd=new Date(q.reminderDate);rd.setHours(0,0,0,0);
+      var diff=Math.round((rd-today)/86400000);
+      var col=diff<0?'#dc2626':diff===0?'#f59e0b':'#15803d';
+      var lbl=diff<0?'Overdue '+Math.abs(diff)+'d':diff===0?'Today':'In '+diff+'d';
+      reminderBadge='<span style="background:'+col+';color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px">🔔 '+lbl+'</span>';
+    }
+    return '<tr>'+
+      '<td><b>'+esc(q.quoteNum)+'</b>'+reminderBadge+'</td>'+
+      '<td>'+esc(q.date)+'</td>'+
+      '<td>'+esc(q.supName)+'</td>'+
+      '<td style="text-align:center">'+q.items.length+' item'+(q.items.length!==1?'s':'')+'</td>'+
+      '<td style="text-align:right;font-weight:700;color:#1a237e">'+fmt(q.grandTotal)+'</td>'+
+      '<td style="font-size:11px;color:var(--text3)">'+esc(q.notes||'—')+'</td>'+
+      '<td style="text-align:center">'+
+        '<button onclick="shareQuotationWhatsAppById(\''+q.id+'\')" style="background:#25D366;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;margin-right:4px">💬</button>'+
+        '<button onclick="deletePurchaseQuotation(\''+q.id+'\')" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">🗑️</button>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
+  return '<div style="margin-top:20px">'+
+    '<p class="sec-title" style="margin-bottom:10px">📋 Saved Quotations</p>'+
+    '<div class="tbl-wrap"><table><thead><tr>'+
+      '<th>Ref #</th><th>Date</th><th>Supplier</th><th style="text-align:center">Items</th><th style="text-align:right">Budget Total</th><th>Notes</th><th style="text-align:center">Actions</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+  '</div>';
+}
+
+function shareQuotationWhatsAppById(id){
+  var q=(DB.purchaseQuotations||[]).find(function(x){return x.id===id;});
+  if(!q)return;
+  var lines=['📋 *PURCHASE QUOTATION*','','*Ref:* '+q.quoteNum,'*Date:* '+q.date,'*Supplier:* '+q.supName,'','*Items:*'];
+  q.items.forEach(function(l,i){
+    var qty=l.qtyOrdered||l.qty||1;
+    lines.push((i+1)+'. '+l.name+' × '+qty+' @ '+fmt(l.cost)+' = '+fmt(l.cost*qty));
+  });
+  if(q.discAmt>0){lines.push('');lines.push('Subtotal: '+fmt(q.subtotal));lines.push('Discount: - '+fmt(q.discAmt));}
+  lines.push('');lines.push('*BUDGET TOTAL: '+fmt(q.grandTotal)+'*');
+  lines.push('');lines.push('_Great Chid Electro (Nig.) & Global Doors Ltd_');
+  window.open('https://wa.me/?text='+encodeURIComponent(lines.join('\n')),'_blank');
+}
+
 function deletePurchase(id){
   var p=DB.purchases.find(function(x){return x.id===id;});
   if(!p)return;
@@ -10992,8 +11139,9 @@ function buildPurchases(){
       '<div class="form-group" id="pu-part-wrap" style="display:none"><label>Amount paid now (₦)</label><input type="number" id="pu-part-amt" placeholder="0" min="0"></div>'+
     '</div>'+
     '<div class="fg" style="grid-template-columns:1fr 1fr;margin-top:-8px">'+bankSubField+posSubField+'</div>'+
-    '<div style="display:flex;gap:10px;margin-bottom:1.5rem">'+
+    '<div style="display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap">'+
       '<button class="btn primary" onclick="submitPurchase()" style="font-size:14px;padding:10px 24px">&#10003; Record purchase</button>'+
+      '<button class="btn" onclick="generatePurchaseQuotation()" style="font-size:14px;padding:10px 24px;background:var(--primary-bg);color:#1a237e;border-color:#93c5fd">&#128196; Generate Quotation</button>'+
       '<button class="btn" onclick="purchaseItems=[];renderPurchaseItems()" style="color:var(--danger);border-color:#fca5a5">&#10005; Clear</button>'+
     '</div>'+
     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">'+
@@ -11005,6 +11153,7 @@ function buildPurchases(){
     '</div>'+
     (puRows?'<div class="tbl-wrap"><table id="purchases-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Supplier</th><th>Items</th><th style="text-align:center">Units</th><th style="text-align:right">Total</th><th>Payment</th><th>By</th><th></th></tr></thead><tbody>'+puRows+_purchPager+'</tbody></table></div>':'<div class="empty">No purchases recorded yet.</div>')+
     pendingRows+
+    buildPurchaseQuotationsSection()+
     buildPurchaseReturnsSection();
 }
 
