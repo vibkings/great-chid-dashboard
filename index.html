@@ -376,7 +376,7 @@ var DB={
   users:[{id:1,name:'Admin',username:'admin',password:'admin123',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
   adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],commissionLedger:[],proformas:[],
-  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],
+  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],heldChange:[],
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
   invoiceCounter:1,demoInvoiceCounter:1,
@@ -625,6 +625,7 @@ function buildCollectionSnapshot(colName) {
     supplierDeposits: DB.supplierDeposits||[],
     demoSales: DB.demoSales||[],
     purchaseQuotations: DB.purchaseQuotations||[],
+    heldChange: DB.heldChange||[],
     demoInvoiceCounter: DB.demoInvoiceCounter||1,
     activityLog: (DB.activityLog||[]).slice(0,200), // limit to 200
     settings: DB.settings||{},
@@ -1366,6 +1367,7 @@ function applySnapshot(snapshot) {
   DB.supplierDeposits = snapshot.supplierDeposits || [];
   DB.demoSales = snapshot.demoSales || [];
   DB.purchaseQuotations = snapshot.purchaseQuotations || [];
+  DB.heldChange = snapshot.heldChange || [];
   DB.demoInvoiceCounter = snapshot.demoInvoiceCounter || DB.demoInvoiceCounter || 1;
   DB.recycleBin = snapshot.recycleBin || [];
   DB.drafts = snapshot.drafts || [];
@@ -1450,6 +1452,7 @@ function buildSnapshot() {
     supplierDeposits: DB.supplierDeposits || [],
     demoSales: DB.demoSales || [],
     purchaseQuotations: DB.purchaseQuotations || [],
+    heldChange: DB.heldChange || [],
     demoInvoiceCounter: DB.demoInvoiceCounter || 1,
     commissionLedger: DB.commissionLedger || [],
     proformas: DB.proformas || [],
@@ -2495,6 +2498,12 @@ function buildClosingReport(){
         (suppPayTotal>0?'<tr style="background:var(--warning-bg)"><td style="font-weight:600;color:#92400e">🚛 Supplier Payments</td><td style="text-align:right;color:#92400e;font-size:11px;font-style:italic">see detail below</td><td style="text-align:right;color:#9ca3af;font-size:11px">—</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(suppPayTotal)+'</td></tr>':'')+
         (retTotal>0?'<tr style="background:var(--danger-bg)"><td style="font-weight:600;color:#c0392b">↩ Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">- '+fmt(retTotal)+'</td><td style="text-align:right;font-weight:700;color:#c0392b">- '+fmt(retTotal)+'</td></tr>':'')+
         (changeToday>0?'<tr style="background:var(--warning-bg)"><td style="font-weight:600;color:#92400e">💵 Change Given (Cash)</td><td style="text-align:right;color:#92400e">Cash out</td><td style="text-align:right;color:#92400e">- '+fmt(changeToday)+'</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(changeToday)+'</td></tr>':'')+
+        (function(){
+          var heldToday=(DB.heldChange||[]).filter(function(h){return h.status==='pending'&&dateInRange(h.date,closingDate,closingDate);});
+          var heldTotal=heldToday.reduce(function(a,h){return a+h.amount;},0);
+          if(!heldTotal)return '';
+          return '<tr style="background:#fef9c3;border:1px solid #fcd34d"><td style="font-weight:600;color:#92400e">🔒 Held Change (in till — not yet paid out)</td><td style="text-align:right;color:#92400e;font-size:11px;font-style:italic">'+heldToday.length+' customer'+(heldToday.length!==1?'s':'')+' — still in till</td><td style="text-align:right;color:#6b7280;font-size:11px">liability</td><td style="text-align:right;font-weight:700;color:#92400e">'+fmt(heldTotal)+'</td></tr>';
+        })()+
         '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(openFloat+cash+pos+transfer+depTotal+exchBalTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+retTotal>0?'- '+fmt(expTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal+openFloat)+'</td></tr>'+
         '</tbody></table>'+
       '</div>'+
@@ -7777,6 +7786,14 @@ function submitInvoice(){
             // No cash out — money stays in till, just recorded as customer deposit liability
             logActivity('Overpayment credited','₦'+changeGiven.toLocaleString()+' overpayment from Invoice #'+invNum+' added to '+depCust.name+' account');
           }
+        } else if(changeDisposition==='hold'){
+          // Hold change — park it for walk-in customer to collect later
+          var holdNameEl=document.getElementById('s-disp-hold-name');
+          var holdName=(holdNameEl&&holdNameEl.value.trim())||custName||'Walk-in customer';
+          if(!DB.heldChange)DB.heldChange=[];
+          DB.heldChange.push({id:uid(),invoiceNum:invNum,custName:holdName,amount:changeGiven,date:date,month:month,by:DB.currentUser.name,status:'pending'});
+          // Cashflow: money stays in till as liability — no cash out yet
+          logActivity('Change held','₦'+changeGiven.toLocaleString()+' change held for '+holdName+' — Invoice #'+invNum,DB.currentUser.name);
         } else {
           // Cash change given back
           DB.cashflow.push({id:uid(),desc:'Change given — Invoice #'+invNum+' - '+custName,amount:changeGiven,type:'out',cat:'Change',payMode:'cash',date:date,month:month,by:DB.currentUser.name,isChange:true});
@@ -8379,7 +8396,9 @@ function onTenderedInput(){
 function onDispChange(){
   var sel=document.querySelector('input[name="s-change-disp"]:checked');
   var hidden=document.getElementById('s-change-disp-val');
+  var holdWrap=document.getElementById('s-disp-hold-name-wrap');
   if(hidden&&sel)hidden.value=sel.value;
+  if(holdWrap)holdWrap.style.display=(sel&&sel.value==='hold')?'block':'none';
 }
 
 function onSplitModeChange(){
@@ -9240,10 +9259,17 @@ function buildSales(){
               '<input type="radio" name="s-change-disp" id="s-disp-cash" value="cash" checked onchange="onDispChange()">'+
               '💵 <span><b>Give cash change</b> — hand back the money</span>'+
             '</label>'+
-            '<label id="s-disp-credit-label" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;border:1px solid var(--border);font-size:13px">'+
+            '<label id="s-disp-credit-label" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;border:1px solid var(--border);margin-bottom:6px;font-size:13px">'+
               '<input type="radio" name="s-change-disp" id="s-disp-credit" value="credit" onchange="onDispChange()">'+
               '🏦 <span><b>Add to customer account</b> — store as deposit for next visit</span>'+
             '</label>'+
+            '<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;border:1.5px solid #f59e0b;background:#fffbeb;margin-bottom:6px;font-size:13px">'+
+              '<input type="radio" name="s-change-disp" id="s-disp-hold" value="hold" onchange="onDispChange()">'+
+              '🔒 <span><b>Hold change</b> — park it, customer collects later</span>'+
+            '</label>'+
+            '<div id="s-disp-hold-name-wrap" style="display:none;margin-top:4px">'+
+              '<input type="text" id="s-disp-hold-name" placeholder="Customer name or description (e.g. Oga Sunday)" style="width:100%;padding:8px;border:1.5px solid #f59e0b;border-radius:7px;font-size:13px">'+
+            '</div>'+
           '</div>'+
         '</div>'+
         '<input type="hidden" id="s-change-amt">'+
@@ -9410,9 +9436,67 @@ function buildSales(){
         (rows?
           '<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Invoice #</th><th>Customer</th><th>Items returned</th><th>Refund type</th><th>Reason</th><th style="text-align:right">Refund amt</th><th>By</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'
         :'<div class="empty" style="padding:1.25rem">No returns for this period.</div>');
-    })();
+    })()+
+    buildHeldChangeSection();
 }
 // ── Edit Return Group ───────────────────────────────────────
+function buildHeldChangeSection(){
+  var held=(DB.heldChange||[]).filter(function(h){return h.status==='pending';}).slice().reverse();
+  if(!held.length)return '';
+  var total=held.reduce(function(a,h){return a+h.amount;},0);
+  window._heldChangeMap=held;
+  var rows=held.map(function(h,idx){
+    return '<tr style="background:#fffbeb">'+
+      '<td>'+h.date+'</td>'+
+      '<td><b>'+(h.invoiceNum||'—')+'</b></td>'+
+      '<td>'+esc(h.custName)+'</td>'+
+      '<td style="text-align:right;font-weight:700;color:#92400e;font-size:14px">'+fmt(h.amount)+'</td>'+
+      '<td>'+esc(h.by)+'</td>'+
+      '<td style="text-align:center">'+
+        '<button onclick="payoutHeldChange((window._heldChangeMap||[])['+idx+']&&(window._heldChangeMap||[])['+idx+'].id)" style="background:#15803d;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">💵 Pay out</button>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
+  return '<div style="margin-top:20px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'+
+      '<p class="sec-title" style="margin:0">🔒 Held Change Register</p>'+
+      '<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;color:#92400e">'+
+        'Total held: '+fmt(total)+
+      '</div>'+
+    '</div>'+
+    '<div class="tbl-wrap"><table><thead><tr>'+
+      '<th>Date</th><th>Invoice #</th><th>Customer name</th><th style="text-align:right">Amount held</th><th>By</th><th style="text-align:center">Action</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+  '</div>';
+}
+
+function payoutHeldChange(id){
+  var h=(DB.heldChange||[]).find(function(x){return x.id===id;});
+  if(!h)return;
+  showConfirm({
+    type:'warning',
+    title:'💵 Pay out held change?',
+    msg:'Customer: <b>'+esc(h.custName)+'</b><br>Invoice: <b>'+(h.invoiceNum||'—')+'</b><br>Amount: <b style="font-size:16px;color:#15803d">'+fmt(h.amount)+'</b><br><br>This will record the cash as paid out and remove it from the held register.',
+    detail:'',
+    confirmLabel:'✅ Confirm payout',
+    cancelLabel:'Cancel'
+  },function(){
+    var today=new Date();
+    var date=today.toLocaleDateString();
+    var month=today.toISOString().slice(0,7);
+    // Record cash out
+    DB.cashflow.push({id:uid(),desc:'Held change paid out — Invoice #'+(h.invoiceNum||'—')+' — '+h.custName,amount:h.amount,type:'out',cat:'Change',payMode:'cash',date:date,month:month,by:DB.currentUser?DB.currentUser.name:'Admin',isChange:true});
+    // Mark as paid
+    h.status='paid';
+    h.paidDate=date;
+    h.paidBy=DB.currentUser?DB.currentUser.name:'Admin';
+    saveData();
+    renderApp();
+    logActivity('Held change paid out','₦'+h.amount.toLocaleString()+' paid to '+h.custName+' — Invoice #'+(h.invoiceNum||'—'),DB.currentUser?DB.currentUser.name:'Admin');
+    alert('✅ ₦'+h.amount.toLocaleString()+' paid out to '+h.custName+'. Cashflow updated.');
+  });
+}
+
 function editReturnGroup(gKey){
   var groups=window._retGroups||{};
   var g=groups[gKey];
