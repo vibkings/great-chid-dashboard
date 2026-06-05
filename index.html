@@ -5746,7 +5746,7 @@ async function sendTermiiSMS(){
     if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
     phone=phone.replace(/^\+/,'');
     try{
-      var resp=await fetch(TERMII_BASE+'/api/sms/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:phone,from:TERMII_SENDER,sms:text,type:'plain',api_key:apiKey,channel:'generic'})});
+      var resp=await fetch('https://greatchid-inventory.valentineahize.workers.dev?url='+encodeURIComponent(TERMII_BASE+'/api/sms/send'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:phone,from:TERMII_SENDER,sms:text,type:'plain',api_key:apiKey,channel:'generic'})});
       var rawText=await resp.text();
       console.log('Termii raw ['+c.name+'] HTTP '+resp.status+':', rawText);
       var data={};try{data=JSON.parse(rawText);}catch(e){console.warn('Termii JSON parse failed:',rawText);data={_raw:rawText,httpStatus:resp.status};}
