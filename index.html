@@ -5591,7 +5591,10 @@ function buildMessagingPanel(){
           '<div><label style="font-size:11px">Account SID</label><input type="text" id="twilio-sid-input" placeholder="ACxxxxxxxxx" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>'+
           '<div><label style="font-size:11px">Auth Token</label><input type="password" id="twilio-token-input" placeholder="Auth token..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>'+
           '<button onclick="saveTwilioCreds()" style="padding:8px 14px;background:#1a237e;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Save</button>'+
-        '</div></div>':
+        '</div>'+
+        '<div style="margin-top:8px"><label style="font-size:11px">WhatsApp Template Content SID <span style="color:#888;font-weight:400">(from Twilio Console → Content Template Builder)</span></label>'+
+        '<input type="text" id="twilio-content-sid-input" placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" value="'+(DB.settings&&DB.settings.twilioContentSid?DB.settings.twilioContentSid:'')+'" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-top:4px"></div>'+
+        '</div>':
       '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
         '✅ WhatsApp (Twilio) connected — +2347055693109 (egreatchidelectro)'+
         (noPhone.length?' | <span style="color:#92400e">⚠ '+noPhone.length+' without phone</span>':'')+
@@ -5654,12 +5657,15 @@ function msgSelectCredit(){msgSelectedCusts=DB.customers.filter(function(c){retu
 function saveTwilioCreds(){
   var sid=document.getElementById('twilio-sid-input');
   var tok=document.getElementById('twilio-token-input');
+  var cSid=document.getElementById('twilio-content-sid-input');
   if(!sid||!sid.value.trim()){alert('Enter Account SID.');return;}
   if(!tok||!tok.value.trim()){alert('Enter Auth Token.');return;}
   if(!DB.settings)DB.settings={};
   DB.settings.twilioAccountSid=sid.value.trim();
   DB.settings.twilioAuthToken=tok.value.trim();
+  if(cSid&&cSid.value.trim())DB.settings.twilioContentSid=cSid.value.trim();
   saveData();renderApp();
+  showToast('✅ Twilio credentials saved!','success');
 }
 function clearTwilioCreds(){if(!confirm('Remove Twilio credentials?'))return;if(DB.settings){DB.settings.twilioAccountSid='';DB.settings.twilioAuthToken='';}saveData();renderApp();}
 
@@ -5687,13 +5693,23 @@ async function sendTwilioWhatsApp(){
   for(var i=0;i<selected.length;i++){
     var c=selected[i];
     if(statusEl)statusEl.textContent='Sending '+(i+1)+' of '+selected.length+'...';
-    var text=msgText.replace(/\{name\}/g,c.name).replace(/\{balance\}/g,c.creditBalance>0?fmt(c.creditBalance):'₦0');
     var phone=c.phone.replace(/[\s\-\(\)]/g,'');
     if(phone.startsWith('0'))phone='234'+phone.substring(1);
     if(!phone.startsWith('234')&&!phone.startsWith('+'))phone='234'+phone;
     phone=phone.replace(/^\+/,'');
     try{
-      var resp=await fetch(proxyUrl,{method:'POST',headers:headers,body:'From='+encodeURIComponent(TWILIO_FROM)+'&To='+encodeURIComponent('whatsapp:+'+phone)+'&Body='+encodeURIComponent(text)});
+      // Use approved Meta template to avoid Error 63016 (outside messaging window)
+      // Template: great_chid_electro_global_doors_ltd with variable {{customer_name}}
+      var bodyStr='From='+encodeURIComponent(TWILIO_FROM)+
+        '&To='+encodeURIComponent('whatsapp:+'+phone)+
+        '&ContentSid='+encodeURIComponent(DB.settings&&DB.settings.twilioContentSid?DB.settings.twilioContentSid:'')+
+        '&ContentVariables='+encodeURIComponent(JSON.stringify({'1':c.name||'Valued Customer'}));
+      // Fallback to Body if no ContentSid configured
+      if(!DB.settings||!DB.settings.twilioContentSid){
+        var text=msgText.replace(/\{name\}/g,c.name).replace(/\{balance\}/g,c.creditBalance>0?fmt(c.creditBalance):'₦0');
+        bodyStr='From='+encodeURIComponent(TWILIO_FROM)+'&To='+encodeURIComponent('whatsapp:+'+phone)+'&Body='+encodeURIComponent(text);
+      }
+      var resp=await fetch(proxyUrl,{method:'POST',headers:headers,body:bodyStr});
       var rawText=await resp.text();
       var data={};try{data=JSON.parse(rawText);}catch(e){data={_raw:rawText};}
       results.push({name:c.name,phone:c.phone,status:data.sid?'✅ Sent':'❌ '+(data.message||data.error_message||rawText.substring(0,80)||'Failed')});
