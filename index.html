@@ -9719,21 +9719,25 @@ function eiPaymentChange(){
   var partModeWrap=document.getElementById('ei-partmode-wrap');
   var partBankWrap=document.getElementById('ei-partbank-wrap');
   var partPosWrap=document.getElementById('ei-partpos-wrap');
+  var splitWrap=document.getElementById('ei-split-wrap');
   var isPart=val==='part';
   var isTransfer=val==='transfer';
   var isPos=val==='pos';
-  // Main mode selectors (bank/pos) — show for transfer/pos only, not for part (part has its own)
+  var isSplit=val==='split';
+  // Main mode selectors
   if(bankWrap)bankWrap.style.display=isTransfer?'block':'none';
   if(posWrap)posWrap.style.display=isPos?'block':'none';
   // Part payment fields
   if(partWrap)partWrap.style.display=isPart?'block':'none';
   if(partModeWrap)partModeWrap.style.display=isPart?'block':'none';
-  // Part sub-mode (bank/pos) — driven by ei-partmode
   if(isPart)eiPartModeChange();
   else{
     if(partBankWrap)partBankWrap.style.display='none';
     if(partPosWrap)partPosWrap.style.display='none';
   }
+  // Split payment fields
+  if(splitWrap)splitWrap.style.display=isSplit?'block':'none';
+  if(isSplit)eiSplitModeChange();
 }
 
 function eiPartModeChange(){
@@ -9742,6 +9746,52 @@ function eiPartModeChange(){
   var partPosWrap=document.getElementById('ei-partpos-wrap');
   if(partBankWrap)partBankWrap.style.display=mode==='transfer'?'block':'none';
   if(partPosWrap)partPosWrap.style.display=mode==='pos'?'block':'none';
+}
+
+function eiSplitModeChange(){
+  var mode1=(document.getElementById('ei-split-mode1')||{}).value||'cash';
+  var mode2=(document.getElementById('ei-split-mode2')||{}).value||'cash';
+  var b1=document.getElementById('ei-split-bank1-wrap');
+  var p1=document.getElementById('ei-split-pos1-wrap');
+  var b2=document.getElementById('ei-split-bank2-wrap');
+  var p2=document.getElementById('ei-split-pos2-wrap');
+  if(b1)b1.style.display=mode1==='transfer'?'block':'none';
+  if(p1)p1.style.display=mode1==='pos'?'block':'none';
+  if(b2)b2.style.display=mode2==='transfer'?'block':'none';
+  if(p2)p2.style.display=mode2==='pos'?'block':'none';
+}
+
+function eiUpdateSplitBalance(){
+  var a1=parseFloat((document.getElementById('ei-split-amt1')||{}).value)||0;
+  var a2=parseFloat((document.getElementById('ei-split-amt2')||{}).value)||0;
+  var el=document.getElementById('ei-split-balance');
+  if(!el)return;
+  // Read item totals from edit form
+  var formTotal=0;
+  var i=0;
+  while(document.getElementById('ei-qty-'+i)){
+    var qty=parseInt((document.getElementById('ei-qty-'+i)||{}).value)||0;
+    var price=parseFloat((document.getElementById('ei-price-'+i)||{}).value)||0;
+    var disc=parseFloat((document.getElementById('ei-disc-'+i)||{}).value)||0;
+    formTotal+=Math.max(0,(price*qty)-disc);
+    i++;
+  }
+  var invDisc=parseFloat((document.getElementById('ei-inv-disc')||{}).value)||0;
+  var invoiceTotal=Math.round(Math.max(0,formTotal-invDisc)*100)/100;
+  var splitSum=Math.round((a1+a2)*100)/100;
+  var diff=Math.round((splitSum-invoiceTotal)*100)/100;
+  el.style.display='block';
+  if(a1===0&&a2===0){el.style.display='none';return;}
+  if(Math.abs(diff)<=1){
+    el.style.background='#f0fdf4';el.style.color='#15803d';
+    el.innerHTML='✅ Split amounts match invoice total — Payment 1: ₦'+a1.toLocaleString()+' + Payment 2: ₦'+a2.toLocaleString()+' = ₦'+splitSum.toLocaleString();
+  } else if(diff<0){
+    el.style.background='#fff8e1';el.style.color='#92400e';
+    el.innerHTML='⚠️ Short by ₦'+Math.abs(diff).toLocaleString()+' — Invoice total: ₦'+invoiceTotal.toLocaleString()+' | You have: ₦'+splitSum.toLocaleString();
+  } else {
+    el.style.background='#fff1f2';el.style.color='#dc2626';
+    el.innerHTML='❌ Over by ₦'+diff.toLocaleString()+' — Invoice total: ₦'+invoiceTotal.toLocaleString()+' | You have: ₦'+splitSum.toLocaleString();
+  }
 }
 
 function editInvoice(invNum){
@@ -9847,6 +9897,56 @@ function editInvoice(invNum){
             (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(s0.payment==='part'&&String(p.id)===String(s0.posId)?' selected':'')+'>'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
           '</select>'+
         '</div>'+
+        '<div id="ei-split-wrap" style="display:'+(s0.payment==='split'?'block':'none')+';grid-column:1/-1;background:var(--primary-bg);border:1.5px solid #93c5fd;border-radius:8px;padding:12px;margin-top:4px">'+
+          '<div style="font-size:11px;font-weight:700;color:#1a237e;margin-bottom:10px">⚡ Split payment — configure two payment legs</div>'+
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+            '<div>'+
+              '<label style="font-size:11px;font-weight:600;color:var(--text1);margin-bottom:3px;display:block">Payment 1 — Mode</label>'+
+              '<select id="ei-split-mode1" onchange="eiSplitModeChange()" style="width:100%;padding:7px;border:1px solid #93c5fd;border-radius:6px;font-size:12px">'+
+                '<option value="cash"'+(s0.splitPayment&&s0.splitPayment.mode1==='cash'?' selected':'')+'>Cash</option>'+
+                '<option value="transfer"'+(s0.splitPayment&&s0.splitPayment.mode1==='transfer'?' selected':'')+'>Bank Transfer</option>'+
+                '<option value="pos"'+(s0.splitPayment&&s0.splitPayment.mode1==='pos'?' selected':'')+'>POS</option>'+
+              '</select>'+
+              '<div id="ei-split-bank1-wrap" style="display:'+(s0.splitPayment&&s0.splitPayment.mode1==='transfer'?'block':'none')+';margin-top:6px">'+
+                '<select id="ei-split-bank1" style="width:100%;padding:7px;border:1px solid #93c5fd;border-radius:6px;font-size:12px">'+
+                  '<option value="">-- Select bank --</option>'+
+                  (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(s0.splitPayment&&String(b.id)===String(s0.splitPayment.bankId)?' selected':'')+'>'+(b.name||b.bankName||'')+(b.acct?' - '+b.acct:'')+'</option>';}).join('')+
+                '</select>'+
+              '</div>'+
+              '<div id="ei-split-pos1-wrap" style="display:'+(s0.splitPayment&&s0.splitPayment.mode1==='pos'?'block':'none')+';margin-top:6px">'+
+                '<select id="ei-split-pos1" style="width:100%;padding:7px;border:1px solid #93c5fd;border-radius:6px;font-size:12px">'+
+                  '<option value="">-- Select POS --</option>'+
+                  (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(s0.splitPayment&&String(p.id)===String(s0.splitPayment.posId)?' selected':'')+'>'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
+                '</select>'+
+              '</div>'+
+              '<label style="font-size:11px;font-weight:600;color:var(--text1);margin-top:6px;display:block">Payment 1 — Amount (₦)</label>'+
+              '<input type="number" id="ei-split-amt1" value="'+(s0.splitPayment?s0.splitPayment.amt1||0:0)+'" min="0" placeholder="0" oninput="eiUpdateSplitBalance()" style="width:100%;padding:7px;border:1px solid #93c5fd;border-radius:6px;font-size:12px;margin-top:3px">'+
+            '</div>'+
+            '<div>'+
+              '<label style="font-size:11px;font-weight:600;color:var(--text1);margin-bottom:3px;display:block">Payment 2 — Mode</label>'+
+              '<select id="ei-split-mode2" onchange="eiSplitModeChange()" style="width:100%;padding:7px;border:1px solid #93c5fd;border-radius:6px;font-size:12px">'+
+                '<option value="cash"'+(s0.splitPayment&&s0.splitPayment.mode2==='cash'?' selected':'')+'>Cash</option>'+
+                '<option value="transfer"'+(s0.splitPayment&&s0.splitPayment.mode2==='transfer'?' selected':'')+'>Bank Transfer</option>'+
+                '<option value="pos"'+(s0.splitPayment&&s0.splitPayment.mode2==='pos'?' selected':'')+'>POS</option>'+
+              '</select>'+
+              '<div id="ei-split-bank2-wrap" style="display:'+(s0.splitPayment&&s0.splitPayment.mode2==='transfer'?'block':'none')+';margin-top:6px">'+
+                '<select id="ei-split-bank2" style="width:100%;padding:7px;border:1px solid #93c5fd;border-radius:6px;font-size:12px">'+
+                  '<option value="">-- Select bank --</option>'+
+                  (DB.banks||[]).map(function(b){return '<option value="'+b.id+'"'+(s0.splitPayment&&String(b.id)===String(s0.splitPayment.bankId2||s0.splitPayment.bankId)?' selected':'')+'>'+(b.name||b.bankName||'')+(b.acct?' - '+b.acct:'')+'</option>';}).join('')+
+                '</select>'+
+              '</div>'+
+              '<div id="ei-split-pos2-wrap" style="display:'+(s0.splitPayment&&s0.splitPayment.mode2==='pos'?'block':'none')+';margin-top:6px">'+
+                '<select id="ei-split-pos2" style="width:100%;padding:7px;border:1px solid #93c5fd;border-radius:6px;font-size:12px">'+
+                  '<option value="">-- Select POS --</option>'+
+                  (DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'"'+(s0.splitPayment&&String(p.id)===String(s0.splitPayment.posId2||s0.splitPayment.posId)?' selected':'')+'>'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('')+
+                '</select>'+
+              '</div>'+
+              '<label style="font-size:11px;font-weight:600;color:var(--text1);margin-top:6px;display:block">Payment 2 — Amount (₦)</label>'+
+              '<input type="number" id="ei-split-amt2" value="'+(s0.splitPayment?s0.splitPayment.amt2||0:0)+'" min="0" placeholder="0" oninput="eiUpdateSplitBalance()" style="width:100%;padding:7px;border:1px solid #93c5fd;border-radius:6px;font-size:12px;margin-top:3px">'+
+            '</div>'+
+          '</div>'+
+          '<div id="ei-split-balance" style="margin-top:10px;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:700;background:#f0fdf4;color:#15803d;display:none"></div>'+
+        '</div>'+
       '</div>'+
       '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">'+
         '<thead><tr style="background:#f5f5f5"><th style="padding:6px;text-align:left">Item</th><th style="padding:6px">Qty</th><th style="padding:6px">Unit price</th><th style="padding:6px">Disc amt</th><th style="padding:6px">Total</th></tr></thead>'+
@@ -9897,7 +9997,54 @@ function saveInvoiceEdit(invNum){
   if(eiPayVal==='cash'){newPayment='cash';newPayMode='cash';}
   else if(eiPayVal==='pos'){newPayment='cash';newPayMode='pos';newPosId=eiPosId;}
   else if(eiPayVal==='transfer'){newPayment='cash';newPayMode='transfer';newBankId=eiBankId;}
-  else if(eiPayVal==='split'){newPayment='split';newPayMode='split';}
+  else if(eiPayVal==='split'){
+    newPayment='split';newPayMode='split';
+    var eiSplitMode1=(document.getElementById('ei-split-mode1')||{}).value||'cash';
+    var eiSplitMode2=(document.getElementById('ei-split-mode2')||{}).value||'cash';
+    var eiSplitAmt1=parseFloat((document.getElementById('ei-split-amt1')||{}).value)||0;
+    var eiSplitAmt2=parseFloat((document.getElementById('ei-split-amt2')||{}).value)||0;
+    var eiSplitBank1=(document.getElementById('ei-split-bank1')||{}).value||null;
+    var eiSplitBank2=(document.getElementById('ei-split-bank2')||{}).value||null;
+    var eiSplitPos1=(document.getElementById('ei-split-pos1')||{}).value||null;
+    var eiSplitPos2=(document.getElementById('ei-split-pos2')||{}).value||null;
+    // ── Validate split amounts tally with invoice total ──────────
+    var eiSplitSum=eiSplitAmt1+eiSplitAmt2;
+    if(eiSplitAmt1<=0||eiSplitAmt2<=0){
+      alert('❌ Split payment error.\n\nBoth payment amounts must be greater than zero.\n\nPayment 1: ₦'+eiSplitAmt1.toLocaleString()+'\nPayment 2: ₦'+eiSplitAmt2.toLocaleString());
+      return;
+    }
+    if(eiSplitMode1===eiSplitMode2&&eiSplitMode1!=='cash'){
+      // Allow cash+cash but warn on pos+pos or transfer+transfer
+      if(!confirm('⚠️ Both payments use the same mode ('+eiSplitMode1+').\n\nAre you sure? Usually split payment uses two different modes.\n\nContinue anyway?'))return;
+    }
+    // Compute current item totals from form to get expected invoice total
+    var _eiFormTotal=0;
+    var _eiIdx=0;
+    while(document.getElementById('ei-qty-'+_eiIdx)){
+      var _qty=parseInt((document.getElementById('ei-qty-'+_eiIdx)||{}).value)||0;
+      var _price=parseFloat((document.getElementById('ei-price-'+_eiIdx)||{}).value)||0;
+      var _disc=parseFloat((document.getElementById('ei-disc-'+_eiIdx)||{}).value)||0;
+      _eiFormTotal+=Math.max(0,(_price*_qty)-_disc);
+      _eiIdx++;
+    }
+    var _eiInvDiscCheck=parseFloat((document.getElementById('ei-inv-disc')||{}).value)||0;
+    var _eiExpectedTotal=Math.round(Math.max(0,_eiFormTotal-_eiInvDiscCheck)*100)/100;
+    var _eiSplitSumRounded=Math.round(eiSplitSum*100)/100;
+    if(Math.abs(_eiSplitSumRounded-_eiExpectedTotal)>1){
+      alert('❌ Split payment mismatch!\n\nInvoice total:   ₦'+_eiExpectedTotal.toLocaleString()+'\nPayment 1:       ₦'+eiSplitAmt1.toLocaleString()+'\nPayment 2:       ₦'+eiSplitAmt2.toLocaleString()+'\nSum of payments: ₦'+_eiSplitSumRounded.toLocaleString()+'\nDifference:      ₦'+Math.abs(_eiSplitSumRounded-_eiExpectedTotal).toLocaleString()+'\n\nThe two payment amounts must add up exactly to the invoice total.');
+      return;
+    }
+    invSales.forEach(function(s){
+      s.splitPayment={
+        mode1:eiSplitMode1,amt1:eiSplitAmt1,
+        mode2:eiSplitMode2,amt2:eiSplitAmt2,
+        bankId:eiSplitMode1==='transfer'?eiSplitBank1:(eiSplitMode2==='transfer'?eiSplitBank2:null),
+        bankId2:eiSplitMode2==='transfer'?eiSplitBank2:null,
+        posId:eiSplitMode1==='pos'?eiSplitPos1:(eiSplitMode2==='pos'?eiSplitPos2:null),
+        posId2:eiSplitMode2==='pos'?eiSplitPos2:null
+      };
+    });
+  }
   else if(eiPayVal==='part'){newPayment='part';newPayMode=eiPartMode;newPartPayment=eiPartAmt;newBankId=eiPartMode==='transfer'?eiPartBankId:null;newPosId=eiPartMode==='pos'?eiPartPosId:null;}
   else if(eiPayVal==='credit'){newPayment='credit';newPayMode='credit';}
   else if(eiPayVal==='deposit'){newPayment='deposit';newPayMode='deposit';}
@@ -10592,8 +10739,8 @@ function buildPurchaseQuotationsSection(){
       '<td style="text-align:right;font-weight:700;color:#1a237e">'+fmt(q.grandTotal)+'</td>'+
       '<td style="font-size:11px;color:var(--text3)">'+esc(q.notes||'—')+'</td>'+
       '<td style="text-align:center">'+
-        '<button data-qid="'+q.id+'" onclick="viewPurchaseQuotation(this.getAttribute(\'data-qid\'))" style="background:#1a237e;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;margin-right:4px">👁 View</button>'+
-        '<button data-qid="'+q.id+'" onclick="deletePurchaseQuotation(this.getAttribute(\'data-qid\'))" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">🗑️</button>'+
+        '<button data-qid="'+q.id+'" onclick="window._puqViewId=this.dataset.qid;viewPurchaseQuotation(window._puqViewId)" style="background:#1a237e;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;margin-right:4px">👁 View</button>'+
+        '<button data-qid="'+q.id+'" onclick="window._puqDelId=this.dataset.qid;deletePurchaseQuotation(window._puqDelId)" style="background:#fee2e2;color:#dc2626;border:none;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">🗑️</button>'+
       '</td>'+
     '</tr>';
   }).join('');
