@@ -376,7 +376,7 @@ var DB={
   users:[{id:1,name:'Admin',username:'admin',password:'admin123',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
   adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],commissionLedger:[],proformas:[],
-  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],heldChange:[],
+  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
   invoiceCounter:1,demoInvoiceCounter:1,
@@ -625,7 +625,6 @@ function buildCollectionSnapshot(colName) {
     supplierDeposits: DB.supplierDeposits||[],
     demoSales: DB.demoSales||[],
     purchaseQuotations: DB.purchaseQuotations||[],
-    heldChange: DB.heldChange||[],
     demoInvoiceCounter: DB.demoInvoiceCounter||1,
     activityLog: (DB.activityLog||[]).slice(0,200), // limit to 200
     settings: DB.settings||{},
@@ -1367,7 +1366,6 @@ function applySnapshot(snapshot) {
   DB.supplierDeposits = snapshot.supplierDeposits || [];
   DB.demoSales = snapshot.demoSales || [];
   DB.purchaseQuotations = snapshot.purchaseQuotations || [];
-  DB.heldChange = snapshot.heldChange || [];
   DB.demoInvoiceCounter = snapshot.demoInvoiceCounter || DB.demoInvoiceCounter || 1;
   DB.recycleBin = snapshot.recycleBin || [];
   DB.drafts = snapshot.drafts || [];
@@ -1452,7 +1450,6 @@ function buildSnapshot() {
     supplierDeposits: DB.supplierDeposits || [],
     demoSales: DB.demoSales || [],
     purchaseQuotations: DB.purchaseQuotations || [],
-    heldChange: DB.heldChange || [],
     demoInvoiceCounter: DB.demoInvoiceCounter || 1,
     commissionLedger: DB.commissionLedger || [],
     proformas: DB.proformas || [],
@@ -2498,12 +2495,6 @@ function buildClosingReport(){
         (suppPayTotal>0?'<tr style="background:var(--warning-bg)"><td style="font-weight:600;color:#92400e">🚛 Supplier Payments</td><td style="text-align:right;color:#92400e;font-size:11px;font-style:italic">see detail below</td><td style="text-align:right;color:#9ca3af;font-size:11px">—</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(suppPayTotal)+'</td></tr>':'')+
         (retTotal>0?'<tr style="background:var(--danger-bg)"><td style="font-weight:600;color:#c0392b">↩ Returns Refunded</td><td style="text-align:right">-</td><td style="text-align:right;color:#c0392b">- '+fmt(retTotal)+'</td><td style="text-align:right;font-weight:700;color:#c0392b">- '+fmt(retTotal)+'</td></tr>':'')+
         (changeToday>0?'<tr style="background:var(--warning-bg)"><td style="font-weight:600;color:#92400e">💵 Change Given (Cash)</td><td style="text-align:right;color:#92400e">Cash out</td><td style="text-align:right;color:#92400e">- '+fmt(changeToday)+'</td><td style="text-align:right;font-weight:700;color:#92400e">- '+fmt(changeToday)+'</td></tr>':'')+
-        (function(){
-          var heldToday=(DB.heldChange||[]).filter(function(h){return h.status==='pending'&&dateInRange(h.date,closingDate,closingDate);});
-          var heldTotal=heldToday.reduce(function(a,h){return a+h.amount;},0);
-          if(!heldTotal)return '';
-          return '<tr style="background:#fef9c3;border:1px solid #fcd34d"><td style="font-weight:600;color:#92400e">🔒 Held Change (in till — not yet paid out)</td><td style="text-align:right;color:#92400e;font-size:11px;font-style:italic">'+heldToday.length+' customer'+(heldToday.length!==1?'s':'')+' — still in till</td><td style="text-align:right;color:#6b7280;font-size:11px">liability</td><td style="text-align:right;font-weight:700;color:#92400e">'+fmt(heldTotal)+'</td></tr>';
-        })()+
         '<tr style="background:#1a237e;color:#fff;font-weight:800"><td>TOTAL</td><td style="text-align:right;color:#86efac">'+fmt(openFloat+cash+pos+transfer+depTotal+exchBalTotal)+'</td><td style="text-align:right;color:#fca5a5">'+(expTotal+retTotal>0?'- '+fmt(expTotal+retTotal):'-')+'</td><td style="text-align:right;font-size:14px;color:'+(balTotal>=0?'#86efac':'#fca5a5')+'">'+fmt(balTotal+openFloat)+'</td></tr>'+
         '</tbody></table>'+
       '</div>'+
@@ -2521,8 +2512,7 @@ function buildClosingReport(){
     (staffRows?'<div class="card" style="margin-bottom:1rem"><div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:10px">👤 By staff</div><div class="tbl-wrap"><table><thead><tr><th>Staff</th><th style="text-align:center">Invoices</th><th style="text-align:right">Sales</th><th style="text-align:right">Profit</th></tr></thead><tbody>'+staffRows+'</tbody></table></div></div>':'')+
     // Invoice list
     (invRows?'<div class="card"><div style="font-size:13px;font-weight:700;color:#1a237e;margin-bottom:10px">🧾 Invoices ('+invList.length+')</div><div class="tbl-wrap"><table><thead><tr><th>#</th><th>Invoice</th><th>Customer</th><th>Type</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th><th>Mode</th><th>Staff</th></tr></thead><tbody>'+invRows+'</tbody></table></div></div>':
-    '<div class="empty">No sales recorded for this date.</div>')+
-    buildHeldChangeSection();
+    '<div class="empty">No sales recorded for this date.</div>');
 }
 
 function setOpeningFloat(){
@@ -4668,19 +4658,6 @@ function buildOverview(){
         '<span style="font-size:20px">📈</span> Financial Dashboard'+
       '</button>'+
     '</div>';
-
-  // ── Held Change Alert ──────────────────────────────────────
-  var pendingHeld=(DB.heldChange||[]).filter(function(h){return h.status==='pending';});
-  if(pendingHeld.length){
-    var heldTotal=pendingHeld.reduce(function(a,h){return a+h.amount;},0);
-    html+='<div style="background:#fef9c3;border:1.5px solid #f59e0b;border-radius:12px;padding:12px 16px;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
-      '<div>'+
-        '<div style="font-size:13px;font-weight:800;color:#92400e">🔒 Held Change — '+pendingHeld.length+' customer'+(pendingHeld.length!==1?'s':'')+' waiting</div>'+
-        '<div style="font-size:12px;color:#92400e;margin-top:2px">Total in till: <b>'+fmt(heldTotal)+'</b> — go to Daily Closing to pay out</div>'+
-      '</div>'+
-      '<button onclick="switchTab(\'closing\')" style="padding:7px 16px;background:#f59e0b;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">Go to Closing →</button>'+
-    '</div>';
-  }
 
   return html;
 }
@@ -7800,14 +7777,6 @@ function submitInvoice(){
             // No cash out — money stays in till, just recorded as customer deposit liability
             logActivity('Overpayment credited','₦'+changeGiven.toLocaleString()+' overpayment from Invoice #'+invNum+' added to '+depCust.name+' account');
           }
-        } else if(changeDisposition==='hold'){
-          // Hold change — park it for walk-in customer to collect later
-          var holdNameEl=document.getElementById('s-disp-hold-name');
-          var holdName=(holdNameEl&&holdNameEl.value.trim())||custName||'Walk-in customer';
-          if(!DB.heldChange)DB.heldChange=[];
-          DB.heldChange.push({id:uid(),invoiceNum:invNum,custName:holdName,amount:changeGiven,date:date,month:month,by:DB.currentUser.name,status:'pending'});
-          // Cashflow: money stays in till as liability — no cash out yet
-          logActivity('Change held','₦'+changeGiven.toLocaleString()+' change held for '+holdName+' — Invoice #'+invNum,DB.currentUser.name);
         } else {
           // Cash change given back
           DB.cashflow.push({id:uid(),desc:'Change given — Invoice #'+invNum+' - '+custName,amount:changeGiven,type:'out',cat:'Change',payMode:'cash',date:date,month:month,by:DB.currentUser.name,isChange:true});
@@ -8410,9 +8379,7 @@ function onTenderedInput(){
 function onDispChange(){
   var sel=document.querySelector('input[name="s-change-disp"]:checked');
   var hidden=document.getElementById('s-change-disp-val');
-  var holdWrap=document.getElementById('s-disp-hold-name-wrap');
   if(hidden&&sel)hidden.value=sel.value;
-  if(holdWrap)holdWrap.style.display=(sel&&sel.value==='hold')?'block':'none';
 }
 
 function onSplitModeChange(){
@@ -9273,17 +9240,10 @@ function buildSales(){
               '<input type="radio" name="s-change-disp" id="s-disp-cash" value="cash" checked onchange="onDispChange()">'+
               '💵 <span><b>Give cash change</b> — hand back the money</span>'+
             '</label>'+
-            '<label id="s-disp-credit-label" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;border:1px solid var(--border);margin-bottom:6px;font-size:13px">'+
+            '<label id="s-disp-credit-label" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;border:1px solid var(--border);font-size:13px">'+
               '<input type="radio" name="s-change-disp" id="s-disp-credit" value="credit" onchange="onDispChange()">'+
               '🏦 <span><b>Add to customer account</b> — store as deposit for next visit</span>'+
             '</label>'+
-            '<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;cursor:pointer;border:1.5px solid #f59e0b;background:#fffbeb;margin-bottom:6px;font-size:13px">'+
-              '<input type="radio" name="s-change-disp" id="s-disp-hold" value="hold" onchange="onDispChange()">'+
-              '🔒 <span><b>Hold change</b> — park it, customer collects later</span>'+
-            '</label>'+
-            '<div id="s-disp-hold-name-wrap" style="display:none;margin-top:4px">'+
-              '<input type="text" id="s-disp-hold-name" placeholder="Customer name or description (e.g. Oga Sunday)" style="width:100%;padding:8px;border:1.5px solid #f59e0b;border-radius:7px;font-size:13px">'+
-            '</div>'+
           '</div>'+
         '</div>'+
         '<input type="hidden" id="s-change-amt">'+
@@ -9453,63 +9413,6 @@ function buildSales(){
     })();
 }
 // ── Edit Return Group ───────────────────────────────────────
-function buildHeldChangeSection(){
-  var held=(DB.heldChange||[]).filter(function(h){return h.status==='pending';}).slice().reverse();
-  if(!held.length)return '';
-  var total=held.reduce(function(a,h){return a+h.amount;},0);
-  window._heldChangeMap=held;
-  var rows=held.map(function(h,idx){
-    return '<tr style="background:#fffbeb">'+
-      '<td>'+h.date+'</td>'+
-      '<td><b>'+(h.invoiceNum||'—')+'</b></td>'+
-      '<td>'+esc(h.custName)+'</td>'+
-      '<td style="text-align:right;font-weight:700;color:#92400e;font-size:14px">'+fmt(h.amount)+'</td>'+
-      '<td>'+esc(h.by)+'</td>'+
-      '<td style="text-align:center">'+
-        '<button onclick="payoutHeldChange((window._heldChangeMap||[])['+idx+']&&(window._heldChangeMap||[])['+idx+'].id)" style="background:#15803d;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">💵 Pay out</button>'+
-      '</td>'+
-    '</tr>';
-  }).join('');
-  return '<div style="margin-top:20px">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">'+
-      '<p class="sec-title" style="margin:0">🔒 Held Change Register</p>'+
-      '<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;color:#92400e">'+
-        'Total held: '+fmt(total)+
-      '</div>'+
-    '</div>'+
-    '<div class="tbl-wrap"><table><thead><tr>'+
-      '<th>Date</th><th>Invoice #</th><th>Customer name</th><th style="text-align:right">Amount held</th><th>By</th><th style="text-align:center">Action</th>'+
-    '</tr></thead><tbody>'+rows+'</tbody></table></div>'+
-  '</div>';
-}
-
-function payoutHeldChange(id){
-  var h=(DB.heldChange||[]).find(function(x){return x.id===id;});
-  if(!h)return;
-  showConfirm({
-    type:'warning',
-    title:'💵 Pay out held change?',
-    msg:'Customer: <b>'+esc(h.custName)+'</b><br>Invoice: <b>'+(h.invoiceNum||'—')+'</b><br>Amount: <b style="font-size:16px;color:#15803d">'+fmt(h.amount)+'</b><br><br>This will record the cash as paid out and remove it from the held register.',
-    detail:'',
-    confirmLabel:'✅ Confirm payout',
-    cancelLabel:'Cancel'
-  },function(){
-    var today=new Date();
-    var date=today.toLocaleDateString();
-    var month=today.toISOString().slice(0,7);
-    // Record cash out
-    DB.cashflow.push({id:uid(),desc:'Held change paid out — Invoice #'+(h.invoiceNum||'—')+' — '+h.custName,amount:h.amount,type:'out',cat:'Change',payMode:'cash',date:date,month:month,by:DB.currentUser?DB.currentUser.name:'Admin',isChange:true});
-    // Mark as paid
-    h.status='paid';
-    h.paidDate=date;
-    h.paidBy=DB.currentUser?DB.currentUser.name:'Admin';
-    saveData();
-    renderApp();
-    logActivity('Held change paid out','₦'+h.amount.toLocaleString()+' paid to '+h.custName+' — Invoice #'+(h.invoiceNum||'—'),DB.currentUser?DB.currentUser.name:'Admin');
-    alert('✅ ₦'+h.amount.toLocaleString()+' paid out to '+h.custName+'. Cashflow updated.');
-  });
-}
-
 function editReturnGroup(gKey){
   var groups=window._retGroups||{};
   var g=groups[gKey];
@@ -9862,6 +9765,8 @@ function eiUpdateSplitBalance(){
   var a1=parseFloat((document.getElementById('ei-split-amt1')||{}).value)||0;
   var a2=parseFloat((document.getElementById('ei-split-amt2')||{}).value)||0;
   var el=document.getElementById('ei-split-balance');
+  var changeWrap=document.getElementById('ei-split-change-wrap');
+  var changeAmtEl=document.getElementById('ei-split-change-amt');
   if(!el)return;
   // Read item totals from edit form
   var formTotal=0;
@@ -9878,17 +9783,27 @@ function eiUpdateSplitBalance(){
   var splitSum=Math.round((a1+a2)*100)/100;
   var diff=Math.round((splitSum-invoiceTotal)*100)/100;
   el.style.display='block';
-  if(a1===0&&a2===0){el.style.display='none';return;}
+  if(a1===0&&a2===0){el.style.display='none';if(changeWrap)changeWrap.style.display='none';return;}
   if(Math.abs(diff)<=1){
     el.style.background='#f0fdf4';el.style.color='#15803d';
     el.innerHTML='✅ Split amounts match invoice total — Payment 1: ₦'+a1.toLocaleString()+' + Payment 2: ₦'+a2.toLocaleString()+' = ₦'+splitSum.toLocaleString();
+    if(changeWrap)changeWrap.style.display='none';
   } else if(diff<0){
     el.style.background='#fff8e1';el.style.color='#92400e';
     el.innerHTML='⚠️ Short by ₦'+Math.abs(diff).toLocaleString()+' — Invoice total: ₦'+invoiceTotal.toLocaleString()+' | You have: ₦'+splitSum.toLocaleString();
+    if(changeWrap)changeWrap.style.display='none';
   } else {
-    el.style.background='#fff1f2';el.style.color='#dc2626';
-    el.innerHTML='❌ Over by ₦'+diff.toLocaleString()+' — Invoice total: ₦'+invoiceTotal.toLocaleString()+' | You have: ₦'+splitSum.toLocaleString();
+    el.style.background='#fff8e1';el.style.color='#92400e';
+    el.innerHTML='⚠️ Over by ₦'+diff.toLocaleString()+' — select how to handle change below';
+    if(changeWrap)changeWrap.style.display='block';
+    if(changeAmtEl)changeAmtEl.textContent='₦'+diff.toLocaleString();
   }
+}
+
+function eiSplitChangeDispChange(){
+  var sel=document.querySelector('input[name="ei-split-change-disp"]:checked');
+  var holdWrap=document.getElementById('ei-split-hold-name-wrap');
+  if(holdWrap)holdWrap.style.display=(sel&&sel.value==='hold')?'block':'none';
 }
 
 function editInvoice(invNum){
@@ -10043,6 +9958,21 @@ function editInvoice(invNum){
             '</div>'+
           '</div>'+
           '<div id="ei-split-balance" style="margin-top:10px;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:700;background:#f0fdf4;color:#15803d;display:none"></div>'+
+          '<div id="ei-split-change-wrap" style="display:none;margin-top:8px;border-top:1px solid #93c5fd;padding-top:8px">'+
+            '<div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:6px">💵 Change to give back: <span id="ei-split-change-amt" style="font-size:13px"></span></div>'+
+            '<div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">What to do with change?</div>'+
+            '<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;cursor:pointer;border:1px solid var(--border);margin-bottom:5px;font-size:12px">'+
+              '<input type="radio" name="ei-split-change-disp" value="cash" checked onchange="eiSplitChangeDispChange()">'+
+              '💵 <b>Give cash change</b>'+
+            '</label>'+
+            '<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;cursor:pointer;border:1.5px solid #f59e0b;background:#fffbeb;font-size:12px">'+
+              '<input type="radio" name="ei-split-change-disp" value="hold" onchange="eiSplitChangeDispChange()">'+
+              '🔒 <b>Hold change</b> — customer collects later'+
+            '</label>'+
+            '<div id="ei-split-hold-name-wrap" style="display:none;margin-top:4px">'+
+              '<input type="text" id="ei-split-hold-name" placeholder="Customer name (e.g. Oga Sunday)" style="width:100%;padding:7px;border:1.5px solid #f59e0b;border-radius:7px;font-size:12px">'+
+            '</div>'+
+          '</div>'+
         '</div>'+
       '</div>'+
       '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">'+
@@ -10127,9 +10057,17 @@ function saveInvoiceEdit(invNum){
     var _eiInvDiscCheck=parseFloat((document.getElementById('ei-inv-disc')||{}).value)||0;
     var _eiExpectedTotal=Math.round(Math.max(0,_eiFormTotal-_eiInvDiscCheck)*100)/100;
     var _eiSplitSumRounded=Math.round(eiSplitSum*100)/100;
-    if(Math.abs(_eiSplitSumRounded-_eiExpectedTotal)>1){
-      alert('❌ Split payment mismatch!\n\nInvoice total:   ₦'+_eiExpectedTotal.toLocaleString()+'\nPayment 1:       ₦'+eiSplitAmt1.toLocaleString()+'\nPayment 2:       ₦'+eiSplitAmt2.toLocaleString()+'\nSum of payments: ₦'+_eiSplitSumRounded.toLocaleString()+'\nDifference:      ₦'+Math.abs(_eiSplitSumRounded-_eiExpectedTotal).toLocaleString()+'\n\nThe two payment amounts must add up exactly to the invoice total.');
+    var _eiSplitChange=Math.round((_eiSplitSumRounded-_eiExpectedTotal)*100)/100;
+    if(_eiSplitSumRounded<_eiExpectedTotal-1){
+      alert('❌ Split payment short!\n\nInvoice total:   ₦'+_eiExpectedTotal.toLocaleString()+'\nYou entered:     ₦'+_eiSplitSumRounded.toLocaleString()+'\nShort by:        ₦'+Math.abs(_eiSplitChange).toLocaleString()+'\n\nPlease increase the amounts.');
       return;
+    }
+    // Read change disposition if overpaid
+    var _eiSplitChangeDisp='cash';
+    var _eiSplitHoldName='';
+    if(_eiSplitChange>1){
+      _eiSplitChangeDisp=(document.querySelector('input[name="ei-split-change-disp"]:checked')||{}).value||'cash';
+      _eiSplitHoldName=document.getElementById('ei-split-hold-name')?document.getElementById('ei-split-hold-name').value.trim():'';
     }
     invSales.forEach(function(s){
       s.splitPayment={
@@ -10138,9 +10076,31 @@ function saveInvoiceEdit(invNum){
         bankId:eiSplitMode1==='transfer'?eiSplitBank1:(eiSplitMode2==='transfer'?eiSplitBank2:null),
         bankId2:eiSplitMode2==='transfer'?eiSplitBank2:null,
         posId:eiSplitMode1==='pos'?eiSplitPos1:(eiSplitMode2==='pos'?eiSplitPos2:null),
-        posId2:eiSplitMode2==='pos'?eiSplitPos2:null
+        posId2:eiSplitMode2==='pos'?eiSplitPos2:null,
+        changeGiven:_eiSplitChange>1?_eiSplitChange:null,
+        changeDisposition:_eiSplitChange>1?_eiSplitChangeDisp:null,
+        changeHoldName:_eiSplitChange>1?(_eiSplitHoldName||null):null
       };
     });
+    // Record change cashflow
+    if(_eiSplitChange>1){
+      var _eiInvNum=invSales[0].invoiceNum||invSales[0].id;
+      var _eiCustName=invSales[0].printName||invSales[0].custName||'Customer';
+      var _eiDate=new Date().toLocaleDateString();
+      var _eiMonth=new Date().toISOString().slice(0,7);
+      if(_eiSplitChangeDisp==='hold'){
+        var _eiHoldName=_eiSplitHoldName||_eiCustName;
+        if(!DB.heldChange)DB.heldChange=[];
+        // Only add if not already held for this invoice
+        var _alreadyHeld=(DB.heldChange||[]).find(function(h){return h.invoiceNum===_eiInvNum&&h.status==='pending';});
+        if(!_alreadyHeld){
+          DB.heldChange.push({id:uid(),invoiceNum:_eiInvNum,custName:_eiHoldName,amount:_eiSplitChange,date:_eiDate,month:_eiMonth,by:DB.currentUser.name,status:'pending'});
+          logActivity('Change held (edit)','₦'+_eiSplitChange.toLocaleString()+' held for '+_eiHoldName+' — Invoice #'+_eiInvNum,DB.currentUser.name);
+        }
+      } else {
+        DB.cashflow.push({id:uid(),desc:'Change given — Invoice #'+_eiInvNum+' - '+_eiCustName,amount:_eiSplitChange,type:'out',cat:'Change',payMode:'cash',date:_eiDate,month:_eiMonth,by:DB.currentUser.name,isChange:true});
+      }
+    }
   }
   else if(eiPayVal==='part'){newPayment='part';newPayMode=eiPartMode;newPartPayment=eiPartAmt;newBankId=eiPartMode==='transfer'?eiPartBankId:null;newPosId=eiPartMode==='pos'?eiPartPosId:null;}
   else if(eiPayVal==='credit'){newPayment='credit';newPayMode='credit';}
@@ -10946,87 +10906,37 @@ function viewPurchaseRecord(id){
   var pu=DB.purchases.find(function(p){return p.id==id;});if(!pu)return;
   var rows=pu.items.map(function(l,i){
     return '<tr>'+
-      '<td style="text-align:center;width:30px">'+(i+1)+'</td>'+
-      '<td style="font-weight:600">'+esc(l.name)+'</td>'+
-      '<td style="text-align:center;width:60px">'+(l.qtyOrdered||l.qty||0)+'</td>'+
-      '<td style="text-align:right;width:110px">'+fmt(l.cost)+'</td>'+
-      '<td style="text-align:right;width:110px;font-weight:700">'+fmt(l.total)+'</td>'+
+      '<td style="text-align:center">'+(i+1)+'</td>'+
+      '<td><b>'+esc(l.name)+'</b></td>'+
+      '<td style="text-align:center">'+(l.qtyOrdered||l.qty||0)+'</td>'+
+      '<td style="text-align:right">'+fmt(l.cost)+'</td>'+
+      '<td style="text-align:right"><b>'+fmt(l.total)+'</b></td>'+
     '</tr>';
   }).join('');
-  // Build payment label cleanly
-  var payTypeLabel=pu.payType==='credit'?'⚠ Credit (owed to supplier)':
-    pu.payType==='part'?'Part payment':
-    'Cash (fully paid)';
-  var payModeLabel2=pu.payType==='credit'?'Credit':
-    pu.payMode==='pos'?'POS'+(pu.posId?' ('+getPosName(pu.posId)+')':''):
-    pu.payMode==='transfer'?'Bank Transfer'+(pu.bankId?' — '+getBankName(pu.bankId):''):
-    'Cash';
-  var old=document.getElementById('pu-view-overlay');if(old)old.remove();
-  var overlay=document.createElement('div');
-  overlay.id='pu-view-overlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto';
-  overlay.innerHTML=
-    '<div style="background:var(--white);border-radius:14px;width:100%;max-width:620px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
-      '<div style="background:#1a237e;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0;position:sticky;top:0;z-index:1">'+
-        '<div>'+
-          '<div style="font-size:15px;font-weight:800;color:#fff">📋 Purchase Record</div>'+
-          '<div style="font-size:11px;color:rgba(255,255,255,.85);margin-top:2px">'+esc(pu.supName)+' · Invoice #'+(pu.invoiceNum||'—')+'</div>'+
-        '</div>'+
-        '<button onclick="document.getElementById(\'pu-view-overlay\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
+  var payModeStr=pu.payMode==='pos'?'POS':pu.payMode==='transfer'?'Bank Transfer'+(pu.bankId?' ('+getBankName(pu.bankId)+')':''):'Cash';
+  var payTypeStr=pu.payType==='credit'?'Credit':'Part Payment';
+  showConfirm({
+    type:'info',
+    title:'📋 Purchase Record — '+esc(pu.supName),
+    msg:
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;margin-bottom:12px;background:var(--surface);padding:10px;border-radius:8px">'+
+        '<div><span style="color:var(--text3);font-size:11px">SUPPLIER</span><br><b>'+esc(pu.supName)+'</b></div>'+
+        '<div><span style="color:var(--text3);font-size:11px">INVOICE #</span><br><b>'+(pu.invoiceNum||'—')+'</b></div>'+
+        '<div><span style="color:var(--text3);font-size:11px">DATE</span><br>'+pu.date+'</div>'+
+        '<div><span style="color:var(--text3);font-size:11px">PAYMENT TYPE</span><br>'+(pu.payType==='cash'?'Cash (fully paid)':payTypeStr)+' — '+payModeStr+'</div>'+
       '</div>'+
-      '<div style="padding:16px 18px">'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">'+
-          '<div style="background:var(--surface2);border-radius:8px;padding:10px">'+
-            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Supplier</div>'+
-            '<div style="font-size:13px;font-weight:700;color:var(--text1)">'+esc(pu.supName)+'</div>'+
-          '</div>'+
-          '<div style="background:var(--surface2);border-radius:8px;padding:10px">'+
-            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Date</div>'+
-            '<div style="font-size:13px;font-weight:700;color:var(--text1)">'+pu.date+'</div>'+
-          '</div>'+
-          '<div style="background:var(--surface2);border-radius:8px;padding:10px">'+
-            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Recorded by</div>'+
-            '<div style="font-size:13px;font-weight:700;color:var(--text1)">'+esc(pu.by||'—')+'</div>'+
-          '</div>'+
-          '<div style="background:'+(pu.payType==='credit'?'#fff1f2':pu.payType==='part'?'#fff8e1':'#f0fdf4')+ ';border-radius:8px;padding:10px">'+
-            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Payment type</div>'+
-            '<div style="font-size:12px;font-weight:700;color:'+(pu.payType==='credit'?'#dc2626':pu.payType==='part'?'#92400e':'#15803d')+'">'+payTypeLabel+'</div>'+
-          '</div>'+
-          '<div style="background:var(--surface2);border-radius:8px;padding:10px">'+
-            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Payment mode</div>'+
-            '<div style="font-size:12px;font-weight:700;color:var(--text1)">'+payModeLabel2+'</div>'+
-          '</div>'+
-          '<div style="background:var(--primary-bg);border-radius:8px;padding:10px">'+
-            '<div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Grand Total</div>'+
-            '<div style="font-size:16px;font-weight:900;color:#1a237e">'+fmt(pu.grandTotal)+'</div>'+
-          '</div>'+
-        '</div>'+
-        (pu.payType==='part'?
-          '<div style="background:#fff8e1;border:1px solid #fcd34d;border-radius:8px;padding:10px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">'+
-            '<div><span style="color:#92400e;font-weight:700">Paid now: </span>'+fmt(pu.partAmt||0)+'</div>'+
-            '<div><span style="color:#dc2626;font-weight:700">Owed to supplier: </span>'+fmt(pu.creditAmt||0)+'</div>'+
-          '</div>':'')+
-        '<table style="width:100%;border-collapse:collapse;font-size:13px">'+
-          '<thead><tr style="background:#1a237e">'+
-            '<th style="color:#fff;padding:8px;text-align:center;width:35px">#</th>'+
-            '<th style="color:#fff;padding:8px;text-align:left">Item</th>'+
-            '<th style="color:#fff;padding:8px;text-align:center;width:65px">Qty</th>'+
-            '<th style="color:#fff;padding:8px;text-align:right;width:120px">Unit Cost</th>'+
-            '<th style="color:#fff;padding:8px;text-align:right;width:120px">Total</th>'+
-          '</tr></thead>'+
-          '<tbody>'+rows+'</tbody>'+
-          '<tfoot>'+
-            (pu.discAmt>0?'<tr style="background:#fff1f2"><td colspan="4" style="text-align:right;padding:7px;font-size:11px;color:#dc2626;font-weight:700">DISCOUNT</td><td style="text-align:right;padding:7px;color:#dc2626;font-weight:700">- '+fmt(pu.discAmt)+'</td></tr>':'')+
-            '<tr style="background:#e8eaf6"><td colspan="4" style="text-align:right;padding:8px;font-weight:800;font-size:13px">GRAND TOTAL</td><td style="text-align:right;padding:8px;font-weight:900;font-size:15px;color:#1a237e">'+fmt(pu.grandTotal)+'</td></tr>'+
-          '</tfoot>'+
-        '</table>'+
-        '<div style="display:flex;gap:8px;margin-top:14px">'+
-          '<button onclick="printPurchaseRecord(\''+id+'\');document.getElementById(\'pu-view-overlay\').remove()" style="flex:1;padding:10px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">🖨️ Print</button>'+
-          '<button onclick="document.getElementById(\'pu-view-overlay\').remove()" style="padding:10px 20px;background:var(--surface2);color:var(--text1);border:none;border-radius:8px;font-size:13px;cursor:pointer">Close</button>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
-  document.body.appendChild(overlay);
+      '<div class="tbl-wrap">'+
+      '<table><thead><tr><th>#</th><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Cost</th><th style="text-align:right">Total</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody>'+
+      '<tfoot><tr style="background:var(--info-bg);font-weight:700">'+
+        '<td colspan="4" style="text-align:right">GRAND TOTAL</td>'+
+        '<td style="text-align:right">'+fmt(pu.grandTotal)+'</td>'+
+      '</tr></tfoot></table></div>'+
+      '<div style="font-size:12px;color:var(--text3);margin-top:8px">Recorded by: '+esc(pu.by||'—')+'</div>',
+    detail:'',
+    confirmLabel:'🖨️ Print',
+    cancelLabel:'Close'
+  },function(){printPurchaseRecord(id);});
 }
 
 function printPurchaseRecord(id){
@@ -11432,10 +11342,7 @@ function buildPurchases(){
       '<td>'+p.date+'</td>'+
       '<td><b>'+(p.invoiceNum||'-')+'</b></td>'+
       '<td>'+esc(p.supName)+'</td>'+
-      '<td style="font-size:11px;max-width:200px">'+
-        (p.items[0]?esc(p.items[0].name+' ×'+(p.items[0].qtyReceived||p.items[0].qty)):'')+
-        (p.items.length>1?'<span style="color:#6b7280;font-style:italic"> ...+'+(p.items.length-1)+' more</span>':'')+
-      '</td>'+
+      '<td style="font-size:11px">'+p.items.map(function(l){return l.name+' x'+(l.qtyReceived||l.qty);}).join(', ')+'</td>'+
       '<td style="text-align:center">'+totalItems+'</td>'+
       '<td style="text-align:right"><b>'+fmt(p.grandTotal)+'</b></td>'+
       '<td>'+payBadge+'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+puModeLabel+'</div></td>'+
