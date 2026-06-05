@@ -7132,6 +7132,12 @@ function onSaleCustChange(custId){
   var el=document.getElementById('sale-deposit-notice');
   if(!el)return;
   if(!custId){el.innerHTML='';onPaymentTypeChange();return;}
+  // Auto-fill address from customer profile (only if field is empty)
+  var addrEl=document.getElementById('s-inv-address');
+  if(addrEl&&!addrEl.value.trim()){
+    var rc=DB.customers.find(function(c){return c.id==custId;});
+    if(rc&&rc.address)addrEl.value=rc.address;
+  }
   var depBal=(DB.deposits||[]).filter(function(d){return String(d.custId)==String(custId);}).reduce(function(a,d){return a+d.amount;},0);
   if(depBal<=0){
     el.innerHTML='';
@@ -7452,6 +7458,8 @@ function submitInvoice(){
   if(saleCustomerType==='walkin'){
     var walkPrintEl=document.getElementById('s-print-name');
     printName=(walkPrintEl&&walkPrintEl.value.trim())||'';
+    var walkAddrEl=document.getElementById('s-inv-address');
+    custAddr=(walkAddrEl&&walkAddrEl.value.trim())||'';
   }
   if(saleCustomerType==='registered'||saleCustomerType==='credit'){
     var selEl=document.getElementById('s-reg-customer');
@@ -7459,6 +7467,9 @@ function submitInvoice(){
     if(!custId){alert('Please select a registered customer.');return;}
     var rc=DB.customers.find(function(c){return c.id==custId;});
     if(rc){custName=rc.name;custAddr=rc.address||'';
+      // Override with invoice-specific address if provided
+      var invAddrEl=document.getElementById('s-inv-address');
+      if(invAddrEl&&invAddrEl.value.trim())custAddr=invAddrEl.value.trim();
       // Read optional print-as name
       var printNameEl=document.getElementById('s-print-name');
       printName=(printNameEl&&printNameEl.value.trim())||'';
@@ -8902,9 +8913,15 @@ function buildSales(){
     '<button class="ctype-btn'+(saleCustomerType==='registered'?' active':'')+'" onclick="setSaleCustType(\'registered\')"><div class="ctype-label">Registered customer</div><div class="ctype-sub">Cash or credit</div></button>'+
     '</div>'+
     (saleCustomerType==='walkin'?
-      '<div class="form-group" style="margin-top:8px;max-width:360px">'+
-        '<label>Print invoice as <span style="font-size:10px;color:var(--text3);font-weight:400">(optional — leave blank for "Walk-in customer")</span></label>'+
-        '<input type="text" id="s-print-name" placeholder="e.g. customer name to show on invoice">'+
+      '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:10px">'+
+        '<div class="form-group" style="flex:1;min-width:200px">'+
+          '<label>Print invoice as <span style="font-size:10px;color:var(--text3);font-weight:400">(optional)</span></label>'+
+          '<input type="text" id="s-print-name" placeholder="e.g. customer name to show on invoice">'+
+        '</div>'+
+        '<div class="form-group" style="flex:1;min-width:200px">'+
+          '<label>Delivery / billing address <span style="font-size:10px;color:var(--text3);font-weight:400">(optional)</span></label>'+
+          '<input type="text" id="s-inv-address" placeholder="e.g. 12 Oke-Ado Street, Ogbomosho">'+
+        '</div>'+
       '</div>'
     :'')+
     (saleCustomerType==='registered'?
@@ -8924,6 +8941,11 @@ function buildSales(){
         '<div class="form-group">'+
           '<label>Print invoice as <span style="font-size:10px;color:var(--text3);font-weight:400">(optional — leave blank to use customer name)</span></label>'+
           '<input type="text" id="s-print-name" placeholder="e.g. client name to show on invoice">'+
+        '</div>'+
+        '<div class="form-group" style="grid-column:1/-1">'+
+          '<label>Delivery / billing address <span style="font-size:10px;color:var(--text3);font-weight:400">(optional — leave blank to use saved address)</span></label>'+
+          '<input type="text" id="s-inv-address" placeholder="Enter address or leave blank to use saved address"'+
+            ' value="'+(window._saleRegCustId?(function(){var c=DB.customers.find(function(c){return c.id==window._saleRegCustId;});return c?c.address||'':'';})():'')+'">'+ 
         '</div>'+
       '</div>'+
       (DB.customers.length===0?'<p style="font-size:12px;color:#888;margin-top:4px">No customers. <button class="btn sm" onclick="switchTab(\'customers\')">Add</button></p>':'')+
