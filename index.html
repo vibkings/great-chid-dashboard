@@ -5564,7 +5564,7 @@ function buildMessagingPanel(){
     return '<button onclick="setMsgTemplate(\''+k+'\')" style="padding:7px 12px;border-radius:8px;border:1.5px solid '+(active?'#1a237e':'#cbd5e1')+';background:'+(active?'#1a237e':'#fff')+';color:'+(active?'#fff':'#374151')+';font-size:12px;font-weight:600;cursor:pointer">'+t.label+'</button>';
   }).join('');
   var custRows=custs.map(function(c){
-    var checked=msgSelectedCusts.indexOf(c.id)!==-1;
+    var checked=msgSelectedCusts.indexOf(String(c.id))!==-1;
     return '<tr style="cursor:pointer" onclick="toggleMsgCust(\''+c.id+'\')">'+
       '<td style="width:36px;text-align:center"><input type="checkbox" '+(checked?'checked':'')+' onclick="event.stopPropagation();toggleMsgCust(\''+c.id+'\')" style="width:15px;height:15px"></td>'+
       '<td style="font-weight:600">'+esc(c.name)+'</td><td>'+esc(c.phone)+'</td><td>'+(c.biz||'—')+'</td>'+
@@ -5639,10 +5639,17 @@ function buildMessagingPanel(){
 }
 
 function setMsgTemplate(key){msgTemplateKey=key;renderApp();setTimeout(function(){var ta=document.getElementById('msg-text');if(ta)ta.value=MSG_TEMPLATES[key].text;},50);}
-function toggleMsgCust(id){var idx=msgSelectedCusts.indexOf(id);if(idx===-1)msgSelectedCusts.push(id);else msgSelectedCusts.splice(idx,1);var el=document.getElementById('msg-sel-count');if(el)el.textContent=msgSelectedCusts.length+' selected';}
-function msgSelectAll(){msgSelectedCusts=DB.customers.filter(function(c){return c.phone;}).map(function(c){return c.id;});renderApp();}
+function toggleMsgCust(id){
+  var sid=String(id);
+  var idx=msgSelectedCusts.indexOf(sid);
+  if(idx===-1)msgSelectedCusts.push(sid);
+  else msgSelectedCusts.splice(idx,1);
+  var el=document.getElementById('msg-sel-count');
+  if(el)el.textContent=msgSelectedCusts.length+' selected';
+}
+function msgSelectAll(){msgSelectedCusts=DB.customers.filter(function(c){return c.phone;}).map(function(c){return String(c.id);});renderApp();}
 function msgSelectNone(){msgSelectedCusts=[];renderApp();}
-function msgSelectCredit(){msgSelectedCusts=DB.customers.filter(function(c){return c.phone&&c.creditBalance>0;}).map(function(c){return c.id;});renderApp();}
+function msgSelectCredit(){msgSelectedCusts=DB.customers.filter(function(c){return c.phone&&c.creditBalance>0;}).map(function(c){return String(c.id);});renderApp();}
 
 function saveTwilioCreds(){
   var sid=document.getElementById('twilio-sid-input');
@@ -5671,9 +5678,7 @@ async function sendTwilioWhatsApp(){
   if(!msgSelectedCusts.length){alert('Select at least one customer.');return;}
   var token=getTwilioAuthToken(),sid=getTwilioAccountSid();
   if(!token||!sid){alert('Please save your Twilio credentials first.');return;}
-  var selected=DB.customers.filter(function(c){return msgSelectedCusts.indexOf(c.id)!==-1&&c.phone;});
-  if(!selected.length){alert('No selected customers have phone numbers.');return;}
-  if(!confirm('Send WhatsApp to '+selected.length+' customer(s)?\nEstimated cost: $'+(selected.length*0.05).toFixed(2)+' from your Twilio balance.'))return;
+  var selected=DB.customers.filter(function(c){return msgSelectedCusts.indexOf(String(c.id))!==-1&&c.phone;});
   var statusEl=document.getElementById('msg-send-status'),resultsEl=document.getElementById('msg-results');
   if(statusEl)statusEl.textContent='Sending...';if(resultsEl)resultsEl.innerHTML='';
   var results=[],url='https://api.twilio.com/2010-04-01/Accounts/'+sid+'/Messages.json';
@@ -5706,7 +5711,7 @@ async function sendTermiiSMS(){
   if(!msgSelectedCusts.length){alert('Select at least one customer.');return;}
   var apiKey=getTermiiApiKey();
   if(!apiKey){alert('Please save your Termii API key first.');return;}
-  var selected=DB.customers.filter(function(c){return msgSelectedCusts.indexOf(c.id)!==-1&&c.phone;});
+  var selected=DB.customers.filter(function(c){return msgSelectedCusts.indexOf(String(c.id))!==-1&&c.phone;});
   if(!selected.length){alert('No selected customers have phone numbers.');return;}
   if(!confirm('Send SMS to '+selected.length+' customer(s) via Termii?\nEstimated cost: ₦'+(selected.length*6)+' – ₦'+(selected.length*10)))return;
   var statusEl=document.getElementById('msg-send-status'),resultsEl=document.getElementById('msg-results');
