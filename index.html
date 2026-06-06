@@ -5604,6 +5604,42 @@ function buildMessagingPanel(){
   var credSection='';
   if(msgChannel==='twilio'){
     var ok=getTwilioAuthToken()&&getTwilioAccountSid();
+    var twilioTemplates=DB.settings&&DB.settings.twilioTemplates?DB.settings.twilioTemplates:[];
+    var activeContentSid=DB.settings&&DB.settings.twilioContentSid?DB.settings.twilioContentSid:'';
+    var templateLibraryHtml=
+      '<div style="background:#f0f4ff;border:1px solid #c7d7fe;border-radius:10px;padding:12px;margin-top:10px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+          '<div style="font-size:12px;font-weight:700;color:#1a237e">📋 Template Library</div>'+
+          '<span style="font-size:10px;color:#6b7280">'+twilioTemplates.length+' template'+(twilioTemplates.length!==1?'s':'')+'</span>'+
+        '</div>'+
+        // Saved templates list
+        (twilioTemplates.length?
+          '<div style="margin-bottom:10px">'+
+          twilioTemplates.map(function(t){
+            var isActive=t.contentSid===activeContentSid;
+            return '<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:'+(isActive?'#e0e7ff':'#fff')+';border:1px solid '+(isActive?'#6366f1':'#e5e7eb')+';border-radius:7px;margin-bottom:5px">'+
+              '<div style="flex:1;min-width:0">'+
+                '<div style="font-size:12px;font-weight:600;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(t.name)+(isActive?' <span style="font-size:10px;background:#6366f1;color:#fff;padding:1px 6px;border-radius:10px">Active</span>':'')+'</div>'+
+                '<div style="font-size:10px;color:#6b7280;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(t.contentSid)+'</div>'+
+              '</div>'+
+              '<button onclick="selectTwilioTemplate(\''+t.contentSid+'\')" style="padding:4px 10px;background:'+(isActive?'#6366f1':'#e0e7ff')+';color:'+(isActive?'#fff':'#3730a3')+';border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">'+(isActive?'✓ Selected':'Use')+'</button>'+
+              '<button onclick="deleteTwilioTemplate(\''+t.id+'\')" style="padding:4px 8px;background:#fff0f0;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;cursor:pointer">🗑</button>'+
+            '</div>';
+          }).join('')+
+          '</div>'
+        :
+          '<div style="font-size:11px;color:#9ca3af;margin-bottom:10px;padding:8px;background:#fff;border-radius:6px;text-align:center">No templates saved yet. Add your first template below.</div>'
+        )+
+        // Add new template form
+        '<div style="border-top:1px solid #c7d7fe;padding-top:10px">'+
+          '<div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px">➕ Add template</div>'+
+          '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end">'+
+            '<div><label style="font-size:10px;color:#6b7280">Template name</label><input type="text" id="tpl-name-input" placeholder="e.g. Balance Reminder" style="width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-top:2px"></div>'+
+            '<div><label style="font-size:10px;color:#6b7280">Content SID (HX...)</label><input type="text" id="tpl-sid-input" placeholder="HXxxxxxxxxxxxxxxxxxx" style="width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-top:2px;font-family:monospace"></div>'+
+            '<button onclick="addTwilioTemplate()" style="padding:7px 14px;background:#1a237e;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Add</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
     credSection=!ok?
       '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:1rem">'+
         '<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">⚙️ Twilio credentials required</div>'+
@@ -5612,24 +5648,58 @@ function buildMessagingPanel(){
           '<div><label style="font-size:11px">Auth Token</label><input type="password" id="twilio-token-input" placeholder="Auth token..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"></div>'+
           '<button onclick="saveTwilioCreds()" style="padding:8px 14px;background:#1a237e;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Save</button>'+
         '</div>'+
-        '<div style="margin-top:8px"><label style="font-size:11px">WhatsApp Template Content SID <span style="color:#888;font-weight:400">(from Twilio Console → Content Template Builder)</span></label>'+
-        '<input type="text" id="twilio-content-sid-input" placeholder="HXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" value="'+(DB.settings&&DB.settings.twilioContentSid?DB.settings.twilioContentSid:'')+'" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-top:4px"></div>'+
+        templateLibraryHtml+
         '</div>':
       '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:10px;padding:10px 14px;font-size:12px;color:#15803d;margin-bottom:1rem">'+
-        '✅ WhatsApp (Twilio) connected — +2347055693109 (egreatchidelectro)'+
-        (noPhone.length?' | <span style="color:#92400e">⚠ '+noPhone.length+' without phone</span>':'')+
-        ' <button onclick="clearTwilioCreds()" style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;text-decoration:underline">Change</button></div>';
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+          '<span>✅ WhatsApp (Twilio) connected — +2347055693109'+(activeContentSid?' | 📋 Template: <b>'+(twilioTemplates.find(function(t){return t.contentSid===activeContentSid;})||{name:activeContentSid}).name+'</b>':' | ⚠️ No template selected')+'</span>'+
+          (noPhone.length?'<span style="color:#92400e">⚠ '+noPhone.length+' without phone</span>':'')+
+          '<button onclick="clearTwilioCreds()" style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;text-decoration:underline">Change</button>'+
+        '</div>'+
+      '</div>'+
+      templateLibraryHtml;
   } else if(msgChannel==='meta'){
     var metaOk=DB.settings&&DB.settings.metaPhoneNumberId&&DB.settings.metaAccessToken;
+    var metaTemplates=DB.settings&&DB.settings.metaTemplates?DB.settings.metaTemplates:[];
+    var activeMetaTemplate=DB.settings&&DB.settings.metaTemplateName?DB.settings.metaTemplateName:'';
+    var metaTemplateLibraryHtml=
+      '<div style="background:#e8f4ff;border:1px solid #93c5fd;border-radius:10px;padding:12px;margin-top:10px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+          '<div style="font-size:12px;font-weight:700;color:#0d47a1">📋 Meta Template Library</div>'+
+          '<span style="font-size:10px;color:#6b7280">'+metaTemplates.length+' template'+(metaTemplates.length!==1?'s':'')+'</span>'+
+        '</div>'+
+        (metaTemplates.length?
+          '<div style="margin-bottom:10px">'+
+          metaTemplates.map(function(t){
+            var isActive=t.templateName===activeMetaTemplate;
+            return '<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:'+(isActive?'#dbeafe':'#fff')+';border:1px solid '+(isActive?'#3b82f6':'#e5e7eb')+';border-radius:7px;margin-bottom:5px">'+
+              '<div style="flex:1;min-width:0">'+
+                '<div style="font-size:12px;font-weight:600;color:#1e293b">'+esc(t.name)+(isActive?' <span style="font-size:10px;background:#0084ff;color:#fff;padding:1px 6px;border-radius:10px">Active</span>':'')+'</div>'+
+                '<div style="font-size:10px;color:#6b7280;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(t.templateName)+'</div>'+
+              '</div>'+
+              '<button onclick="selectMetaTemplate(\''+t.templateName.replace(/'/g,"\\'")+'\')" style="padding:4px 10px;background:'+(isActive?'#0084ff':'#dbeafe')+';color:'+(isActive?'#fff':'#1d4ed8')+';border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer">'+(isActive?'✓ Selected':'Use')+'</button>'+
+              '<button onclick="deleteMetaTemplate(\''+t.id+'\')" style="padding:4px 8px;background:#fff0f0;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;cursor:pointer">🗑</button>'+
+            '</div>';
+          }).join('')+
+          '</div>'
+        :
+          '<div style="font-size:11px;color:#9ca3af;margin-bottom:10px;padding:8px;background:#fff;border-radius:6px;text-align:center">No templates saved yet. Add your first template below.</div>'
+        )+
+        '<div style="border-top:1px solid #93c5fd;padding-top:10px">'+
+          '<div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px">➕ Add template</div>'+
+          '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end">'+
+            '<div><label style="font-size:10px;color:#6b7280">Friendly name</label><input type="text" id="meta-tpl-name-input" placeholder="e.g. New Month Greeting" style="width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-top:2px"></div>'+
+            '<div><label style="font-size:10px;color:#6b7280">Exact template name from Meta</label><input type="text" id="meta-tpl-tname-input" placeholder="e.g. great_chid_electro_..." style="width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-top:2px;font-family:monospace"></div>'+
+            '<button onclick="addMetaTemplate()" style="padding:7px 14px;background:#0084ff;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">Add</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
     credSection=!metaOk?
       '<div style="background:var(--warning-bg);border:1px solid #fcd34d;border-radius:10px;padding:12px;margin-bottom:1rem">'+
         '<div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px">⚙️ Meta Cloud API credentials required</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'+
           '<div><label style="font-size:11px">Phone Number ID</label><input type="text" id="meta-phone-id-input" placeholder="e.g. 123456789012345" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-top:3px"></div>'+
           '<div><label style="font-size:11px">Permanent Access Token</label><input type="password" id="meta-token-input" placeholder="EAAxxxxxxxxxxxxxxx..." style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-top:3px"></div>'+
-        '</div>'+
-        '<div style="margin-bottom:8px"><label style="font-size:11px">Template Name <span style="color:#888;font-weight:400">(exact name from Meta Business Manager)</span></label>'+
-          '<input type="text" id="meta-template-input" placeholder="e.g. great_chid_electro_global_doors_ltd" value="'+(DB.settings&&DB.settings.metaTemplateName?DB.settings.metaTemplateName:'great_chid_electro_global_doors_ltd')+'" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-top:3px">'+
         '</div>'+
         '<div style="margin-bottom:10px"><label style="font-size:11px">Language Code</label>'+
           '<input type="text" id="meta-lang-input" placeholder="en_US" value="'+(DB.settings&&DB.settings.metaLangCode?DB.settings.metaLangCode:'en_US')+'" style="width:120px;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-top:3px">'+
@@ -5639,11 +5709,16 @@ function buildMessagingPanel(){
           '<b>Where to find these:</b> Meta Business Suite → WhatsApp → API Setup → Phone Number ID & Access Token. '+
           'For a permanent token: Meta Business Manager → System Users → Generate token (WhatsApp Business Messaging + Management permissions).'+
         '</div>'+
+        metaTemplateLibraryHtml+
       '</div>':
       '<div style="background:#e8f4ff;border:1px solid #93c5fd;border-radius:10px;padding:10px 14px;font-size:12px;color:#1d4ed8;margin-bottom:1rem">'+
-        '💙 WhatsApp (Meta Cloud API) connected — Template: <b>'+(DB.settings.metaTemplateName||'—')+'</b>'+
-        (noPhone.length?' | <span style="color:#92400e">⚠ '+noPhone.length+' without phone</span>':'')+
-        ' <button onclick="clearMetaCreds()" style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;text-decoration:underline">Change</button></div>';
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+          '<span>💙 WhatsApp (Meta Cloud API) connected'+(activeMetaTemplate?' | 📋 Template: <b>'+(metaTemplates.find(function(t){return t.templateName===activeMetaTemplate;})||{name:activeMetaTemplate}).name+'</b>':' | ⚠️ No template selected')+'</span>'+
+          (noPhone.length?'<span style="color:#92400e">⚠ '+noPhone.length+' without phone</span>':'')+
+          '<button onclick="clearMetaCreds()" style="background:none;border:none;color:#c0392b;font-size:11px;cursor:pointer;text-decoration:underline">Change</button>'+
+        '</div>'+
+      '</div>'+
+      metaTemplateLibraryHtml;
   } else {
     var ok2=getTermiiApiKey();
     credSection=!ok2?
@@ -5713,6 +5788,43 @@ function saveTwilioCreds(){
   if(cSid&&cSid.value.trim())DB.settings.twilioContentSid=cSid.value.trim();
   saveData();renderApp();
   showToast('✅ Twilio credentials saved!','success');
+}
+function addTwilioTemplate(){
+  var nameEl=document.getElementById('tpl-name-input');
+  var sidEl=document.getElementById('tpl-sid-input');
+  if(!nameEl||!nameEl.value.trim()){alert('Enter a template name.');return;}
+  if(!sidEl||!sidEl.value.trim()){alert('Enter the Content SID.');return;}
+  var name=nameEl.value.trim();
+  var contentSid=sidEl.value.trim();
+  if(!contentSid.startsWith('HX')){alert('Content SID must start with HX...');return;}
+  if(!DB.settings)DB.settings={};
+  if(!DB.settings.twilioTemplates)DB.settings.twilioTemplates=[];
+  // Check for duplicate SID
+  if(DB.settings.twilioTemplates.find(function(t){return t.contentSid===contentSid;})){alert('This Content SID is already saved.');return;}
+  DB.settings.twilioTemplates.push({id:uid(),name:name,contentSid:contentSid});
+  // Auto-select if first template
+  if(DB.settings.twilioTemplates.length===1)DB.settings.twilioContentSid=contentSid;
+  saveData();renderApp();
+  showToast('✅ Template "'+name+'" added!','success');
+}
+function deleteTwilioTemplate(id){
+  if(!confirm('Remove this template?'))return;
+  if(!DB.settings||!DB.settings.twilioTemplates)return;
+  var tpl=DB.settings.twilioTemplates.find(function(t){return t.id===id;});
+  DB.settings.twilioTemplates=DB.settings.twilioTemplates.filter(function(t){return t.id!==id;});
+  // If deleted template was active, clear or switch to first available
+  if(tpl&&tpl.contentSid===DB.settings.twilioContentSid){
+    DB.settings.twilioContentSid=DB.settings.twilioTemplates.length?DB.settings.twilioTemplates[0].contentSid:'';
+  }
+  saveData();renderApp();
+  showToast('Template removed.','success');
+}
+function selectTwilioTemplate(contentSid){
+  if(!DB.settings)DB.settings={};
+  DB.settings.twilioContentSid=contentSid;
+  saveData();renderApp();
+  var tpl=(DB.settings.twilioTemplates||[]).find(function(t){return t.contentSid===contentSid;});
+  showToast('✅ Template "'+(tpl?tpl.name:contentSid)+'" selected for sending.','success');
 }
 function clearTwilioCreds(){if(!confirm('Remove Twilio credentials?'))return;if(DB.settings){DB.settings.twilioAccountSid='';DB.settings.twilioAuthToken='';}saveData();renderApp();}
 
@@ -5813,16 +5925,48 @@ function sendWhatsAppMessages(){msgChannel==='termii'?sendTermiiSMS():msgChannel
 function saveMetaCreds(){
   var phoneId=document.getElementById('meta-phone-id-input')?document.getElementById('meta-phone-id-input').value.trim():'';
   var token=document.getElementById('meta-token-input')?document.getElementById('meta-token-input').value.trim():'';
-  var tplName=document.getElementById('meta-template-input')?document.getElementById('meta-template-input').value.trim():'great_chid_electro_global_doors_ltd';
   var lang=document.getElementById('meta-lang-input')?document.getElementById('meta-lang-input').value.trim():'en_US';
   if(!phoneId||!token){alert('Enter both Phone Number ID and Access Token.');return;}
   if(!DB.settings)DB.settings={};
   DB.settings.metaPhoneNumberId=phoneId;
   DB.settings.metaAccessToken=token;
-  DB.settings.metaTemplateName=tplName||'great_chid_electro_global_doors_ltd';
   DB.settings.metaLangCode=lang||'en_US';
   saveData();renderApp();
-  alert('✅ Meta credentials saved!');
+  showToast('✅ Meta credentials saved!','success');
+}
+function addMetaTemplate(){
+  var nameEl=document.getElementById('meta-tpl-name-input');
+  var tnameEl=document.getElementById('meta-tpl-tname-input');
+  if(!nameEl||!nameEl.value.trim()){alert('Enter a friendly name.');return;}
+  if(!tnameEl||!tnameEl.value.trim()){alert('Enter the exact Meta template name.');return;}
+  var name=nameEl.value.trim();
+  var templateName=tnameEl.value.trim();
+  if(!DB.settings)DB.settings={};
+  if(!DB.settings.metaTemplates)DB.settings.metaTemplates=[];
+  if(DB.settings.metaTemplates.find(function(t){return t.templateName===templateName;})){alert('This template name is already saved.');return;}
+  DB.settings.metaTemplates.push({id:uid(),name:name,templateName:templateName});
+  // Auto-select if first template
+  if(DB.settings.metaTemplates.length===1)DB.settings.metaTemplateName=templateName;
+  saveData();renderApp();
+  showToast('✅ Template "'+name+'" added!','success');
+}
+function deleteMetaTemplate(id){
+  if(!confirm('Remove this template?'))return;
+  if(!DB.settings||!DB.settings.metaTemplates)return;
+  var tpl=DB.settings.metaTemplates.find(function(t){return t.id===id;});
+  DB.settings.metaTemplates=DB.settings.metaTemplates.filter(function(t){return t.id!==id;});
+  if(tpl&&tpl.templateName===DB.settings.metaTemplateName){
+    DB.settings.metaTemplateName=DB.settings.metaTemplates.length?DB.settings.metaTemplates[0].templateName:'';
+  }
+  saveData();renderApp();
+  showToast('Template removed.','success');
+}
+function selectMetaTemplate(templateName){
+  if(!DB.settings)DB.settings={};
+  DB.settings.metaTemplateName=templateName;
+  saveData();renderApp();
+  var tpl=(DB.settings.metaTemplates||[]).find(function(t){return t.templateName===templateName;});
+  showToast('✅ Template "'+(tpl?tpl.name:templateName)+'" selected for sending.','success');
 }
 
 function clearMetaCreds(){
