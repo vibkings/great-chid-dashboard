@@ -5839,7 +5839,7 @@ async function sendMetaWhatsApp(){
   if(!phoneNumberId||!accessToken){alert('Meta Cloud API credentials not configured. Go to Messaging settings and add your Phone Number ID and Access Token.');return;}
   if(!msgSelectedCusts.length){alert('Select at least one customer.');return;}
   var msgText=document.getElementById('msg-text')?document.getElementById('msg-text').value:'';
-  var custs=DB.customers.filter(function(c){return msgSelectedCusts.indexOf(c.id)>-1&&c.phone;});
+  var custs=DB.customers.filter(function(c){return msgSelectedCusts.indexOf(String(c.id))!==-1&&c.phone;});
   if(!custs.length){alert('No selected customers have phone numbers.');return;}
   var sent=0,failed=0,errors=[];
   var statusEl=document.getElementById('msg-status');
