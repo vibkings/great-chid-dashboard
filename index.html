@@ -9871,6 +9871,20 @@ function eiCustSearch(val, showAll){
   }).join('');
 }
 
+function eiSupplyStatusChange(){
+  var val=(document.querySelector('input[name="ei-supply-status"]:checked')||{}).value||'supplied';
+  var note=document.getElementById('ei-supply-note');
+  if(note){
+    if(val==='pending'){
+      note.textContent='⚠️ Changing to Not Yet Supplied will add items back to inventory and mark goods as pending.';
+      note.style.color='#92400e';
+    } else {
+      note.textContent='✅ Changing to Supplied will deduct items from inventory and record supply date as today.';
+      note.style.color='#15803d';
+    }
+  }
+}
+
 function eiPaymentChange(){
   var val=document.getElementById('ei-payment').value;
   var bankWrap=document.getElementById('ei-bank-wrap');
@@ -10139,6 +10153,25 @@ function editInvoice(invNum){
         '<thead><tr style="background:#f5f5f5"><th style="padding:6px;text-align:left">Item</th><th style="padding:6px">Qty</th><th style="padding:6px">Unit price</th><th style="padding:6px">Disc amt</th><th style="padding:6px">Total</th></tr></thead>'+
         '<tbody>'+itemRows+'</tbody>'+
       '</table>'+
+      // ── Supply Status ──────────────────────────────────────
+      '<div style="background:'+(s0.supplyStatus==='pending'||s0.pendingSupply?'#fff7ed':'#f0fdf4')+';border:1px solid '+(s0.supplyStatus==='pending'||s0.pendingSupply?'#fed7aa':'#86efac')+';border-radius:8px;padding:12px;margin-bottom:14px">'+
+        '<div style="font-size:12px;font-weight:700;color:'+(s0.supplyStatus==='pending'||s0.pendingSupply?'#92400e':'#15803d')+';margin-bottom:8px">📦 Supply Status</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
+          '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;border-radius:8px;border:2px solid '+(!(s0.supplyStatus==='pending'||s0.pendingSupply)?'#16a34a':'#cbd5e1')+';background:'+(!(s0.supplyStatus==='pending'||s0.pendingSupply)?'#f0fdf4':'#fff')+';font-size:13px;font-weight:600">'+
+            '<input type="radio" name="ei-supply-status" value="supplied" '+(!(s0.supplyStatus==='pending'||s0.pendingSupply)?'checked':'')+' onchange="eiSupplyStatusChange()" style="accent-color:#16a34a">'+
+            '<span style="color:#15803d">✅ Supplied</span>'+
+          '</label>'+
+          '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:8px 14px;border-radius:8px;border:2px solid '+((s0.supplyStatus==='pending'||s0.pendingSupply)?'#f59e0b':'#cbd5e1')+';background:'+((s0.supplyStatus==='pending'||s0.pendingSupply)?'#fff7ed':'#fff')+';font-size:13px;font-weight:600">'+
+            '<input type="radio" name="ei-supply-status" value="pending" '+((s0.supplyStatus==='pending'||s0.pendingSupply)?'checked':'')+' onchange="eiSupplyStatusChange()" style="accent-color:#f59e0b">'+
+            '<span style="color:#92400e">⏳ Not Yet Supplied</span>'+
+          '</label>'+
+        '</div>'+
+        '<div id="ei-supply-note" style="font-size:11px;color:#6b7280;margin-top:6px">'+
+          (s0.supplyStatus==='pending'||s0.pendingSupply?
+            '⚠️ Stock has NOT been deducted. Changing to Supplied will deduct items from inventory.':
+            '✅ Stock already deducted. Changing to Not Yet Supplied will add items back to inventory.')+
+        '</div>'+
+      '</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">'+
         '<div>'+
           '<label style="font-size:12px;font-weight:600;color:var(--text1,#374151);display:block;margin-bottom:4px">Invoice-level discount (₦)</label>'+
@@ -10328,6 +10361,57 @@ function saveInvoiceEdit(invNum){
     }
   }
   var newTotal=invSales.reduce(function(a,s){return a+s.total;},0);
+
+  // ── Supply status change ───────────────────────────────────
+  var eiSupplyVal=(document.querySelector('input[name="ei-supply-status"]:checked')||{}).value||'supplied';
+  var oldSupplyStatus=invSales[0].supplyStatus||'supplied';
+  var wasSupplied=!(oldSupplyStatus==='pending'||invSales[0].pendingSupply);
+  var nowSupplied=eiSupplyVal==='supplied';
+  if(wasSupplied!==nowSupplied){
+    var supplyStockChanges=[];
+    if(nowSupplied){
+      // Changing pending → supplied: deduct stock now
+      var supplyDateStr=new Date().toLocaleDateString();
+      invSales.forEach(function(s){
+        var invItem=DB.inventory.find(function(it){return it.id==s.itemId;});
+        if(invItem){
+          var before=invItem.qty;
+          invItem.qty=Math.max(0,invItem.qty-s.qty);
+          supplyStockChanges.push({name:s.name,before:before,after:invItem.qty,diff:-s.qty});
+          DB.adjLog.push({id:uid(),itemId:invItem.id,itemName:invItem.name,type:'remove',
+            reason:'Invoice #'+invNum+' marked as Supplied (edit). Qty deducted: '+s.qty+'. '+reason,
+            before:before,change:-s.qty,after:invItem.qty,
+            date:new Date().toLocaleDateString(),by:DB.currentUser.name});
+        }
+        s.supplyStatus='supplied';
+        s.pendingSupply=false;
+        s.supplyDate=supplyDateStr;
+        s.wasEverPending=true;
+      });
+      stockChanges=stockChanges.concat(supplyStockChanges);
+      logActivity('Invoice supply status changed','Invoice #'+invNum+' → Supplied. Stock deducted.','Admin: '+DB.currentUser.name);
+    } else {
+      // Changing supplied → pending: add stock back
+      invSales.forEach(function(s){
+        var invItem=DB.inventory.find(function(it){return it.id==s.itemId;});
+        if(invItem){
+          var before=invItem.qty;
+          invItem.qty=invItem.qty+s.qty;
+          supplyStockChanges.push({name:s.name,before:before,after:invItem.qty,diff:s.qty});
+          DB.adjLog.push({id:uid(),itemId:invItem.id,itemName:invItem.name,type:'add',
+            reason:'Invoice #'+invNum+' marked as Not Yet Supplied (edit). Qty returned: '+s.qty+'. '+reason,
+            before:before,change:s.qty,after:invItem.qty,
+            date:new Date().toLocaleDateString(),by:DB.currentUser.name});
+        }
+        s.supplyStatus='pending';
+        s.pendingSupply=true;
+        s.supplyDate=null;
+      });
+      stockChanges=stockChanges.concat(supplyStockChanges);
+      logActivity('Invoice supply status changed','Invoice #'+invNum+' → Not Yet Supplied. Stock added back.','Admin: '+DB.currentUser.name);
+    }
+  }
+
   saveData();
   // Recalculate totalSpent on affected customer(s)
   var _affIds=[s0.custId, newCustId].filter(Boolean);
