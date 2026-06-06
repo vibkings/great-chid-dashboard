@@ -5842,7 +5842,7 @@ async function sendMetaWhatsApp(){
   var custs=DB.customers.filter(function(c){return msgSelectedCusts.indexOf(String(c.id))!==-1&&c.phone;});
   if(!custs.length){alert('No selected customers have phone numbers.');return;}
   var sent=0,failed=0,errors=[];
-  var statusEl=document.getElementById('msg-status');
+  var statusEl=document.getElementById('msg-send-status');
   if(statusEl)statusEl.innerHTML='<span style="color:#0084ff">💙 Sending via Meta Cloud API...</span>';
   for(var i=0;i<custs.length;i++){
     var c=custs[i];
