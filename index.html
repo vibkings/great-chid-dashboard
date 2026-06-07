@@ -1544,6 +1544,134 @@ function exportBackup() {
   URL.revokeObjectURL(url);
 }
 
+// ── Download latest data directly from Firestore ─────────────
+function downloadFromFirestore() {
+  var btn = document.querySelector('[onclick="downloadFromFirestore()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Fetching...'; }
+  showToast('Fetching latest data from Firestore…', 'info');
+  var cols = GCE_COLLECTIONS.slice();
+  var pending = cols.length;
+  var fetched = {};
+  var errors = 0;
+  cols.forEach(function(colName) {
+    fbGetCollection(colName, function(err, payload) {
+      if (!err && payload) { fetched[colName] = payload; } else { errors++; }
+      pending--;
+      if (pending === 0) {
+        if (btn) { btn.disabled = false; btn.textContent = '☁️⬇ Download'; }
+        if (errors === cols.length) { showToast('❌ Could not reach Firestore. Check your connection.', 'error'); return; }
+        var snapshot = {};
+        var keyMap = {
+          sales:'sales',inventory:'inventory',customers:'customers',suppliers:'suppliers',
+          purchases:'purchases',cashflow:'cashflow',creditPayments:'creditPayments',
+          deposits:'deposits',salesReturns:'salesReturns',adjLog:'adjLog',
+          stockCounts:'stockCounts',commissionLedger:'commissionLedger',proformas:'proformas',
+          supplierPayments:'supplierPayments',tillSessions:'tillSessions',
+          activityLog:'activityLog',settings:'settings',supplierDeposits:'supplierDeposits',
+          demoSales:'demoSales',creditCustomers:'creditCustomers',users:'users',
+          banks:'banks',posTerminals:'posTerminals',categories:'categories',
+          expenseCats:'expenseCats',transferLog:'transferLog',warehouse:'warehouse',
+          recycleBin:'recycleBin',drafts:'drafts',pendingDeliveries:'pendingDeliveries',meta:'_meta'
+        };
+        cols.forEach(function(c) {
+          var p = fetched[c]; if (!p) return;
+          var data = p.data !== undefined ? p.data : p;
+          var key = keyMap[c] || c;
+          if (key === '_meta' && typeof data === 'object' && !Array.isArray(data)) { Object.assign(snapshot, data); }
+          else { snapshot[key] = data; }
+        });
+        snapshot.exportedAt = new Date().toISOString();
+        snapshot.exportSource = 'firestore';
+        snapshot.version = 'v18';
+        var blob = new Blob([JSON.stringify(snapshot, null, 2)], {type:'application/json'});
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'gce_firestore_' + new Date().toISOString().slice(0,10) + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('✅ Firestore data downloaded! (' + (cols.length - errors) + '/' + cols.length + ' collections)', 'success');
+      }
+    });
+  });
+}
+
+// ── Safe Restore: import backup to localStorage without auto-syncing ──
+function showSafeRestoreModal() {
+  var old = document.getElementById('safe-restore-modal'); if (old) old.remove();
+  var overlay = document.createElement('div');
+  overlay.id = 'safe-restore-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  overlay.innerHTML =
+    '<div style="background:var(--bg);border-radius:16px;width:100%;max-width:500px;overflow:hidden;box-shadow:var(--neu-shadow-lg)">'+
+      '<div style="background:linear-gradient(135deg,#4A3020,#6B5237);padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
+        '<div>'+
+          '<div style="font-size:15px;font-weight:800;color:#fff">☁️ Restore from Firestore Backup</div>'+
+          '<div style="font-size:11px;color:rgba(255,255,255,.8);margin-top:2px">Import a downloaded Firestore backup safely</div>'+
+        '</div>'+
+        '<button onclick="document.getElementById(\'safe-restore-modal\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
+      '</div>'+
+      '<div style="padding:18px">'+
+        '<div style="background:var(--warning-bg);border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;font-size:12px;color:var(--warning-text);margin-bottom:14px">'+
+          '⚠️ <b>This replaces your current local data</b> with the backup file.<br>'+
+          'Data will NOT be pushed to Firestore automatically — you control when to sync.'+
+        '</div>'+
+        '<div style="margin-bottom:14px">'+
+          '<label style="font-size:11px;font-weight:700;color:var(--text2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Select backup file (.json)</label>'+
+          '<input type="file" id="safe-restore-file" accept=".json" style="width:100%;padding:8px;border:none;border-radius:8px;font-size:13px;background:var(--bg);box-shadow:var(--neu-inset-sm)">'+
+        '</div>'+
+        '<div id="safe-restore-preview" style="display:none;border-radius:8px;padding:10px 14px;font-size:12px;margin-bottom:14px"></div>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button id="safe-restore-btn" onclick="doSafeRestore()" style="flex:1;padding:11px;background:linear-gradient(135deg,#4A3020,#6B5237);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer" disabled>✅ Restore to This Device</button>'+
+          '<button onclick="document.getElementById(\'safe-restore-modal\').remove()" style="padding:11px 18px;background:var(--bg);color:var(--text2);border:none;border-radius:8px;font-size:13px;cursor:pointer;box-shadow:var(--neu-shadow-sm)">Cancel</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('safe-restore-file').addEventListener('change', function() {
+    var file = this.files[0]; if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var preview = document.getElementById('safe-restore-preview');
+      var btn = document.getElementById('safe-restore-btn');
+      try {
+        var snap = JSON.parse(e.target.result);
+        if (!snap.inventory && !snap.sales) {
+          preview.style.cssText = 'display:block;background:var(--danger-bg);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:12px;color:#991B1B;margin-bottom:14px';
+          preview.innerHTML = '❌ Invalid backup file — no sales or inventory data found.';
+          btn.disabled = true; return;
+        }
+        preview.style.cssText = 'display:block;background:var(--success-bg);border:1px solid #A7F3D0;border-radius:8px;padding:10px 14px;font-size:12px;color:#065F46;margin-bottom:14px';
+        preview.innerHTML =
+          '<b>✅ Valid backup detected</b><br>'+
+          'Source: '+(snap.exportSource==='firestore'?'☁️ Firestore':'💾 Local backup')+'<br>'+
+          'Exported: '+(snap.exportedAt?new Date(snap.exportedAt).toLocaleString():'Unknown')+'<br>'+
+          'Sales: '+((snap.sales||[]).length)+' &nbsp;·&nbsp; Inventory: '+((snap.inventory||[]).length)+' &nbsp;·&nbsp; Customers: '+((snap.customers||[]).length);
+        btn.disabled = false;
+        overlay._pendingSnapshot = snap;
+      } catch(ex) {
+        preview.style.cssText = 'display:block;background:var(--danger-bg);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:12px;color:#991B1B;margin-bottom:14px';
+        preview.innerHTML = '❌ Could not read file. Make sure it is a valid .json backup.';
+      }
+    };
+    reader.readAsText(file);
+  });
+}
+
+function doSafeRestore() {
+  var overlay = document.getElementById('safe-restore-modal');
+  var snap = overlay && overlay._pendingSnapshot;
+  if (!snap) { alert('No file selected.'); return; }
+  if (!confirm('Restore this backup to your local device?\n\nFirestore will NOT be updated until you manually sync.')) return;
+  applySnapshot(snap);
+  saveData();
+  fbSyncInProgress = true;
+  setTimeout(function() { fbSyncInProgress = false; }, 60000);
+  overlay.remove();
+  showToast('✅ Backup restored! Review your data before syncing to Firestore.', 'success');
+  renderApp();
+}
+
 // ── Auto Backup System ────────────────────────────────────────
 // Keeps rolling backups in localStorage — up to 7 days
 // Keys: gce_autobackup_YYYY-MM-DD (daily) + gce_autobackup_hourly (last hour)
@@ -3492,6 +3620,8 @@ function renderApp(){
         '<div class="topbar-actions">'+
           '<div id="sync-indicator" class="sync-badge local">🔵 Connecting...</div>'+
           '<button class="btn sm" onclick="showFirebaseDiag()" title="Firebase diagnostics" style="font-size:11px;padding:4px 8px;color:var(--text3)">🔍 Sync</button>'+
+          '<button class="btn sm" onclick="downloadFromFirestore()" title="Download latest Firestore data to device" style="color:#1d4ed8;border-color:#93c5fd">☁️⬇ Download</button>'+
+          '<button class="btn sm" onclick="showSafeRestoreModal()" title="Restore a Firestore backup to this device" style="color:#15803d;border-color:#86efac">☁️↑ Restore</button>'+
           '<button class="btn sm" onclick="exportBackup()" title="Export data backup">&#11015; Backup</button>'+
           '<button class="btn sm" onclick="showAutoBackupPanel()" title="Auto backup history" style="color:#15803d;border-color:#86efac">🔄</button>'+
           '<button class="btn sm" onclick="toggleDarkMode()" title="Toggle dark/light mode" id="dark-mode-btn" style="font-size:14px;padding:4px 8px">'+(isDarkMode()?'☀️':'🌙')+'</button>'+
@@ -11816,8 +11946,17 @@ function buildPurchases(){
       '<td>'+p.date+'</td>'+
       '<td><b>'+(p.invoiceNum||'-')+'</b></td>'+
       '<td>'+esc(p.supName)+'</td>'+
-      '<td style="font-size:11px">'+p.items.map(function(l){return l.name+' x'+(l.qtyReceived||l.qty);}).join(', ')+'</td>'+
-      '<td style="text-align:center">'+totalItems+'</td>'+
+      '<td style="font-size:12px">'+
+        (function(){
+          var first=p.items[0];
+          var firstQty=first?(first.qtyOrdered||first.qtyReceived||first.qty||0):0;
+          var firstName=first?esc(first.name):'';
+          var more=p.items.length-1;
+          return '<span style="color:var(--text2)">'+firstName+' <span style="color:var(--text3)">x'+firstQty+'</span></span>'+
+            (more>0?'<br><span style="color:var(--primary);font-size:11px;cursor:pointer" onclick="viewPurchaseRecord('+p.id+')">...'+more+' more item'+(more>1?'s':'')+'</span>':'');
+        })()+
+      '</td>'+
+      '<td style="display:none">'+totalItems+'</td>'+
       '<td style="text-align:right"><b>'+fmt(p.grandTotal)+'</b></td>'+
       '<td>'+payBadge+'<div style="font-size:10px;color:var(--text3);margin-top:2px">'+puModeLabel+'</div></td>'+
       '<td>'+esc(p.by)+'</td>'+
@@ -11992,7 +12131,7 @@ function buildPurchases(){
         '<input type="text" id="purch-search-input" placeholder="Search purchases..." value="'+purchaseSearch+'" oninput="purchaseSearch=this.value;window._purchPage=0;renderPanel()" style="padding-left:32px;width:100%;font-size:13px">'+
       '</div>'+
     '</div>'+
-    (puRows?'<div class="tbl-wrap"><table id="purchases-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Supplier</th><th>Items</th><th style="text-align:center">Units</th><th style="text-align:right">Total</th><th>Payment</th><th>By</th><th></th></tr></thead><tbody>'+puRows+_purchPager+'</tbody></table></div>':'<div class="empty">No purchases recorded yet.</div>')+
+    (puRows?'<div class="tbl-wrap"><table id="purchases-table"><thead><tr><th>Date</th><th>Invoice #</th><th>Supplier</th><th>Items</th><th style="display:none">Units</th><th style="text-align:right">Total</th><th>Payment</th><th>By</th><th></th></tr></thead><tbody>'+puRows+_purchPager+'</tbody></table></div>':'<div class="empty">No purchases recorded yet.</div>')+
     pendingRows+
     buildPurchaseQuotationsSection()+
     buildPurchaseReturnsSection();
