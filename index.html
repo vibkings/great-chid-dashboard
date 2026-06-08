@@ -8340,6 +8340,7 @@ function submitInvoice(){
   }
   if(confirm(saveMsg+'\n\nPrint invoice now?')){
     printInvoice(DB._lastInvoice);
+    renderApp();
   } else {renderApp();}
 }
 
@@ -8446,11 +8447,11 @@ function doPrint(mode, inv) {
   var w=window.open('','_blank','width=700,height=900');
   w.document.write(html);w.document.close();
   setTimeout(function(){w.print();},500);
-  // Reset the full sales form if this print came from a fresh sale (not a reprint)
-  if(activeTab==='sales'&&invoiceItems.length){
+  // Reset the full sales form after print (invoiceItems already cleared by submitInvoice)
+  if(activeTab==='sales'){
     invoiceItems=[];
     window._pendingProformaConvert=null;
-    renderPanel();
+    window._depTopup=null;
   }
 }
 
