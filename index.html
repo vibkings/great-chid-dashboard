@@ -2095,14 +2095,14 @@ function showAutoBackupPanel() {
   var list = autoBackupList();
   var lastTime = localStorage.getItem(AUTO_BACKUP_PREFIX+'lastTime');
   var lastLabel = lastTime ? new Date(lastTime).toLocaleString() : 'Never';
-  var lastOneDrive = localStorage.getItem('gce_onedrive_last_backup');
+  var lastOneDrive = localStorage.getItem('gce_gdrive_last_backup');
   var oneDriveLabel = lastOneDrive ? new Date(lastOneDrive).toLocaleString() : 'Never';
-  var hasOneDrive = !!localStorage.getItem('gce_onedrive_client_id');
+  var hasOneDrive = !!(localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId);
   var rows = list.length ? list.map(function(b) {
     return '<tr>'+
       '<td style="font-weight:600">'+b.date+'</td>'+
       '<td><button class="btn sm" onclick="autoBackupDownload(\''+b.key+'\')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">⬇ Download</button></td>'+
-      '<td><button class="btn sm" onclick="autoBackupToOneDrive(false)" style="color:#0078d4;border-color:#93c5fd;font-size:11px">☁️ OneDrive</button></td>'+
+      '<td><button class="btn sm" onclick="autoBackupToGDrive(false)" style="color:#15803d;border-color:#86efac;font-size:11px">☁️ Drive</button></td>'+
       '<td><button class="btn sm" onclick="autoBackupRestore(\''+b.key+'\')" style="color:#dc2626;border-color:#fca5a5;font-size:11px">↩ Restore</button></td>'+
     '</tr>';
   }).join('') : '<tr><td colspan="4" class="empty">No auto backups yet.</td></tr>';
@@ -2116,21 +2116,22 @@ function showAutoBackupPanel() {
       '<button onclick="document.getElementById(\'auto-backup-panel\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">&times;</button>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Last saved: <b>'+lastLabel+'</b></div>'+
-    '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Last OneDrive: <b style="color:'+(lastOneDrive?'#0078d4':'#888')+'">'+oneDriveLabel+'</b></div>'+
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Last Google Drive: <b style="color:'+(lastOneDrive?'#15803d':'#888')+'">'+oneDriveLabel+'</b></div>'+
     '<div style="font-size:11px;color:#166534;background:#f0fdf4;border-radius:6px;padding:6px 10px;margin-bottom:10px">'+
       '✅ Auto saves every hour + after each sale. Keeps last 7 days.'+
     '</div>'+
-    // OneDrive banner
-    '<div style="background:'+(hasOneDrive?'#eff6ff':'#fffbeb')+';border:1px solid '+(hasOneDrive?'#93c5fd':'#fcd34d')+';border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px">'+
+    // Google Drive banner
+    '<div style="background:'+(hasOneDrive?'#f0fdf4':'#fffbeb')+';border:1px solid '+(hasOneDrive?'#86efac':'#fcd34d')+';border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px">'+
       (hasOneDrive ?
-        '<b style="color:#1d4ed8">☁️ OneDrive connected</b><br>'+
-        '<span style="color:#3b82f6">Uploads to: OneDrive/GCE Backups/</span><br>'+
-        '<button onclick="autoBackupToOneDrive(false)" style="margin-top:6px;padding:5px 12px;background:#0078d4;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁️ Upload Now</button>'+
-        ' <button onclick="showOneDriveSetup()" style="margin-top:6px;padding:5px 10px;background:#fff;color:#0078d4;border:1px solid #93c5fd;border-radius:6px;font-size:11px;cursor:pointer">⚙️ Settings</button>'
+        '<b style="color:#15803d">☁️ Google Drive connected</b><br>'+
+        '<span style="color:#16a34a">Uploads to: Drive/GCE Backups/</span><br>'+
+        '<span style="color:var(--text3);font-size:10px">Last backup: '+oneDriveLabel+'</span><br>'+
+        '<button onclick="autoBackupToGDrive(false)" style="margin-top:6px;padding:5px 12px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">☁️ Upload Now</button>'+
+        ' <button onclick="showGDriveSetup()" style="margin-top:6px;padding:5px 10px;background:#fff;color:#15803d;border:1px solid #86efac;border-radius:6px;font-size:11px;cursor:pointer">⚙️ Settings</button>'
         :
-        '<b style="color:#92400e">☁️ OneDrive not connected</b><br>'+
-        '<span style="color:#78716c">Connect OneDrive for automatic cloud backup</span><br>'+
-        '<button onclick="showOneDriveSetup()" style="margin-top:6px;padding:5px 12px;background:#0078d4;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">🔌 Connect OneDrive</button>'
+        '<b style="color:#92400e">☁️ Google Drive not connected</b><br>'+
+        '<span style="color:#78716c">Connect Google Drive for automatic cloud backup</span><br>'+
+        '<button onclick="showGDriveSetup()" style="margin-top:6px;padding:5px 12px;background:#15803d;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">🔌 Connect Google Drive</button>'
       )+
     '</div>'+
     '<div class="tbl-wrap" style="margin-bottom:10px"><table><thead><tr><th>Date</th><th></th><th></th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
