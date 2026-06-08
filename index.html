@@ -3339,11 +3339,13 @@ function logActivity(action, detail, extra){
     time:new Date().toLocaleTimeString(),
     ts:Date.now()
   });
-  // Keep last 200 entries to stay well under Firestore 1MB doc limit
-  if(DB.activityLog.length>200)DB.activityLog=DB.activityLog.slice(0,200);
+  // Keep last 500 entries to stay well under Firestore 1MB doc limit
+  if(DB.activityLog.length>500)DB.activityLog=DB.activityLog.slice(0,500);
+  // Save to localStorage immediately so it's not lost on next sync
+  try { localStorage.setItem('gce_db', JSON.stringify(buildSnapshot())); } catch(e) {}
   // Immediately sync activityLog to Firestore (don't wait for batch save)
   fbSetCollection('activityLog', DB.activityLog, null, function(err){
-    console.warn('activityLog sync failed:', err);
+    if(err) console.warn('activityLog sync failed:', err);
   });
 }
 
@@ -8328,6 +8330,7 @@ function submitInvoice(){
   fbSetCollection('sales', DB.sales, null, function(err){ console.warn('sales immediate sync failed:', err); });
   fbSetCollection('cashflow', DB.cashflow, null, function(err){ console.warn('cashflow immediate sync failed:', err); });
   fbSetCollection('inventory', DB.inventory, null, function(err){ console.warn('inventory immediate sync failed:', err); });
+  fbSetCollection('activityLog', DB.activityLog, null, function(err){ console.warn('activityLog immediate sync failed:', err); });
   var saveMsg='Invoice #'+invNum+' saved!';
   if(pendingSupply){
     saveMsg+='\n\n⏳ GOODS NOT YET SUPPLIED\nPayment recorded. Stock will NOT be deducted until you mark the goods as supplied from the sales ledger.';
