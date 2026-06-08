@@ -2638,7 +2638,9 @@ function buildClosingReport(){
       var todaySession=(DB.tillSessions||[]).find(function(t){return t.date===closingDate;});
       var openFloat=todaySession?todaySession.openFloat:0;
       var cashExpToday=expToday.filter(function(e){return !e.payMode||e.payMode==='cash';}).reduce(function(a,e){return a+e.amount;},0);
-      var expectedCash=openFloat+cash-cashExpToday;
+      var cashRetToday=DB.cashflow.filter(function(c){return c.isReturn&&c.type==='out'&&(!c.payMode||c.payMode==='cash')&&dateInRange(c.date,closingDate,closingDate);}).reduce(function(a,c){return a+c.amount;},0);
+      var totalCashOut=cashExpToday+cashRetToday;
+      var expectedCash=openFloat+cash-totalCashOut;
       var closingCount=todaySession?todaySession.closingCount:null;
       var variance=closingCount!==null?closingCount-expectedCash:null;
       return '<div class="card" style="margin-bottom:1rem;border-left:4px solid #15803d">'+
@@ -2653,11 +2655,11 @@ function buildClosingReport(){
             '<div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#15803d">'+fmt(cash)+'</div>'+
           '</div>'+
           '</div>'+
-          (cashExpToday>0?'<div style="background:var(--danger-bg);border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Cash expenses out</div><div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#dc2626">-'+fmt(cashExpToday)+'</div></div>':'')+
+          (totalCashOut>0?'<div style="background:var(--danger-bg);border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Cash out (expenses'+(cashRetToday>0?' + returns':'')+')</div><div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#dc2626">-'+fmt(totalCashOut)+'</div>'+(cashRetToday>0?'<div style="font-size:9px;color:#dc2626;margin-top:2px">Expenses: '+fmt(cashExpToday)+' · Returns: '+fmt(cashRetToday)+'</div>':'')+'</div>':'')+
           '<div style="background:var(--primary-bg);border:1px solid #93c5fd;border-radius:8px;padding:10px;text-align:center">'+
             '<div style="font-size:11px;color:#666;margin-bottom:4px">Expected in till</div>'+
             '<div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#1d4ed8">'+fmt(expectedCash)+'</div>'+
-            '<div style="font-size:9px;color:#6b7280;margin-top:2px">'+(cashExpToday>0?'Float + Sales - Expenses':'Float + Cash sales')+'</div>'+
+            '<div style="font-size:9px;color:#6b7280;margin-top:2px">'+(totalCashOut>0?'Float + Sales - Cash out':'Float + Cash sales')+'</div>'+
           '</div>'+
           (closingCount!==null?
             '<div style="background:'+(variance===0?'#f0fdf4':variance>0?'#eff6ff':'#fff5f5')+';border:1px solid '+(variance===0?'#86efac':variance>0?'#93c5fd':'#fca5a5')+';border-radius:8px;padding:10px;text-align:center">'+
