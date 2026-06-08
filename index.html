@@ -9454,7 +9454,7 @@ function buildSales(){
     if(sel&&window._saleRegCustId){sel.value=window._saleRegCustId;onSaleCustChange(window._saleRegCustId);}
   },70);
   var invoiceGroups={};
-  DB.sales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invoiceGroups[k])invoiceGroups[k]={invoiceNum:s.invoiceNum||' - ',date:s.date,custName:s.custName,custId:s.custId,items:[],total:0,profit:0,payMode:s.payMode,bankId:s.bankId,posId:s.posId,payment:s.payment,seller:s.seller,_s:s};invoiceGroups[k].items.push(s);invoiceGroups[k].total+=s.total;invoiceGroups[k].profit+=s.profit;});
+  DB.sales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invoiceGroups[k])invoiceGroups[k]={invoiceNum:s.invoiceNum||' - ',date:s.date,custName:s.custName,custId:s.custId,items:[],total:0,profit:0,payMode:s.payMode,bankId:s.bankId,posId:s.posId,payment:s.payment,seller:s.seller,creditAmt:s.creditAmt||0,partAmt:s.partAmt||0,splitPayment:s.splitPayment,_s:s};invoiceGroups[k].items.push(s);invoiceGroups[k].total+=s.total;invoiceGroups[k].profit+=s.profit;});
   var _salesSearchTerm=(salesSearch||'').toLowerCase().trim();
   var invoiceKeys=Object.keys(invoiceGroups).reverse().filter(function(k){
     var g=invoiceGroups[k];
@@ -9483,9 +9483,16 @@ function buildSales(){
     var g=invoiceGroups[k];
     filteredRev+=g.total;
     filteredProfit+=g.profit;
-    if(g.payment==='credit')filteredCredit+=g.total;
-    else if(g.payment==='part')filteredPart+=g.total;
-    if(g.payMode==='split'&&g.splitPayment){
+    if(g.payment==='credit'){
+      filteredCredit+=g.total;
+    } else if(g.payment==='part'){
+      var partCreditAmt=g.creditAmt||0;
+      var partCashAmt=g.partAmt||(g.total-partCreditAmt)||0;
+      filteredCredit+=partCreditAmt;
+      filteredPart+=partCashAmt;
+      function addFPart(m,a){if(m==='pos')filteredPos+=a;else if(m==='transfer')filteredTransfer+=a;else filteredCash+=a;}
+      addFPart(g.payMode,partCashAmt);
+    } else if(g.payMode==='split'&&g.splitPayment){
       var sp=g.splitPayment;
       function addFSplit(m,a){if(m==='pos')filteredPos+=a;else if(m==='transfer')filteredTransfer+=a;else filteredCash+=a;}
       addFSplit(sp.mode1,sp.amt1||0);addFSplit(sp.mode2,sp.amt2||0);
