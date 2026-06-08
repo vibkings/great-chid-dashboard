@@ -2660,7 +2660,8 @@ function buildClosingReport(){
       var openFloat=todaySession?todaySession.openFloat:0;
       var cashExpToday=expToday.filter(function(e){return !e.payMode||e.payMode==='cash';}).reduce(function(a,e){return a+e.amount;},0);
       var cashRetToday=DB.cashflow.filter(function(c){return c.isReturn&&c.type==='out'&&(!c.payMode||c.payMode==='cash')&&dateInRange(c.date,closingDate,closingDate);}).reduce(function(a,c){return a+c.amount;},0);
-      var totalCashOut=cashExpToday+cashRetToday;
+      var cashChangeToday=DB.cashflow.filter(function(c){return c.isChange&&c.type==='out'&&(!c.payMode||c.payMode==='cash')&&dateInRange(c.date,closingDate,closingDate);}).reduce(function(a,c){return a+c.amount;},0);
+      var totalCashOut=cashExpToday+cashRetToday+cashChangeToday;
       var expectedCash=openFloat+cash-totalCashOut;
       var closingCount=todaySession?todaySession.closingCount:null;
       var variance=closingCount!==null?closingCount-expectedCash:null;
@@ -2676,7 +2677,7 @@ function buildClosingReport(){
             '<div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#15803d">'+fmt(cash)+'</div>'+
           '</div>'+
           '</div>'+
-          (totalCashOut>0?'<div style="background:var(--danger-bg);border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Cash out (expenses'+(cashRetToday>0?' + returns':'')+')</div><div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#dc2626">-'+fmt(totalCashOut)+'</div>'+(cashRetToday>0?'<div style="font-size:9px;color:#dc2626;margin-top:2px">Expenses: '+fmt(cashExpToday)+' · Returns: '+fmt(cashRetToday)+'</div>':'')+'</div>':'')+
+          (totalCashOut>0?'<div style="background:var(--danger-bg);border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Cash out (expenses'+(cashRetToday>0?' + returns':'')+(cashChangeToday>0?' + change':'')+')</div><div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#dc2626">-'+fmt(totalCashOut)+'</div>'+(cashRetToday>0||cashChangeToday>0?'<div style="font-size:9px;color:#dc2626;margin-top:2px">Exp: '+fmt(cashExpToday)+(cashRetToday>0?' · Returns: '+fmt(cashRetToday):'')+(cashChangeToday>0?' · Change: '+fmt(cashChangeToday):'')+'</div>':'')+'</div>':'')+
           '<div style="background:var(--primary-bg);border:1px solid #93c5fd;border-radius:8px;padding:10px;text-align:center">'+
             '<div style="font-size:11px;color:#666;margin-bottom:4px">Expected in till</div>'+
             '<div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#1d4ed8">'+fmt(expectedCash)+'</div>'+
@@ -9036,6 +9037,17 @@ function showReturnModal(invoiceId){
               '<input type="number" id="ret-exch-payamt" readonly style="width:120px;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#f9fafb">'+
             '</div>'+
           '</div>'+
+          '<div id="ret-exch-change-row" style="display:none;margin-top:10px">'+
+            '<div style="font-size:12px;font-weight:600;color:#15803d;margin-bottom:6px">💵 Return value exceeds exchange — pay change to customer:</div>'+
+            '<div style="display:flex;gap:8px;align-items:center">'+
+              '<select id="ret-exch-changemode" style="flex:1;padding:6px;border:1px solid #86efac;border-radius:6px;font-size:12px">'+
+                '<option value="cash">Cash</option>'+
+                '<option value="transfer">Bank Transfer</option>'+
+                '<option value="pos">POS</option>'+
+              '</select>'+
+              '<input type="number" id="ret-exch-changeamt" readonly style="width:120px;padding:6px;border:1px solid #86efac;border-radius:6px;font-size:12px;background:#f0fdf4">'+
+            '</div>'+
+          '</div>'+
         '</div>'+
       '</div>'+
       '<div style="display:flex;gap:8px;margin-top:1rem">'+
@@ -9189,8 +9201,12 @@ function retUpdateExchangeTotal(){
       balEl.style.color='#374151';
     }
   }
+  var changeRow=document.getElementById('ret-exch-change-row');
+  var changeAmtInp=document.getElementById('ret-exch-changeamt');
   if(payRow)payRow.style.display=balance>0?'block':'none';
   if(payAmtInp)payAmtInp.value=balance>0?Math.round(balance):'';
+  if(changeRow)changeRow.style.display=balance<0?'block':'none';
+  if(changeAmtInp)changeAmtInp.value=balance<0?Math.round(Math.abs(balance)):'';
 }
 
 function processReturn(invoiceId){
@@ -9307,10 +9323,11 @@ function processReturn(invoiceId){
           desc:'Exchange balance payment — Return of Invoice #'+items[0].invoiceNum+' ('+items[0].custName+')',
           amount:balance,type:'in',cat:'Sales',payMode:exchPayMode,date:date,month:month,isExchange:true});
       } else if(balance<0){
-        // Shop owes change back
+        // Shop owes change back — use selected payout mode
+        var exchChangeMode=(document.getElementById('ret-exch-changemode')||{}).value||'cash';
         DB.cashflow.push({id:uid(),
           desc:'Exchange change given — Return of Invoice #'+items[0].invoiceNum+' ('+items[0].custName+')',
-          amount:Math.abs(balance),type:'out',cat:'Sales Return',payMode:'cash',date:date,month:month,isExchange:true});
+          amount:Math.abs(balance),type:'out',cat:'Sales Return',payMode:exchChangeMode,date:date,month:month,isExchange:true,isReturn:true});
       }
     }
   }
