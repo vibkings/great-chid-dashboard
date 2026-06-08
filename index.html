@@ -1763,7 +1763,7 @@ function autoBackupDownload(key) {
 
 // ── Google Drive backup integration ──────────────────────────
 var GDrive = {
-  clientId: '148066739673-9q2v0p7k3m8n5r6t1u4w0x2y8z3a5b7c.apps.googleusercontent.com',
+  clientId: '897745552019-8q6fbec8unf6ii87c1sschfhc4ptfinm.apps.googleusercontent.com',
   scope: 'https://www.googleapis.com/auth/drive.file',
   token: null,
   tokenExpiry: 0
@@ -1776,10 +1776,14 @@ function gDriveGetToken(onSuccess, onError) {
   if (saved && Date.now() < expiry) { GDrive.token = saved; onSuccess(saved); return; }
 
   // Get clientId from settings
-  var clientId = localStorage.getItem('gce_gdrive_client_id');
+  var clientId = localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId;
   if (!clientId) {
     if (onError) onError('Google Drive not configured. Click "Connect Google Drive" first.');
     return;
+  }
+  // Auto-save if using default
+  if (!localStorage.getItem('gce_gdrive_client_id')) {
+    localStorage.setItem('gce_gdrive_client_id', clientId);
   }
 
   var redirectUri = window.location.origin + window.location.pathname;
@@ -1895,7 +1899,7 @@ function autoBackupToGDrive(silent) {
 }
 
 function showGDriveSetup() {
-  var existing = localStorage.getItem('gce_gdrive_client_id') || '';
+  var existing = localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId || '';
   var lastBackup = localStorage.getItem('gce_gdrive_last_backup');
   var lastLabel = lastBackup ? new Date(lastBackup).toLocaleString() : 'Never';
   showConfirm({
