@@ -2142,23 +2142,39 @@ function showAutoBackupPanel() {
 // ── Hook auto backup into saveData ───────────────────────────
 var _origSaveData = null;
 function initAutoBackup() {
-  // Save immediately on load
-  setTimeout(function() { autoBackupSave('startup'); }, 3000);
-  // Save every hour + auto-upload to Google Drive once per day
+  // Save every hour — only when logged in and data is loaded
   setInterval(function() {
-    if (DB.currentUser) {
+    if (DB.currentUser && DB.sales && DB.sales.length >= 0) {
       autoBackupSave('hourly');
       // Auto-upload to Google Drive once per day if configured
-      if (localStorage.getItem('gce_gdrive_client_id')) {
+      var clientId = localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId;
+      if (clientId) {
         var today = new Date().toISOString().slice(0,10);
         var lastDate = localStorage.getItem('gce_gdrive_last_backup_date') || '';
         if (lastDate !== today) {
-          setTimeout(function(){ autoBackupToGDrive(true); }, 5000); // slight delay
+          setTimeout(function(){ autoBackupToGDrive(true); }, 5000);
         }
       }
     }
   }, 60 * 60 * 1000);
-  var _origSaveSale = typeof saveSale === 'function' ? saveSale : null;
+}
+
+// Called after login to do the startup backup
+function initAutoBackupAfterLogin() {
+  if (DB.currentUser) {
+    setTimeout(function() {
+      autoBackupSave('startup');
+      // Also try daily Drive upload on login
+      var clientId = localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId;
+      if (clientId) {
+        var today = new Date().toISOString().slice(0,10);
+        var lastDate = localStorage.getItem('gce_gdrive_last_backup_date') || '';
+        if (lastDate !== today) {
+          setTimeout(function(){ autoBackupToGDrive(true); }, 8000);
+        }
+      }
+    }, 4000);
+  }
 }
 
 
@@ -3245,6 +3261,7 @@ function doLogin(){
   logActivity('Login',user.name+' signed in','');
   saveData();
   renderApp();
+  initAutoBackupAfterLogin();
 }
 function doLogout(){DB.currentUser=null;renderAuth();}
 
