@@ -2359,13 +2359,14 @@ function showConfirm(opts, onConfirm) {
   var overlay = document.createElement('div');
   overlay.id = 'confirm-overlay';
   overlay.className = 'confirm-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto';
   overlay.innerHTML =
-    '<div class="confirm-box" onclick="event.stopPropagation()">'+
+    '<div class="confirm-box" onclick="event.stopPropagation()" style="background:var(--surface);border-radius:14px;padding:1.5rem;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;gap:10px">'+
       '<div class="confirm-icon '+type+'">'+(icons[type]||'⚠️')+'</div>'+
       '<div class="confirm-title">'+(opts.title||'Are you sure?')+'</div>'+
-      '<div class="confirm-msg">'+(opts.msg||'This action cannot be undone.')+'</div>'+
+      '<div class="confirm-msg" style="overflow-y:auto;max-height:55vh;font-size:13px;color:var(--text2);line-height:1.5">'+(opts.msg||'This action cannot be undone.')+'</div>'+
       (opts.detail?'<div class="confirm-detail">'+opts.detail+'</div>':'')+
-      '<div class="confirm-btns">'+
+      '<div class="confirm-btns" style="display:flex;gap:8px;margin-top:4px;flex-shrink:0">'+
         '<button class="btn-cancel" id="confirm-cancel-btn">'+(opts.cancelLabel||'Cancel')+'</button>'+
         '<button class="btn-confirm '+type+'" id="confirm-ok-btn">'+(opts.confirmLabel||'Delete')+'</button>'+
       '</div>'+
