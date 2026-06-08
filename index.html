@@ -2603,10 +2603,15 @@ function buildClosingReport(){
   // NOTE: isDepositApplied cashflow entries have payMode='deposit' so they are
   // never added to cash/pos/transfer totals — no subtraction needed
   var exchBalTotal=exchBalCash+exchBalPos+exchBalTransfer;
-  // Balance after expenses
-  var balCash=cash-expCash;
-  var balTransfer=transfer-expTransfer;
-  var balPos=pos-expPos;
+  // Returns breakdown by payment mode (cash refunds come out of till)
+  var retCashflows=DB.cashflow.filter(function(c){return c.isReturn&&c.type==='out'&&dateInRange(c.date,closingDate,closingDate);});
+  var retCash=retCashflows.filter(function(c){return !c.payMode||c.payMode==='cash';}).reduce(function(a,c){return a+c.amount;},0);
+  var retTransfer=retCashflows.filter(function(c){return c.payMode==='transfer';}).reduce(function(a,c){return a+c.amount;},0);
+  var retPos=retCashflows.filter(function(c){return c.payMode==='pos';}).reduce(function(a,c){return a+c.amount;},0);
+  // Balance after expenses AND returns per mode
+  var balCash=cash-expCash-retCash;
+  var balTransfer=transfer-expTransfer-retTransfer;
+  var balPos=pos-expPos-retPos;
   var balTotal=(cash+pos+transfer+depTotal+exchBalTotal)-(expTotal+retTotal)-changeToday;
   // By staff
   var byStaff={};
@@ -2687,9 +2692,9 @@ function buildClosingReport(){
           '<th style="text-align:right;color:#fff">Balance (₦)</th>'+
         '</tr></thead><tbody>'+
         (openFloat>0?'<tr style="background:#f0fdf4"><td style="font-weight:600;color:#15803d">🏦 Opening Float</td><td style="text-align:right;color:#15803d">'+fmt(openFloat)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#15803d">'+fmt(openFloat)+'</td></tr>':'')+
-        (cash>0||expCash>0?'<tr><td style="font-weight:600">💵 Cash</td><td style="text-align:right;color:#15803d">'+fmt(cash)+'</td><td style="text-align:right;color:#c0392b">'+(expCash>0?'- '+fmt(expCash):'-')+'</td><td style="text-align:right;font-weight:700;color:'+(balCash>=0?'#15803d':'#c0392b')+'">'+fmt(balCash)+'</td></tr>':'')+
-        (pos>0||expPos>0?'<tr><td style="font-weight:600">💳 POS</td><td style="text-align:right;color:#15803d">'+fmt(pos)+'</td><td style="text-align:right;color:#c0392b">'+(expPos>0?'- '+fmt(expPos):'-')+'</td><td style="text-align:right;font-weight:700;color:'+(balPos>=0?'#15803d':'#c0392b')+'">'+fmt(balPos)+'</td></tr>':'')+
-        (transfer>0||expTransfer>0?'<tr><td style="font-weight:600">🏦 Transfer</td><td style="text-align:right;color:#15803d">'+fmt(transfer)+'</td><td style="text-align:right;color:#c0392b">'+(expTransfer>0?'- '+fmt(expTransfer):'-')+'</td><td style="text-align:right;font-weight:700;color:'+(balTransfer>=0?'#15803d':'#c0392b')+'">'+fmt(balTransfer)+'</td></tr>':'')+
+        (cash>0||expCash>0||retCash>0?'<tr><td style="font-weight:600">💵 Cash</td><td style="text-align:right;color:#15803d">'+fmt(cash)+'</td><td style="text-align:right;color:#c0392b">'+((expCash+retCash)>0?'- '+fmt(expCash+retCash):'-')+'</td><td style="text-align:right;font-weight:700;color:'+(balCash>=0?'#15803d':'#c0392b')+'">'+fmt(balCash)+'</td></tr>':'')+
+        (pos>0||expPos>0||retPos>0?'<tr><td style="font-weight:600">💳 POS</td><td style="text-align:right;color:#15803d">'+fmt(pos)+'</td><td style="text-align:right;color:#c0392b">'+((expPos+retPos)>0?'- '+fmt(expPos+retPos):'-')+'</td><td style="text-align:right;font-weight:700;color:'+(balPos>=0?'#15803d':'#c0392b')+'">'+fmt(balPos)+'</td></tr>':'')+
+        (transfer>0||expTransfer>0||retTransfer>0?'<tr><td style="font-weight:600">🏦 Transfer</td><td style="text-align:right;color:#15803d">'+fmt(transfer)+'</td><td style="text-align:right;color:#c0392b">'+((expTransfer+retTransfer)>0?'- '+fmt(expTransfer+retTransfer):'-')+'</td><td style="text-align:right;font-weight:700;color:'+(balTransfer>=0?'#15803d':'#c0392b')+'">'+fmt(balTransfer)+'</td></tr>':'')+
         (cpTotal>0?'<tr style="background:#f0fdf4"><td style="font-weight:600">✅ Credit Payments</td><td style="text-align:right;color:#15803d">'+fmt(cpTotal)+'</td><td style="text-align:right">-</td><td style="text-align:right;font-weight:700;color:#15803d">'+fmt(cpTotal)+'</td></tr>'+
           (cpCash>0?'<tr><td style="font-size:11px;color:#555;padding-left:20px">└ Cash</td><td style="text-align:right;font-size:11px;color:#15803d">'+fmt(cpCash)+'</td><td></td><td></td></tr>':'')+
           (cpPos>0?'<tr><td style="font-size:11px;color:#555;padding-left:20px">└ POS</td><td style="text-align:right;font-size:11px;color:#0891b2">'+fmt(cpPos)+'</td><td></td><td></td></tr>':'')+
