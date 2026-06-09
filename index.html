@@ -1899,11 +1899,15 @@ function _gDriveUploadToFolder(token, folderId, json, filename, onSuccess, onErr
 }
 
 function autoBackupToGDrive(silent) {
+  // Always save a fresh snapshot before uploading — ensures we upload today's data,
+  // not a stale 'latest' from a previous session.
+  if (DB.currentUser && DB.sales) autoBackupSave('pre-drive');
   var json = localStorage.getItem(AUTO_BACKUP_PREFIX+'latest');
   if (!json) { if(!silent) showToast('No backup found. Save first.','error'); return; }
   var snapshot;
   try { snapshot = JSON.parse(json); } catch(e) { return; }
-  var dateStr = (snapshot.exportedAt || new Date().toISOString()).slice(0,10);
+  // Always use today's date for the filename — never use stale exportedAt
+  var dateStr = new Date().toISOString().slice(0,10);
   var filename = 'gce_autobackup_' + dateStr + '.json';
 
   // If silent (auto-trigger), check token validity FIRST.
