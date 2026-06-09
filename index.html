@@ -908,9 +908,27 @@ function startFirebaseListener() {
         });
       });
 
-      // ── Object/entity collections: add new remote records, keep local for existing ──
-      // This protects locally-added suppliers, customers, inventory items etc.
-      var objCols = ['customers','inventory','suppliers','users','banks','posTerminals','categories','expenseCats'];
+      // ── Object/entity collections: merge remote into local ──────────────────────
+      // For customers: remote (Firestore) is authoritative — always take remote version
+      // for existing records so that creditBalance/totalSpent updates are not lost on reload.
+      // For other entity cols: add new remote records, keep local for existing.
+      var remoteWinCols = ['customers','suppliers'];
+      remoteWinCols.forEach(function(col) {
+        var remote = remoteDB[col] || [];
+        if (!DB[col]) DB[col] = [];
+        var localMap = {};
+        DB[col].forEach(function(rec, idx) { if (rec.id) localMap[String(rec.id)] = idx; });
+        remote.forEach(function(rec) {
+          if (!rec.id) return;
+          var key = String(rec.id);
+          if (localMap[key] !== undefined) {
+            DB[col][localMap[key]] = rec; // replace stale local with authoritative remote
+          } else {
+            DB[col].push(rec); // new record not yet local
+          }
+        });
+      });
+      var objCols = ['inventory','users','banks','posTerminals','categories','expenseCats'];
       objCols.forEach(function(col) {
         var remote = remoteDB[col] || [];
         if (!DB[col]) DB[col] = [];
