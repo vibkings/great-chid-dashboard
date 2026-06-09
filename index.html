@@ -747,14 +747,26 @@ function applyCollection(colName, payload) {
     var col = map[colName];
     // These collections use ID-based merge — local entries must never be overwritten by stale remote
     var mergeCols = ['activityLog','inventory','warehouse','transferLog'];
-    if(mergeCols.indexOf(col) >= 0 && DB[col] && DB[col].length > 0) {
-      var existingIds = {};
-      DB[col].forEach(function(r){ if(r.id) existingIds[String(r.id)] = true; });
-      data.forEach(function(r){ if(r.id && !existingIds[String(r.id)]) DB[col].push(r); });
-      // For activityLog: sort newest first, cap at 500
-      if(col === 'activityLog'){
-        DB[col].sort(function(a,b){return (b.ts||0)-(a.ts||0);});
-        if(DB[col].length > 500) DB[col] = DB[col].slice(0,500);
+    if(mergeCols.indexOf(col) >= 0) {
+      if(!DB[col]) DB[col] = [];
+      // If local was intentionally cleared (cleared flag set), don't merge back old remote data
+      var clearedKey = 'gce_cleared_'+col;
+      var clearedAt = parseInt(localStorage.getItem(clearedKey)||'0');
+      var isClearedRecently = clearedAt > 0 && (Date.now()-clearedAt) < 30000; // within 30s
+      if(isClearedRecently) {
+        // Skip merge — user just cleared this collection
+        return;
+      }
+      if(DB[col].length > 0) {
+        var existingIds = {};
+        DB[col].forEach(function(r){ if(r.id) existingIds[String(r.id)] = true; });
+        data.forEach(function(r){ if(r.id && !existingIds[String(r.id)]) DB[col].push(r); });
+        if(col === 'activityLog'){
+          DB[col].sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+          if(DB[col].length > 500) DB[col] = DB[col].slice(0,500);
+        }
+      } else {
+        DB[col] = data;
       }
     } else {
       DB[col] = data;
@@ -3125,7 +3137,15 @@ function buildActivityLog(){
 
 function clearActivityLog(){
   if(!confirm('Clear all activity log entries? This cannot be undone.'))return;
-  DB.activityLog=[];saveData();renderPanel();
+  DB.activityLog=[];
+  // Set cleared flag so applyCollection won't merge old entries back for 30s
+  localStorage.setItem('gce_cleared_activityLog', String(Date.now()));
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildSnapshot()));}catch(e){}
+  // Force-push empty array directly to Firestore
+  fbSetCollection('activityLog',[],
+    function(){saveData();renderPanel();showToast('Activity log cleared.','success');},
+    function(){saveData();renderPanel();}
+  );
 }
 
 function buildRecycleBin() {
