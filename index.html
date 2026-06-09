@@ -1415,7 +1415,15 @@ function loadData() {
 function applySnapshot(snapshot) {
   if (!snapshot) return;
   DB.users = snapshot.users || DB.users;
-  DB.inventory = snapshot.inventory || [];
+  // Inventory: use whichever has more items (protects recent additions)
+  var _snapInv = snapshot.inventory || [];
+  if(!DB.inventory||DB.inventory.length===0) DB.inventory = _snapInv;
+  else if(_snapInv.length > DB.inventory.length) DB.inventory = _snapInv;
+  else {
+    // Merge: add any items in snapshot not in local (by id)
+    var _invIds={}; DB.inventory.forEach(function(i){if(i.id)_invIds[String(i.id)]=true;});
+    _snapInv.forEach(function(i){if(i.id&&!_invIds[String(i.id)])DB.inventory.push(i);});
+  }
   DB.sales = snapshot.sales || [];
   DB.purchases = snapshot.purchases || [];
   DB.cashflow = snapshot.cashflow || [];
@@ -1428,15 +1436,22 @@ function applySnapshot(snapshot) {
   DB.creditCustomers = snapshot.creditCustomers || [];
   DB.adjLog = snapshot.adjLog || [];
   DB.salesReturns = snapshot.salesReturns || [];
-  DB.transferLog = snapshot.transferLog || [];
-  DB.warehouse = snapshot.warehouse || [];
+  // For transferLog and warehouse: only overwrite if local is empty
+  // (protects against stale Firestore overwriting fresh local data)
+  if(!DB.transferLog||DB.transferLog.length===0) DB.transferLog = snapshot.transferLog || [];
+  else if(snapshot.transferLog&&snapshot.transferLog.length>DB.transferLog.length) DB.transferLog = snapshot.transferLog;
+  if(!DB.warehouse||DB.warehouse.length===0) DB.warehouse = snapshot.warehouse || [];
+  else if(snapshot.warehouse&&snapshot.warehouse.length>DB.warehouse.length) DB.warehouse = snapshot.warehouse;
   DB.stockCounts = snapshot.stockCounts || [];
   DB.banks = snapshot.banks || DB.banks;
   DB.posTerminals = snapshot.posTerminals || DB.posTerminals;
   DB.categories = snapshot.categories || DB.categories;
   DB.expenseCats = snapshot.expenseCats || DB.expenseCats;
-  DB.invoiceCounter = snapshot.invoiceCounter || DB.invoiceCounter;
-  DB.invoiceYear = snapshot.invoiceYear || new Date().getFullYear();
+  // Never let invoiceCounter go backwards — keep the higher value
+  var _snapCtr = snapshot.invoiceCounter || 0;
+  DB.invoiceCounter = Math.max(_snapCtr, DB.invoiceCounter || 0) || _snapCtr || 1;
+  var _currentYear = new Date().getFullYear();
+  DB.invoiceYear = Math.max(snapshot.invoiceYear || _currentYear, DB.invoiceYear || _currentYear);
   // If no invoiceYear stored yet, derive counter from existing invoices to avoid collision
   if(!snapshot.invoiceYear){
     var currentYr=new Date().getFullYear();
@@ -1452,7 +1467,11 @@ function applySnapshot(snapshot) {
     }
     DB.invoiceYear=currentYr;
   }
-  DB.activityLog = snapshot.activityLog || [];
+  // ActivityLog: always keep the longer list (more entries = more recent)
+  var _snapLog = snapshot.activityLog || [];
+  if(!DB.activityLog||DB.activityLog.length===0) DB.activityLog = _snapLog;
+  else if(_snapLog.length > DB.activityLog.length) DB.activityLog = _snapLog;
+  // else keep local (it has more entries than remote snapshot)
   DB.supplierPayments = snapshot.supplierPayments || [];
   DB.tillSessions = snapshot.tillSessions || [];
   DB.supplierDeposits = snapshot.supplierDeposits || [];
@@ -1485,6 +1504,8 @@ function applySnapshot(snapshot) {
   migrateDepositApplied();
   // ── One-time migration: rename old deposit shortfall cashflow desc to new format ──
   migrateDepositShortfallDesc();
+  // Remove any items in recycleBin from inventory/warehouse (prevents re-appearance after stale sync)
+  purgeBinnedFromCollections();
 }
 
 function migrateDepositApplied(){
@@ -2488,6 +2509,25 @@ function moveToRecycleBin(type, item, sourceName) {
     expiresAt: new Date(Date.now() + BIN_RETENTION_DAYS * 86400000).toISOString()
   };
   DB.recycleBin.push(binItem);
+  // Log the deletion
+  logActivity('Item deleted',
+    (sourceName||type)+': '+(item.name||item.id||'item')+
+    (item.qty!==undefined?' — Qty: '+item.qty:''),
+    DB.currentUser?DB.currentUser.name:'Unknown');
+}
+
+// Remove any inventory/warehouse items that are already in recycleBin
+// (prevents deleted items from reappearing after stale Firestore sync)
+function purgeBinnedFromCollections(){
+  if(!DB.recycleBin||!DB.recycleBin.length)return;
+  var binnedIds={};
+  DB.recycleBin.forEach(function(b){
+    if(b.data&&b.data.id)binnedIds[String(b.data.id)]=(binnedIds[String(b.data.id)]||0)+1;
+  });
+  var before=DB.inventory.length;
+  DB.inventory=DB.inventory.filter(function(i){return !binnedIds[String(i.id)];});
+  DB.warehouse=DB.warehouse.filter(function(i){return !binnedIds[String(i.id)];});
+  if(DB.inventory.length!==before)console.log('purgeBinnedFromCollections: removed '+(before-DB.inventory.length)+' deleted items from inventory');
 }
 
 function autoPurgeBin() {
@@ -3338,6 +3378,85 @@ function doLogin(){
   renderApp();
   initAutoBackupAfterLogin();
 }
+function showCalculator(){
+  var ex=document.getElementById('gce-calc-overlay');
+  if(ex){ex.remove();return;}
+  var ov=document.createElement('div');
+  ov.id='gce-calc-overlay';
+  ov.style.cssText='position:fixed;top:60px;right:16px;z-index:9999;background:var(--surface);border:1.5px solid var(--border);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);width:280px;user-select:none;font-family:inherit';
+  var expr='',history=[];
+  function render(){
+    var disp=document.getElementById('gce-calc-disp');
+    var hist=document.getElementById('gce-calc-hist');
+    if(disp)disp.textContent=expr||'0';
+    if(hist)hist.innerHTML=history.slice(-4).reverse().map(function(h){return '<div style="font-size:11px;color:var(--text3);text-align:right;padding:1px 0">'+h+'</div>';}).join('');
+  }
+  function press(v){
+    if(v==='C'){expr='';render();return;}
+    if(v==='BS'){expr=expr.slice(0,-1);render();return;}
+    if(v==='='){
+      try{
+        var result=Function('"use strict";return ('+expr.replace(/x/g,'*').replace(/\u00f7/g,'/')+')')();
+        var r=Math.round(result*100000)/100000;
+        history.push(expr+' = '+r.toLocaleString());
+        expr=String(r);
+      }catch(e){expr='Error';}
+      render();return;
+    }
+    if(v==='%'){
+      try{var pct=Function('"use strict";return ('+expr.replace(/x/g,'*').replace(/\u00f7/g,'/')+')')();expr=String(Math.round(pct/100*100000)/100000);}catch(e){}
+      render();return;
+    }
+    if(expr==='Error')expr='';
+    expr+=v;render();
+  }
+  window._calcPress=press;
+  function onKey(e){
+    if(!document.getElementById('gce-calc-overlay')){document.removeEventListener('keydown',onKey);return;}
+    var k=e.key;
+    if(k>='0'&&k<='9'||k==='.')press(k);
+    else if(k==='+')press('+');
+    else if(k==='-')press('-');
+    else if(k==='*')press('x');
+    else if(k==='/')press('\u00f7');
+    else if(k==='Enter'||k==='=')press('=');
+    else if(k==='Backspace')press('BS');
+    else if(k==='Escape'){ov.remove();document.removeEventListener('keydown',onKey);}
+  }
+  document.addEventListener('keydown',onKey);
+  var btns=[
+    ['C','(',')',  'BS'],
+    ['7','8','9',  '\u00f7'],
+    ['4','5','6',  'x'],
+    ['1','2','3',  '-'],
+    ['%','0','.',  '+'],
+    ['','','',     '=']
+  ];
+  function btnHtml(b){
+    if(!b)return '<div></div>';
+    var isOp=['\u00f7','x','-','+','='].indexOf(b)>-1;
+    var isDang=b==='C';
+    var bg=isOp?'var(--primary)':isDang?'#ef4444':'var(--surface2)';
+    var col=isOp||isDang?'#fff':'var(--text1)';
+    var lbl=b==='BS'?'\u232b':b;
+    return '<button onclick="window._calcPress(\''+b+'\')" '+
+      'style="padding:14px 0;font-size:'+(b==='='?'22px':'16px')+';font-weight:'+(isOp?'800':'600')+';border:none;border-radius:9px;background:'+bg+';color:'+col+';cursor:pointer;width:100%">'+lbl+'</button>';
+  }
+  var btnRows=btns.map(function(row){
+    return '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">'+row.map(btnHtml).join('')+'</div>';
+  }).join('');
+  ov.innerHTML=
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px 6px">'+
+      '<span style="font-weight:800;font-size:13px;color:var(--text2)">\uD83E\uDDEE Calculator</span>'+
+      '<button onclick="document.getElementById(\'gce-calc-overlay\').remove()" style="border:none;background:none;font-size:18px;cursor:pointer;color:var(--text3)">\u00d7</button>'+
+    '</div>'+
+    '<div id="gce-calc-hist" style="min-height:44px;padding:0 14px 4px;border-bottom:1px solid var(--border)"></div>'+
+    '<div id="gce-calc-disp" style="font-size:28px;font-weight:800;text-align:right;padding:10px 14px;color:var(--text1);word-break:break-all;min-height:48px">0</div>'+
+    '<div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:6px">'+btnRows+'</div>';
+  document.body.appendChild(ov);
+  render();
+}
+
 function doLogout(){DB.currentUser=null;renderAuth();}
 
 var TABS=[
@@ -3750,6 +3869,7 @@ function renderApp(){
           '<button class="btn sm" onclick="showSafeRestoreModal()" title="Restore a Firestore backup to this device" style="color:#15803d;border-color:#86efac">☁️↑ Restore</button>'+
           '<button class="btn sm" onclick="exportBackup()" title="Export data backup">&#11015; Backup</button>'+
           '<button class="btn sm" onclick="showAutoBackupPanel()" title="Auto backup history" style="color:#15803d;border-color:#86efac">🔄</button>'+
+          '<button class="btn sm" onclick="showCalculator()" title="Calculator" style="font-size:14px;padding:4px 8px">🧮</button>'+
           '<button class="btn sm" onclick="toggleDarkMode()" title="Toggle dark/light mode" id="dark-mode-btn" style="font-size:14px;padding:4px 8px">'+(isDarkMode()?'☀️':'🌙')+'</button>'+
           '<button class="btn sm" onclick="doLogout()">Sign out</button>'+
         '</div>'+
@@ -7061,16 +7181,14 @@ function printCustomerInvoice(invNum,custId){
   var rows=invSales.map(function(s,i){var hasP=s.pendingSupply&&((s.suppliedQty!==undefined&&(s.pendingQty||0)>0)||(s.supplyStatus==='partial'||s.supplyStatus==='pending'));var sQty=s.suppliedQty!==undefined?s.suppliedQty:s.qty;var pQty=s.pendingQty||0;var qCell=hasP?'<span style="color:#16a34a;font-weight:700">'+sQty+' supplied</span><br><span style="color:#dc2626;font-size:9px">'+pQty+' pending</span>':''+s.qty;return '<tr><td class="center">'+(i+1)+'</td><td>'+esc(s.name)+'</td><td class="center">'+qCell+'</td><td class="right">'+fmt(s.salePrice)+'</td><td class="right" style="background:var(--danger-bg);color:#c0392b">'+(s.discAmt>0?'-'+fmt(s.discAmt):'')+'</td><td class="right"><b>'+fmt(s.total)+'</b></td></tr>';}).join('');
   var grandTotal=invSales.reduce(function(a,s){return a+s.total;},0);
   var emptyRows='';var minRI=Math.max(12,invSales.length);for(var i=invSales.length;i<minRI;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
-  // Date-aware: only count invoices/payments that existed at the time of this invoice
   var partPaid=s0.partPayment||0;
   var depApplied=invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
   var invNet=s0.payment==='credit'?Math.max(0,grandTotal-depApplied):s0.payment==='part'?Math.max(0,grandTotal-partPaid-depApplied):0;
-  // Use live creditBalance — most accurate source of truth
-  var liveCredit2=cust?Math.max(0,cust.creditBalance||0):0;
-  // liveCredit2 = current creditBalance (already includes this invoice's contribution)
-  // If s0.prevCreditBalance was stamped at sale time, use it for accurate previous balance
-  var prevInvTotal=s0.prevCreditBalance!=null?Math.max(0,s0.prevCreditBalance):Math.max(0,liveCredit2-invNet);
-  var outstandingBal=prevInvTotal>0?prevInvTotal+invNet:liveCredit2;
+  // Always recalculate from transaction history — never trust stale cached balance
+  // calcOutstandingAtDate uses date+invoiceNum tiebreaker so it's always accurate
+  var _calcResult=custId?calcOutstandingAtDate(custId,s0.date,invNum,invNet):{prevInvTotal:0,outstandingAtDate:0};
+  var prevInvTotal=_calcResult.prevInvTotal;
+  var outstandingBal=_calcResult.outstandingAtDate;
   function doPrint(withOutstanding){
     var _printTotal=s0.depositTotal||grandTotal;var html=buildInvoiceHTML({invoiceNum:invNum,custName:s0.printName||(cust?cust.name:'Unknown'),custAddr:cust?cust.address||'':'',day:day,month:mon,year:yr,rows:rows+emptyRows,itemCount:invSales.length,grandTotal:_printTotal,payment:s0.payment,payMode:s0.payMode,depTopupMode:s0.depTopupMode||null,depositApplied:depApplied||0,bankId:s0.bankId,posId:s0.posId,splitPayment:s0.splitPayment||null,seller:s0.seller,pendingSupply:s0.pendingSupply||false,wasEverPending:s0.wasEverPending||false,supplyDate:s0.supplyDate||null,
       partPayment:partPaid,
@@ -8049,14 +8167,16 @@ function submitInvoice(){
     var _tempDiscAmt=_tempDiscType==='pct'?(_tempSubtotal*_tempDiscVal/100):_tempDiscType==='flat'?Math.min(_tempDiscVal,_tempSubtotal):0;
     var _tempTotal=_tempSubtotal-_tempDiscAmt;
     if(Math.abs(splitTotal-_tempTotal)>1){alert('Split amounts ('+fmt(splitTotal)+') do not match invoice total ('+fmt(_tempTotal)+').\n\nPlease make sure the two amounts add up exactly to the invoice total.');return;}
-    var splitBankId=(sm1==='transfer'||sm2==='transfer')?(document.getElementById('s-split-bankid')?document.getElementById('s-split-bankid').value:''):null;
+    var splitBankId=sm1==='transfer'?(document.getElementById('s-split-bankid1')?document.getElementById('s-split-bankid1').value:''):null;
+    var splitBankId2=sm2==='transfer'?(document.getElementById('s-split-bankid2')?document.getElementById('s-split-bankid2').value:''):null;
     var splitPosId=(sm1==='pos'||sm2==='pos')?(document.getElementById('s-split-posid')?document.getElementById('s-split-posid').value:''):null;
-    if((sm1==='transfer'||sm2==='transfer')&&DB.banks.length&&!splitBankId){alert('Select the bank for transfer.');return;}
+    if(sm1==='transfer'&&DB.banks.length&&!splitBankId){alert('Select the bank for Mode 1 transfer.');return;}
+    if(sm2==='transfer'&&DB.banks.length&&!splitBankId2){alert('Select the bank for Mode 2 transfer.');return;}
     if((sm1==='pos'||sm2==='pos')&&DB.posTerminals.length&&!splitPosId){alert('Select the POS terminal.');return;}
     payMode='split';
-    bankId=splitBankId;
+    bankId=splitBankId||splitBankId2;
     posId=splitPosId;
-    splitPayment={mode1:sm1,amt1:sa1,mode2:sm2,amt2:sa2,bankId:splitBankId,posId:splitPosId};
+    splitPayment={mode1:sm1,amt1:sa1,mode2:sm2,amt2:sa2,bankId:splitBankId||null,bankId2:splitBankId2||null,posId:splitPosId};
     payment='split'; // keep as split for display; treated as fully paid for stock/credit logic
   } else {
     payMode=document.getElementById('s-paymode').value;
@@ -8430,7 +8550,7 @@ function submitInvoice(){
   console.log('[Invoice Print] depositApplied:',_lastDepApplied,'depTopupMode:',_lastDepTopupMode);
   DB._lastInvoice={invoiceId:invoiceId,invoiceNum:invNum,custName:custName,custAddr:custAddr,printName:printName,date:date,items:lastInvItems,invoiceDiscAmt:invoiceDiscAmt,invoiceDiscType:invDiscType,invoiceDiscVal:invDiscVal,payment:payment,payMode:payMode,depTopupMode:_lastDepTopupMode,depositApplied:_lastDepApplied,bankId:bankId,posId:posId,seller:DB.currentUser.name,grandTotal:_printGrandTotal,grandProfit:grandProfit,subtotalAll:subtotalAll,partPayment:partPayment,pendingSupply:pendingSupply};
   invoiceItems=[];
-  logActivity('Invoice saved','Invoice #'+invNum+' — '+custName+' — '+fmt(grandTotal),payment);
+  logActivity('Invoice saved','Invoice #'+invNum+' — '+custName+' — '+fmt(_printGrandTotal||grandTotal),payment);
   // Gap protection: re-check for duplicates right before incrementing
   // (catches race condition where another user saved same number while this form was open)
   var dupCheck=DB.sales.filter(function(s){return String(s.invoiceNum)===String(invNum);});
@@ -8494,14 +8614,15 @@ function printInvoice(inv){
   }).join('');
   var minRows=Math.max(12,inv.items.length);
   var emptyRows='';for(var i=inv.items.length;i<minRows;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
-  // Get current outstanding balance for this customer from DB
-  var invCust = inv.custId ? DB.customers.find(function(c){return c.id==inv.custId;}) : null;
-  var liveOutstanding = invCust ? Math.max(0, invCust.creditBalance||0) : 0;
   // For deposit invoices use subtotalAll-invoiceDiscAmt as the true invoice total
   var _invPrintTotal=inv.payment==='deposit'?(inv.subtotalAll||(inv.grandTotal||0))-(inv.invoiceDiscAmt||0):inv.grandTotal;
   var _invSales=DB.sales.filter(function(s){return s.invoiceNum===inv.invoiceNum;});
   var _invDepApplied=inv.depositApplied||_invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
-  var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:anyPending,wasEverPending:inv.wasEverPending||anyPending||false,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:liveOutstanding,prevInvTotal:0});
+  // Always calculate outstanding balance from transaction history (never from live creditBalance)
+  var _invNet=inv.payment==='credit'?Math.max(0,_invPrintTotal-_invDepApplied):inv.payment==='part'?Math.max(0,_invPrintTotal-(inv.partPayment||0)-_invDepApplied):0;
+  var _invCustId=inv.custId||(_invSales[0]?_invSales[0].custId:null);
+  var _calcPrint=_invCustId?calcOutstandingAtDate(_invCustId,inv.date,inv.invoiceNum,_invNet):{prevInvTotal:0,outstandingAtDate:0};
+  var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:anyPending,wasEverPending:inv.wasEverPending||anyPending||false,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:_calcPrint.outstandingAtDate,prevInvTotal:_calcPrint.prevInvTotal});
   // Show print mode dialog
   showPrintDialog(inv, html);
 }
@@ -8911,12 +9032,13 @@ function onDispChange(){
 function onSplitModeChange(){
   var m1=document.getElementById('s-split-mode1');
   var m2=document.getElementById('s-split-mode2');
-  var bankWrap=document.getElementById('s-split-bank-wrap');
+  var bankWrap1=document.getElementById('s-split-bank-wrap1');
+  var bankWrap2=document.getElementById('s-split-bank-wrap2');
   var posWrap=document.getElementById('s-split-pos-wrap');
   if(!m1||!m2)return;
-  var modes=[m1.value,m2.value];
-  if(bankWrap)bankWrap.style.display=modes.indexOf('transfer')>-1?'block':'none';
-  if(posWrap)posWrap.style.display=modes.indexOf('pos')>-1?'block':'none';
+  if(bankWrap1)bankWrap1.style.display=m1.value==='transfer'?'block':'none';
+  if(bankWrap2)bankWrap2.style.display=m2.value==='transfer'?'block':'none';
+  if(posWrap)posWrap.style.display=(m1.value==='pos'||m2.value==='pos')?'block':'none';
 }
 function onSplitAmtChange(){
   var amt1=parseFloat(document.getElementById('s-split-amt1').value)||0;
@@ -9502,7 +9624,10 @@ function buildSales(){
   // Generate invoice number ONCE per render — prevents gaps from double-calling
   var _nextInvNum=generateInvoiceNum();
   // ── Partial/Pending supply section ──
-  var partialSales=DB.sales.filter(function(s){return s.supplyStatus==='partial'||s.supplyStatus==='pending';});
+  var partialSales=DB.sales.filter(function(s){
+    return s.supplyStatus==='partial'||s.supplyStatus==='pending'||
+    (s.pendingSupply===true&&s.supplyStatus!=='supplied');
+  });
   var pendingByInvoice={};
   partialSales.forEach(function(s){
     if(!pendingByInvoice[s.invoiceNum])pendingByInvoice[s.invoiceNum]={invoiceNum:s.invoiceNum,custName:s.printName||s.custName,date:s.date,items:[]};
@@ -9808,8 +9933,9 @@ function buildSales(){
         '<div class="form-group"><label>Amount 2 (&#8358;)</label><input type="number" id="s-split-amt2" placeholder="0" min="0" oninput="onSplitAmtChange()"></div>'+
       '</div>'+
       '<div class="fg" style="grid-template-columns:1fr 1fr">'+
-        '<div id="s-split-bank-wrap" style="display:none" class="form-group"><label>Bank (for transfer)</label><select id="s-split-bankid"><option value="">Select bank...</option>'+bankOpts()+'</select></div>'+
+        '<div id="s-split-bank-wrap1" style="display:none" class="form-group"><label>Bank (Mode 1 transfer)</label><select id="s-split-bankid1"><option value="">Select bank...</option>'+bankOpts()+'</select></div>'+
         '<div id="s-split-pos-wrap" style="display:none" class="form-group"><label>POS terminal</label><select id="s-split-posid"><option value="">Select terminal...</option>'+posOpts()+'</select></div>'+
+        '<div id="s-split-bank-wrap2" style="display:none" class="form-group"><label>Bank (Mode 2 transfer)</label><select id="s-split-bankid2"><option value="">Select bank...</option>'+bankOpts()+'</select></div>'+
       '</div>'+
       '<div id="s-split-total-check" style="font-size:12px;margin-top:4px"></div>'+
     '</div>'+
@@ -15127,21 +15253,40 @@ var totalCreditAllTime=DB.customers.reduce(function(a,c){return a+(c.creditBalan
 
 // ── Payment mode breakdown — same method as Financial Dashboard ─
 var pmCash=0,pmPos=0,pmTransfer=0;
+// Build invoice map to handle deposit+topup correctly
+var _pmInvMap={};
 mSales.forEach(function(s){
-  if(s.payMode==='split'&&s.splitPayment){
-    var sp=s.splitPayment;
-    var ratio=s.total/((sp.amt1||0)+(sp.amt2||0))||1;
-    if(sp.mode1==='cash')pmCash+=sp.amt1*ratio;
-    else if(sp.mode1==='pos')pmPos+=sp.amt1*ratio;
-    else if(sp.mode1==='transfer')pmTransfer+=sp.amt1*ratio;
-    if(sp.mode2==='cash')pmCash+=sp.amt2*ratio;
-    else if(sp.mode2==='pos')pmPos+=sp.amt2*ratio;
-    else if(sp.mode2==='transfer')pmTransfer+=sp.amt2*ratio;
-  } else if(s.payment!=='credit'){
-    if(s.payMode==='cash')pmCash+=s.total;
-    else if(s.payMode==='pos')pmPos+=s.total;
-    else if(s.payMode==='transfer')pmTransfer+=s.total;
+  var k=s.invoiceNum||s.id;
+  if(!_pmInvMap[k])_pmInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,depTopupMode:s.depTopupMode||null,total:0,depAmt:0};
+  _pmInvMap[k].total+=s.total;
+  _pmInvMap[k].depAmt+=(s.depositApplied||0);
+});
+Object.values(_pmInvMap).forEach(function(g){
+  if(g.payment==='credit')return;
+  if(g.payment==='deposit'){
+    // Only count the shortfall (topup) amount — deposit was recorded on deposit date
+    var _topupAmt=Math.max(0,g.total-g.depAmt);
+    var _topupMode=g.depTopupMode||null;
+    if(_topupMode&&_topupAmt>0){
+      if(_topupMode==='pos')pmPos+=_topupAmt;
+      else if(_topupMode==='transfer')pmTransfer+=_topupAmt;
+      else pmCash+=_topupAmt;
+    }
+    return;
   }
+  if(g.payMode==='split'&&g.splitPayment){
+    var sp=g.splitPayment;
+    if(sp.mode1==='cash')pmCash+=sp.amt1;
+    else if(sp.mode1==='pos')pmPos+=sp.amt1;
+    else if(sp.mode1==='transfer')pmTransfer+=sp.amt1;
+    if(sp.mode2==='cash')pmCash+=sp.amt2;
+    else if(sp.mode2==='pos')pmPos+=sp.amt2;
+    else if(sp.mode2==='transfer')pmTransfer+=sp.amt2;
+    return;
+  }
+  if(g.payMode==='cash')pmCash+=g.total;
+  else if(g.payMode==='pos')pmPos+=g.total;
+  else if(g.payMode==='transfer')pmTransfer+=g.total;
 });
 
 // ── Staff performance ────────────────────────────────────
