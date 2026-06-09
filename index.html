@@ -1905,9 +1905,23 @@ function autoBackupToGDrive(silent) {
   try { snapshot = JSON.parse(json); } catch(e) { return; }
   var dateStr = (snapshot.exportedAt || new Date().toISOString()).slice(0,10);
   var filename = 'gce_autobackup_' + dateStr + '.json';
+
+  // If silent (auto-trigger), check token validity FIRST.
+  // If token is expired/missing, skip rather than attempt popup (browsers block it).
+  // The next manual "Upload Now" will refresh the token, after which auto works again.
+  if (silent) {
+    var saved = localStorage.getItem('gce_gdrive_token');
+    var expiry = parseInt(localStorage.getItem('gce_gdrive_token_expiry')||'0');
+    if (!saved || Date.now() >= expiry) {
+      console.warn('GDrive auto-backup skipped: token expired. Use "Upload Now" to re-authenticate.');
+      return;
+    }
+  }
+
   if (!silent) showToast('☁️ Uploading to Google Drive...', 'info');
   gDriveUpload(json, filename, function() {
-    showToast('✅ Backup saved to Google Drive! (GCE Backups/' + filename + ')', 'success');
+    if (!silent) showToast('✅ Backup saved to Google Drive! (GCE Backups/' + filename + ')', 'success');
+    else showToast('☁️ Auto-backup uploaded to Google Drive', 'success');
     localStorage.setItem('gce_gdrive_last_backup', new Date().toISOString());
     localStorage.setItem('gce_gdrive_last_backup_date', dateStr);
   }, function(err) {
@@ -1958,6 +1972,8 @@ function showAutoBackupPanel() {
   var lastGDrive = localStorage.getItem('gce_gdrive_last_backup');
   var gDriveLabel = lastGDrive ? new Date(lastGDrive).toLocaleString() : 'Never';
   var hasGDrive = !!localStorage.getItem('gce_gdrive_client_id');
+  var _gdriveExpiry = parseInt(localStorage.getItem('gce_gdrive_token_expiry')||'0');
+  var gdriveTokenExpired = hasGDrive && (!localStorage.getItem('gce_gdrive_token') || Date.now() >= _gdriveExpiry);
 
   var rows = list.length ? list.map(function(b) {
     return '<tr>'+
@@ -1978,6 +1994,7 @@ function showAutoBackupPanel() {
     '</div>'+
     '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">Last local save: <b>'+lastLabel+'</b></div>'+
     '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Last Google Drive: <b style="color:'+(lastGDrive?'#15803d':'#9ca3af')+'">'+gDriveLabel+'</b></div>'+
+    (gdriveTokenExpired?'<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:7px;padding:7px 10px;margin-bottom:8px;font-size:11px;color:#92400e">&#9888;&#65039; <b>Google Drive session expired.</b> Click <b>Upload Now</b> to re-authenticate and resume auto-backups.</div>':'')+
     // Google Drive banner
     '<div style="background:'+(hasGDrive?'#f0fdf4':'#fffbeb')+';border:1px solid '+(hasGDrive?'#86efac':'#fcd34d')+';border-radius:8px;padding:10px 12px;margin-bottom:10px">'+
       (hasGDrive ?
@@ -2116,6 +2133,8 @@ function showAutoBackupPanel() {
   var lastOneDrive = localStorage.getItem('gce_gdrive_last_backup');
   var oneDriveLabel = lastOneDrive ? new Date(lastOneDrive).toLocaleString() : 'Never';
   var hasOneDrive = !!(localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId);
+  var _gdriveExpiry2 = parseInt(localStorage.getItem('gce_gdrive_token_expiry')||'0');
+  var gdriveTokenExpired2 = hasOneDrive && (!localStorage.getItem('gce_gdrive_token') || Date.now() >= _gdriveExpiry2);
   var rows = list.length ? list.map(function(b) {
     return '<tr>'+
       '<td style="font-weight:600">'+b.date+'</td>'+
@@ -2135,6 +2154,7 @@ function showAutoBackupPanel() {
     '</div>'+
     '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">Last saved: <b>'+lastLabel+'</b></div>'+
     '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Last Google Drive: <b style="color:'+(lastOneDrive?'#15803d':'#888')+'">'+oneDriveLabel+'</b></div>'+
+    (gdriveTokenExpired2?'<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:7px;padding:7px 10px;margin-bottom:8px;font-size:11px;color:#92400e">&#9888;&#65039; <b>Google Drive session expired.</b> Click <b>Upload Now</b> to re-authenticate and resume auto-backups.</div>':'')+
     '<div style="font-size:11px;color:#166534;background:#f0fdf4;border-radius:6px;padding:6px 10px;margin-bottom:10px">'+
       '✅ Auto saves every hour + after each sale. Keeps last 7 days.'+
     '</div>'+
