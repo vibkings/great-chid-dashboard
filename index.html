@@ -3414,11 +3414,13 @@ function showCalculator(){
   function onKey(e){
     if(!document.getElementById('gce-calc-overlay')){document.removeEventListener('keydown',onKey);return;}
     var k=e.key;
+    // Prevent Enter/Backspace from triggering buttons or browser actions while calc is open
+    if(k==='Enter'||k==='Backspace'||k==='/'||k==='='){e.preventDefault();e.stopPropagation();}
     if(k>='0'&&k<='9'||k==='.')press(k);
     else if(k==='+')press('+');
     else if(k==='-')press('-');
     else if(k==='*')press('x');
-    else if(k==='/')press('\u00f7');
+    else if(k==='/')press('÷');
     else if(k==='Enter'||k==='=')press('=');
     else if(k==='Backspace')press('BS');
     else if(k==='Escape'){ov.remove();document.removeEventListener('keydown',onKey);}
@@ -7208,7 +7210,9 @@ function printCustomerInvoice(invNum,custId){
     };
     setTimeout(_doPrint,6000);
   }
-  if(outstandingBal>0){
+  // Only show outstanding balance prompt if THIS invoice creates a debt (credit/part payment)
+  // Cash/POS/transfer sales are fully paid — previous balance is NOT shown on this invoice
+  if(outstandingBal>0&&invNet>0){
     showPrintChoiceModal(cust?cust.name:'Customer',outstandingBal,prevInvTotal,grandTotal,
       function(){doPrint(true);},function(){doPrint(false);});
   } else {
@@ -8622,7 +8626,9 @@ function printInvoice(inv){
   var _invNet=inv.payment==='credit'?Math.max(0,_invPrintTotal-_invDepApplied):inv.payment==='part'?Math.max(0,_invPrintTotal-(inv.partPayment||0)-_invDepApplied):0;
   var _invCustId=inv.custId||(_invSales[0]?_invSales[0].custId:null);
   var _calcPrint=_invCustId?calcOutstandingAtDate(_invCustId,inv.date,inv.invoiceNum,_invNet):{prevInvTotal:0,outstandingAtDate:0};
-  var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:anyPending,wasEverPending:inv.wasEverPending||anyPending||false,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:_calcPrint.outstandingAtDate,prevInvTotal:_calcPrint.prevInvTotal});
+  // Only show outstanding on credit/part invoices — not on fully paid cash/pos/transfer
+  var _showOutstanding=_invNet>0;
+  var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:anyPending,wasEverPending:inv.wasEverPending||anyPending||false,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:_showOutstanding?_calcPrint.outstandingAtDate:0,prevInvTotal:_showOutstanding?_calcPrint.prevInvTotal:0});
   // Show print mode dialog
   showPrintDialog(inv, html);
 }
@@ -11147,7 +11153,8 @@ function reprintInvoice(invNum){
     };
     setTimeout(_doPrint,6000);
   }
-  if(outstandingBal>0){
+  // Only prompt for outstanding if this invoice itself creates debt
+  if(outstandingBal>0&&invNet>0){
     showPrintChoiceModal(cust?cust.name:(s0.printName||s0.custName||'Customer'),outstandingBal,prevInvTotal,grandTotal,
       function(){doPrint(true);},function(){doPrint(false);});
   } else {
