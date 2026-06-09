@@ -758,7 +758,7 @@ function applyCollection(colName, payload) {
   if (map[colName] && Array.isArray(data)) {
     var col = map[colName];
     // These collections use ID-based merge — local entries must never be overwritten by stale remote
-    var mergeCols = ['activityLog','inventory','warehouse','transferLog'];
+    var mergeCols = ['activityLog','inventory','warehouse','transferLog','adjLog','stockCounts','recycleBin','drafts','pendingDeliveries','supplierDeposits','tillSessions','commissionLedger','proformas','demoSales'];
     if(mergeCols.indexOf(col) >= 0) {
       if(!DB[col]) DB[col] = [];
       // If local was intentionally cleared (cleared flag set), don't merge back old remote data
@@ -1503,7 +1503,10 @@ function applySnapshot(snapshot) {
   DB.suppliers = snapshot.suppliers || [];
   DB.customers = snapshot.customers || [];
   DB.creditCustomers = snapshot.creditCustomers || [];
-  DB.adjLog = snapshot.adjLog || [];
+  // adjLog: merge by id — never lose local adjustment entries
+  var _snapAdj = snapshot.adjLog || [];
+  if(!DB.adjLog||DB.adjLog.length===0){ DB.adjLog = _snapAdj; }
+  else { var _adjIds={}; DB.adjLog.forEach(function(e){if(e.id)_adjIds[String(e.id)]=true;}); _snapAdj.forEach(function(e){if(e.id&&!_adjIds[String(e.id)])DB.adjLog.push(e);}); }
   DB.salesReturns = snapshot.salesReturns || [];
   // transferLog: merge by id — never lose local transfer records
   var _snapTL = snapshot.transferLog || [];
