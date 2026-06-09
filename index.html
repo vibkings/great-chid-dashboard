@@ -9636,8 +9636,15 @@ function buildSales(){
   var _nextInvNum=generateInvoiceNum();
   // ── Partial/Pending supply section ──
   var partialSales=DB.sales.filter(function(s){
-    return s.supplyStatus==='partial'||s.supplyStatus==='pending'||
-    (s.pendingSupply===true&&s.supplyStatus!=='supplied');
+    if(s.supplyStatus==='supplied'&&!s.pendingSupply)return false;
+    if(s.supplyStatus==='supplied')return false;
+    // Old format: pendingSupply:true without supplyStatus/pendingQty
+    if(s.pendingSupply===true&&s.supplyStatus!=='supplied'){
+      // Check if already fully supplied via suppliedQty
+      var _pend=s.pendingQty!==undefined?s.pendingQty:(s.suppliedQty!==undefined?Math.max(0,s.qty-s.suppliedQty):s.qty);
+      return _pend>0;
+    }
+    return s.supplyStatus==='partial'||s.supplyStatus==='pending';
   });
   var pendingByInvoice={};
   partialSales.forEach(function(s){
@@ -11153,15 +11160,13 @@ function reprintInvoice(invNum){
   var emptyRows='';var minR=Math.max(12,invSales.length);for(var i=invSales.length;i<minR;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
   var custId=s0.custId;
   var cust=custId?DB.customers.find(function(c){return c.id==custId;}):null;
-  // Use live creditBalance as source of truth — reconstruct prevInvTotal from it
   var partPaid=s0.partPayment||0;
   var depApplied=invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
   var invNet=s0.payment==='credit'?Math.max(0,grandTotal-depApplied):s0.payment==='part'?Math.max(0,grandTotal-partPaid-depApplied):0;
-  // Live outstanding = what customer owes RIGHT NOW
-  var liveCredit=cust?Math.max(0,cust.creditBalance||0):0;
-  // Previous balance = live balance minus this invoice's unpaid portion
-  var prevInvTotal=Math.max(0,liveCredit-invNet);
-  var outstandingBal=liveCredit;
+  // Always use transaction-history calc — never stale cached creditBalance
+  var _calcResult2=custId?calcOutstandingAtDate(custId,s0.date,invNum,invNet):{prevInvTotal:0,outstandingAtDate:0};
+  var prevInvTotal=_calcResult2.prevInvTotal;
+  var outstandingBal=_calcResult2.outstandingAtDate;
   function doPrint(withOutstanding){
     // For deposit invoices use original total (before deposit applied)
     var _reprintTotal=s0.payment==='deposit'?(s0.depositTotal||grandTotal):grandTotal;
@@ -17398,19 +17403,18 @@ function showSupplyQtyModal(invoiceNum, saleId){
 }
 
 function supplyNow(invoiceNum, saleId, overrideQty){
-  // Use loose == to match whether saleId comes in as string or number
   var sale=DB.sales.find(function(s){return s.id==saleId;});
   if(!sale){
-    // Fallback: try matching by invoiceNum if direct id match fails
     var fallback=DB.sales.filter(function(s){
       return (s.invoiceNum==invoiceNum||String(s.invoiceNum)===String(invoiceNum))&&
-             (s.supplyStatus==='pending'||s.supplyStatus==='partial')&&
-             (s.pendingQty||0)>0;
+             (s.supplyStatus==='pending'||s.supplyStatus==='partial'||s.pendingSupply===true);
     });
     if(fallback.length===1){sale=fallback[0];}
     else{alert('Record not found. Try using "Supply all" instead.');return;}
   }
-  var pending=sale.pendingQty!==undefined?sale.pendingQty:sale.qty;
+  // Patch old-format items missing pendingQty
+  if(sale.pendingQty===undefined){sale.pendingQty=sale.qty;sale.suppliedQty=0;}
+  var pending=sale.pendingQty;
   if(pending<=0){alert('This item is already fully supplied.');return;}
   // Check stock
   var invItem=DB.inventory.find(function(i){return i.id==sale.itemId;});
@@ -17448,7 +17452,19 @@ function supplyNow(invoiceNum, saleId, overrideQty){
 }
 
 function supplyAllNow(invoiceNum){
-  var items=DB.sales.filter(function(s){return s.invoiceNum===invoiceNum&&(s.supplyStatus==='pending'||s.supplyStatus==='partial')&&(s.pendingQty||0)>0;});
+  // Include old-format items: pendingSupply:true but pendingQty not set yet
+  var items=DB.sales.filter(function(s){
+    if(s.invoiceNum!==invoiceNum)return false;
+    if(s.supplyStatus==='supplied'&&!s.pendingSupply)return false;
+    // New format: has pendingQty
+    if(s.pendingQty!==undefined)return (s.supplyStatus==='pending'||s.supplyStatus==='partial')&&s.pendingQty>0;
+    // Old format: pendingSupply:true, treat entire qty as pending
+    return s.pendingSupply===true;
+  });
+  // Patch missing pendingQty for old-format items before proceeding
+  items.forEach(function(s){
+    if(s.pendingQty===undefined){s.pendingQty=s.qty;s.suppliedQty=0;}
+  });
   if(!items.length){alert('No pending items for this invoice.');return;}
   var msg='Supply all pending items for Invoice #'+invoiceNum+'?\n\n';
   var canSupply=[];
