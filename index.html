@@ -1574,7 +1574,14 @@ function migrateRemoveOverpaymentCreditEntries(){
   var removed=before-DB.creditPayments.length;
   if(removed>0){
     console.log('Migration: removed '+removed+' duplicate overpayment creditPayments entries');
-    saveData();
+    // Save locally first
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildSnapshot()));}catch(e){}
+    // Force-push creditPayments directly to Firestore — bypass the normal sync
+    // so Firestore can't restore the deleted entries before saveData completes
+    fbSetCollection('creditPayments', DB.creditPayments,
+      function(){ console.log('Migration: creditPayments pushed to Firestore successfully'); saveData(); },
+      function(err){ console.warn('Migration: Firestore push failed, using saveData fallback', err); saveData(); }
+    );
   }
 }
 
