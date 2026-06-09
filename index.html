@@ -2569,8 +2569,10 @@ function buildClosingReport(){
   var invMap={};
   daySales.forEach(function(s){
     var k=s.invoiceNum||s.id;
-    if(!invMap[k])invMap[k]={invoiceNum:k,custName:s.printName||s.custName,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,splitPayment:s.splitPayment||null,total:0,profit:0,partPayment:s.partPayment||0,seller:s.seller};
+    if(!invMap[k])invMap[k]={invoiceNum:k,custName:s.printName||s.custName,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,splitPayment:s.splitPayment||null,depTopupMode:s.depTopupMode||null,total:0,profit:0,partPayment:s.partPayment||0,seller:s.seller,depAmt:0};
     invMap[k].total+=s.total;invMap[k].profit+=s.profit;
+    invMap[k].depAmt+=(s.depositApplied||0);
+    if(s.depTopupMode)invMap[k].depTopupMode=s.depTopupMode;
   });
   var invList=Object.values(invMap);
   var totalRevenue=invList.reduce(function(a,g){return a+g.total;},0);
@@ -2580,9 +2582,12 @@ function buildClosingReport(){
   invList.forEach(function(g){
     if(g.payment==='credit'){credit+=g.total;}
     else if(g.payment==='deposit'){
-      // Don't add deposit invoices to deposit bucket —
-      // the actual cash collected today comes from topup cashflow entries below
-      // (isDepositApplied entries are excluded; topup entries added to cash/pos/transfer)
+      // Deposit portion goes to deposit bucket
+      // Shortfall (topup) goes to its actual payment mode — read from cashflow entry
+      var _depAmt=g.depAmt||0;
+      deposit+=_depAmt;
+      // Shortfall cashflow entry is already added via the standard cashflow loop below
+      // (it has cat:'Sales', payMode=cash/pos/transfer, no isDepositApplied flag)
     }
     else if(g.payment==='part'){
       // Distribute part payment into its actual mode (cash/pos/transfer)
@@ -2643,10 +2648,11 @@ function buildClosingReport(){
   var exchBalToday=DB.cashflow.filter(function(c){
     return c.isExchange&&c.type==='in'&&dateInRange(c.date,closingDate,closingDate);
   });
-  // Deposit shortfall topup payments (actual cash collected today for deposit invoices)
+  // Deposit shortfall cashflow entries — real cash paid by customer for the shortfall
+  // These have cat:'Sales', payMode=cash/pos/transfer, no isDepositApplied flag
   var depTopupToday=DB.cashflow.filter(function(c){
     return !c.isDepositApplied&&!c.isExchange&&c.type==='in'&&c.cat==='Sales'&&
-    (c.desc||'').indexOf('shortfall')>=0&&dateInRange(c.date,closingDate,closingDate);
+    (c.desc||'').indexOf('balance paid')>=0&&dateInRange(c.date,closingDate,closingDate);
   });
   depTopupToday.forEach(function(c){
     if(c.payMode==='pos')pos+=c.amount;
@@ -2831,8 +2837,10 @@ function printClosingReport(){
   var invMap={};
   daySales.forEach(function(s){
     var k=s.invoiceNum||s.id;
-    if(!invMap[k])invMap[k]={invoiceNum:k,custName:s.printName||s.custName,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,splitPayment:s.splitPayment||null,total:0,profit:0,partPayment:s.partPayment||0,seller:s.seller};
+    if(!invMap[k])invMap[k]={invoiceNum:k,custName:s.printName||s.custName,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,splitPayment:s.splitPayment||null,depTopupMode:s.depTopupMode||null,total:0,profit:0,partPayment:s.partPayment||0,seller:s.seller,depAmt:0};
     invMap[k].total+=s.total;invMap[k].profit+=s.profit;
+    invMap[k].depAmt+=(s.depositApplied||0);
+    if(s.depTopupMode)invMap[k].depTopupMode=s.depTopupMode;
   });
   var invList=Object.values(invMap);
   var totalRevenue=invList.reduce(function(a,g){return a+g.total;},0);
@@ -3590,12 +3598,22 @@ function renderApp(){
   var _todayInvMap={};
   todaySales.forEach(function(s){
     var k=s.invoiceNum||s.id;
-    if(!_todayInvMap[k])_todayInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,total:0};
+    if(!_todayInvMap[k])_todayInvMap[k]={payment:s.payment,payMode:s.payMode,splitPayment:s.splitPayment||null,depTopupMode:s.depTopupMode||null,total:0,depAmt:0};
     _todayInvMap[k].total+=s.total;
+    _todayInvMap[k].depAmt+=(s.depositApplied||0);
+  });
+  // For deposit+topup: topupAmt = total - depositApplied
+  Object.values(_todayInvMap).forEach(function(g){
+    if(g.payment==='deposit')g.topupAmt=Math.max(0,g.total-g.depAmt);
   });
   Object.values(_todayInvMap).forEach(function(g){
     if(g.payment==='credit'){todayCredit+=g.total;return;}
-    if(g.payment==='deposit'||g.payMode==='deposit'){todayDeposit+=g.total;return;}
+    if(g.payment==='deposit'){
+      // Deposit portion goes to deposit bucket
+      // Shortfall is picked up separately from cashflow entries below
+      todayDeposit+=(g.depAmt||g.total);
+      return;
+    }
     if(g.payMode==='split'&&g.splitPayment){
       var sp=g.splitPayment;
       if(sp.mode1==='pos')todayPos+=sp.amt1;else if(sp.mode1==='transfer')todayTransfer+=sp.amt1;else todayCash+=sp.amt1;
@@ -3605,6 +3623,15 @@ function renderApp(){
     if(g.payMode==='pos'){todayPos+=g.total;return;}
     if(g.payMode==='transfer'){todayTransfer+=g.total;return;}
     todayCash+=g.total;
+  });
+  // Deposit shortfall cashflow entries — add to correct payment mode
+  DB.cashflow.filter(function(c){
+    return !c.isDepositApplied&&!c.isExchange&&c.type==='in'&&c.cat==='Sales'&&
+    (c.desc||'').indexOf('balance paid')>=0&&dateInRange(c.date,todayStr,todayStr);
+  }).forEach(function(c){
+    if(c.payMode==='pos')todayPos+=c.amount;
+    else if(c.payMode==='transfer')todayTransfer+=c.amount;
+    else todayCash+=c.amount;
   });
   var openTill=DB.tillSessions&&DB.tillSessions.length?(DB.tillSessions.filter(function(t){return !t.closedAt;}).length>0):false;
   var tillFloat=0;
@@ -7281,10 +7308,15 @@ function buildInvoiceHTML(inv){
       '<tr style="background:#fff5f5"><td colspan="4" style="text-align:right;font-size:9px;color:#c0392b;font-weight:700">DISCOUNT</td><td colspan="2" class="right" style="font-size:10px;color:#c0392b;font-weight:700">- '+fmt(inv.invoiceDiscAmt)+'</td></tr>'
     :'')+
     '<tr class="tr"><td colspan="4" style="text-align:right;font-size:10px">'+(inv.invoiceDiscAmt>0?'NET TOTAL':'TOTAL')+'</td><td colspan="2" class="right">'+fmt(inv.grandTotal)+'</td></tr>'+
-    (inv.payment!=='credit'&&inv.grandTotal>0?
-      '<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d;font-weight:700">AMOUNT PAID</td><td colspan="2" class="right" style="font-size:10px;color:#15803d;font-weight:800">'+fmt(inv.payment==='part'?inv.partPayment||0:inv.grandTotal-(inv.depositApplied||0))+'</td></tr>'+
-      (inv.depositApplied>0?'<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d">DEPOSIT APPLIED</td><td colspan="2" class="right" style="font-size:10px;color:#15803d">'+fmt(inv.depositApplied)+'</td></tr>':'')
-    :'')+
+    (inv.payment==='deposit'?
+      // Deposit invoice: TOTAL → LESS: DEPOSIT APPLIED → AMOUNT PAID (shortfall or ₦0)
+      (inv.depositApplied>0?'<tr style="background:#e0f2fe"><td colspan="4" style="text-align:right;font-size:9px;color:#0369a1">LESS: DEPOSIT APPLIED</td><td colspan="2" class="right" style="font-size:10px;color:#0369a1;font-weight:700">- '+fmt(inv.depositApplied)+'</td></tr>':'')+
+      '<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d;font-weight:700">AMOUNT PAID'+(inv.depTopupMode?' ('+(inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'Transfer':'Cash')+')':'')+'</td><td colspan="2" class="right" style="font-size:10px;color:#15803d;font-weight:800">'+fmt(Math.max(0,(inv.grandTotal||0)-(inv.depositApplied||0)))+'</td></tr>'
+      :
+      // All other payments: existing logic
+      inv.payment!=='credit'&&inv.grandTotal>0?
+        '<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d;font-weight:700">AMOUNT PAID</td><td colspan="2" class="right" style="font-size:10px;color:#15803d;font-weight:800">'+fmt(inv.payment==='part'?inv.partPayment||0:inv.grandTotal)+'</td></tr>'
+        :'')+
     (inv.outstandingBal>0?
       (inv.prevInvTotal>0?'<tr style="background:#fff8f0"><td colspan="4" style="text-align:right;font-size:9px;color:#92400e;font-weight:600">PREVIOUS BALANCE</td><td colspan="2" class="right" style="font-size:10px;color:#92400e">'+fmt(inv.prevInvTotal)+'</td></tr>':'')+
       '<tr style="background:var(--danger-bg);border-top:2px solid #c0392b"><td colspan="4" style="text-align:right;font-size:10px;color:#c0392b;font-weight:800">TOTAL OUTSTANDING</td><td colspan="2" class="right" style="font-size:12px;color:#c0392b;font-weight:900">'+fmt(inv.outstandingBal)+'</td></tr>'
@@ -8262,24 +8294,34 @@ function submitInvoice(){
         if(!DB.deposits)DB.deposits=[];
   if(!DB.purchaseReturns)DB.purchaseReturns=[];
         DB.deposits.push({id:uid(),custId:custId,custName:regC.name,amount:-depositApplied,payMode:'deposit',note:'Auto-applied to Invoice #'+invNum,date:date,month:month,by:'System'});
+        // Informational cashflow entry — excluded from all cash totals (isDepositApplied:true)
         DB.cashflow.push({id:uid(),desc:'Deposit applied — '+regC.name+' Invoice #'+invNum,amount:depositApplied,type:'in',cat:'Sales',payMode:'deposit',date:date,month:month,isDepositApplied:true});
-        // Reduce grandTotal by deposit used
-        grandTotal=Math.max(0,grandTotal-depositApplied);
-        cashReceived=Math.max(0,cashReceived-depositApplied);
+        // Reduce grandTotal to the shortfall only
+        var _shortfall=Math.max(0,grandTotal-depositApplied);
+        grandTotal=_shortfall;
+        cashReceived=_shortfall;
         creditAmount=Math.max(0,creditAmount-depositApplied);
         // Capture topup mode BEFORE the if block clears _localDepTopup
         var _savedTopupMode=_localDepTopup?_localDepTopup.mode:null;
-        // If user selected a topup payment mode to cover the shortfall
-        if(_localDepTopup&&grandTotal>0){
-          var tu=_localDepTopup;
-          if(tu.mode==='credit'){
-            regC.creditBalance=(regC.creditBalance||0)+grandTotal;
-            creditAmount=0;grandTotal=0;cashReceived=0;
-          } else {
-            DB.cashflow.push({id:uid(),desc:'Deposit shortfall paid ('+tu.mode+') — '+regC.name+' Invoice #'+invNum,
-              amount:grandTotal,type:'in',cat:'Sales',payMode:tu.mode,bankId:tu.bankId||null,posId:tu.posId||null,date:date,month:month});
-            cashReceived=0;creditAmount=0;grandTotal=0;
+        // If there is a shortfall, record the real cash payment for it
+        if(_shortfall>0){
+          if(_localDepTopup){
+            var tu=_localDepTopup;
+            if(tu.mode==='credit'){
+              regC.creditBalance=(regC.creditBalance||0)+_shortfall;
+              creditAmount=0;grandTotal=0;cashReceived=0;
+            } else {
+              // Only real cashflow entry for this invoice — the shortfall paid
+              DB.cashflow.push({id:uid(),desc:'Invoice #'+invNum+' balance paid ('+tu.mode+') — '+regC.name,
+                amount:_shortfall,type:'in',cat:'Sales',payMode:tu.mode,bankId:tu.bankId||null,posId:tu.posId||null,date:date,month:month});
+              cashReceived=0;creditAmount=0;grandTotal=0;
+            }
+            _localDepTopup=null;
           }
+          // else: shortfall exists but no topup mode set — will fall through as credit
+        } else {
+          // Deposit covers full amount — no cash entry needed
+          cashReceived=0;creditAmount=0;grandTotal=0;
           _localDepTopup=null;
         }
         // Stamp depositApplied on all saved sale items
