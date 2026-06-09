@@ -7210,9 +7210,9 @@ function printCustomerInvoice(invNum,custId){
     };
     setTimeout(_doPrint,6000);
   }
-  // Only show outstanding balance prompt if THIS invoice creates a debt (credit/part payment)
-  // Cash/POS/transfer sales are fully paid — previous balance is NOT shown on this invoice
-  if(outstandingBal>0&&invNet>0){
+  // Show outstanding prompt whenever customer has ANY outstanding balance
+  // (including cash sales — previous balance reminder)
+  if(outstandingBal>0){
     showPrintChoiceModal(cust?cust.name:'Customer',outstandingBal,prevInvTotal,grandTotal,
       function(){doPrint(true);},function(){doPrint(false);});
   } else {
@@ -7454,16 +7454,23 @@ function buildInvoiceHTML(inv){
     :'')+
     '<tr class="tr"><td colspan="4" style="text-align:right;font-size:10px">'+(inv.invoiceDiscAmt>0?'NET TOTAL':'TOTAL')+'</td><td colspan="2" class="right">'+fmt(inv.grandTotal)+'</td></tr>'+
     (inv.payment==='deposit'?
-      // Deposit invoice: TOTAL → LESS: DEPOSIT APPLIED → AMOUNT PAID (shortfall or ₦0)
+      // Deposit: TOTAL → LESS DEPOSIT → AMOUNT PAID (shortfall)
       (inv.depositApplied>0?'<tr style="background:#e0f2fe"><td colspan="4" style="text-align:right;font-size:9px;color:#0369a1">LESS: DEPOSIT APPLIED</td><td colspan="2" class="right" style="font-size:10px;color:#0369a1;font-weight:700">- '+fmt(inv.depositApplied)+'</td></tr>':'')+
       '<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d;font-weight:700">AMOUNT PAID'+(inv.depTopupMode?' ('+(inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'Transfer':'Cash')+')':'')+'</td><td colspan="2" class="right" style="font-size:10px;color:#15803d;font-weight:800">'+fmt(Math.max(0,(inv.grandTotal||0)-(inv.depositApplied||0)))+'</td></tr>'
+      :inv.payment==='credit'?
+      // Credit: show ₦0 amount paid
+      '<tr style="background:#fff3cd"><td colspan="4" style="text-align:right;font-size:9px;color:#856404;font-weight:700">AMOUNT PAID</td><td colspan="2" class="right" style="font-size:10px;color:#856404;font-weight:800">'+fmt(0)+'</td></tr>'
       :
-      // All other payments: existing logic
-      inv.payment!=='credit'&&inv.grandTotal>0?
+      // Cash/POS/Transfer/Part: show amount paid
+      inv.grandTotal>0?
         '<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d;font-weight:700">AMOUNT PAID</td><td colspan="2" class="right" style="font-size:10px;color:#15803d;font-weight:800">'+fmt(inv.payment==='part'?inv.partPayment||0:inv.grandTotal)+'</td></tr>'
         :'')+
     (inv.outstandingBal>0?
+      // Previous balance row (debt from earlier invoices)
       (inv.prevInvTotal>0?'<tr style="background:#fff8f0"><td colspan="4" style="text-align:right;font-size:9px;color:#92400e;font-weight:600">PREVIOUS BALANCE</td><td colspan="2" class="right" style="font-size:10px;color:#92400e">'+fmt(inv.prevInvTotal)+'</td></tr>':'')+
+      // This invoice remaining (for part/credit)
+      (inv.payment==='part'&&(inv.grandTotal-(inv.partPayment||0))>0?
+        '<tr style="background:#fff8f0"><td colspan="4" style="text-align:right;font-size:9px;color:#92400e;font-weight:600">BALANCE ON THIS INVOICE</td><td colspan="2" class="right" style="font-size:10px;color:#92400e">'+fmt(inv.grandTotal-(inv.partPayment||0))+'</td></tr>':'')+
       '<tr style="background:var(--danger-bg);border-top:2px solid #c0392b"><td colspan="4" style="text-align:right;font-size:10px;color:#c0392b;font-weight:800">TOTAL OUTSTANDING</td><td colspan="2" class="right" style="font-size:12px;color:#c0392b;font-weight:900">'+fmt(inv.outstandingBal)+'</td></tr>'
     :'')+
     '</tbody></table>'+
@@ -8626,9 +8633,7 @@ function printInvoice(inv){
   var _invNet=inv.payment==='credit'?Math.max(0,_invPrintTotal-_invDepApplied):inv.payment==='part'?Math.max(0,_invPrintTotal-(inv.partPayment||0)-_invDepApplied):0;
   var _invCustId=inv.custId||(_invSales[0]?_invSales[0].custId:null);
   var _calcPrint=_invCustId?calcOutstandingAtDate(_invCustId,inv.date,inv.invoiceNum,_invNet):{prevInvTotal:0,outstandingAtDate:0};
-  // Only show outstanding on credit/part invoices — not on fully paid cash/pos/transfer
-  var _showOutstanding=_invNet>0;
-  var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:anyPending,wasEverPending:inv.wasEverPending||anyPending||false,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:_showOutstanding?_calcPrint.outstandingAtDate:0,prevInvTotal:_showOutstanding?_calcPrint.prevInvTotal:0});
+  var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:anyPending,wasEverPending:inv.wasEverPending||anyPending||false,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:_calcPrint.outstandingAtDate,prevInvTotal:_calcPrint.prevInvTotal});
   // Show print mode dialog
   showPrintDialog(inv, html);
 }
@@ -11153,8 +11158,8 @@ function reprintInvoice(invNum){
     };
     setTimeout(_doPrint,6000);
   }
-  // Only prompt for outstanding if this invoice itself creates debt
-  if(outstandingBal>0&&invNet>0){
+  // Show outstanding prompt whenever customer has ANY outstanding balance
+  if(outstandingBal>0){
     showPrintChoiceModal(cust?cust.name:(s0.printName||s0.custName||'Customer'),outstandingBal,prevInvTotal,grandTotal,
       function(){doPrint(true);},function(){doPrint(false);});
   } else {
@@ -16825,6 +16830,35 @@ function printProforma(prfNum){
     '</div>'+
     '<div class="validity">'+
       '🕐 <b>This proforma is valid until: '+validStr+'</b> ('+p.validDays+' days from issue date)'+
+    '</div>'+
+    '<div style="margin-top:12px;border:1.5px solid #e9d5ff;border-radius:8px;padding:10px 14px;background:#faf8ff">'+
+      '<div style="font-size:10px;font-weight:800;color:#7c3aed;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">&#x1F4B3; Payment / Bank Details</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+
+        '<div style="border:1px solid #e9d5ff;border-radius:6px;padding:7px 10px;background:#fff">'+
+          '<div style="font-size:9px;font-weight:800;color:#7c3aed;margin-bottom:4px;text-transform:uppercase">&#x26A1; Electrical Goods Only</div>'+
+          '<div style="font-size:10px;line-height:1.7">'+
+            '<b>Bank:</b> Moniepoint<br>'+
+            '<b>Acc No:</b> 6739763758<br>'+
+            '<b>Name:</b> Kaosisochukwu Valentine A.'+
+          '</div>'+
+        '</div>'+
+        '<div style="border:1px solid #e9d5ff;border-radius:6px;padding:7px 10px;background:#fff">'+
+          '<div style="font-size:9px;font-weight:800;color:#7c3aed;margin-bottom:4px;text-transform:uppercase">&#x1F6AA; Door Payment Only</div>'+
+          '<div style="font-size:10px;line-height:1.7">'+
+            '<b>Bank:</b> Moniepoint<br>'+
+            '<b>Acc No:</b> 5350550093<br>'+
+            '<b>Name:</b> Kaosisochukwu Ahizechukwu'+
+          '</div>'+
+        '</div>'+
+        '<div style="border:1px solid #e9d5ff;border-radius:6px;padding:7px 10px;background:#fff">'+
+          '<div style="font-size:9px;font-weight:800;color:#7c3aed;margin-bottom:4px;text-transform:uppercase">&#x26A1;&#x1F6AA; Electrical &amp; Doors</div>'+
+          '<div style="font-size:10px;line-height:1.7">'+
+            '<b>Bank:</b> Wema Bank<br>'+
+            '<b>Acc No:</b> 0245175907<br>'+
+            '<b>Name:</b> Onwudiwe Godson C. Ahizechukwu K.'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
     '</div>'+
     '<div class="footer">'+
       'Goods remain the property of Great Chid Electro (Nig.) until full payment is confirmed.<br>'+
