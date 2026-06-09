@@ -1641,16 +1641,8 @@ function recalcInventoryFromSales(){
 
   var salesToProcess = DB.sales.filter(function(s){
     if(!s.date) return false;
-    // Parse sale date — handles both 'M/D/YYYY' locale and 'YYYY-MM-DD' ISO formats
-    var d = parseSaleDate(s.date);
-    if(!d) return false;
-    var dt = new Date(d);
-    // Build ISO date string manually to avoid timezone issues
-    var yr = dt.getFullYear();
-    var mo = String(dt.getMonth()+1).padStart(2,'0');
-    var dy = String(dt.getDate()).padStart(2,'0');
-    var ds = yr+'-'+mo+'-'+dy;
-    if(ds < fromDate || ds > toDate) return false;
+    // Use dateInRange which handles locale date formats correctly
+    if(!dateInRange(s.date, fromDate, toDate)) return false;
     if(s.supplyStatus === 'pending') return false;
     return true;
   });
