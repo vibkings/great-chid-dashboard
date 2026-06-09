@@ -1504,6 +1504,8 @@ function applySnapshot(snapshot) {
   migrateDepositApplied();
   // ── One-time migration: rename old deposit shortfall cashflow desc to new format ──
   migrateDepositShortfallDesc();
+  // Remove duplicate overpayment creditPayments entries (they double-deduct in statement)
+  migrateRemoveOverpaymentCreditEntries();
   // Remove any items in recycleBin from inventory/warehouse (prevents re-appearance after stale sync)
   purgeBinnedFromCollections();
 }
@@ -1537,6 +1539,25 @@ function migrateDepositApplied(){
   });
   if(patched>0){
     console.log('Migration: fixed '+patched+' deposit-covered invoice(s)');
+    saveData();
+  }
+}
+
+function migrateRemoveOverpaymentCreditEntries(){
+  if(!DB.creditPayments||!DB.creditPayments.length)return;
+  var before=DB.creditPayments.length;
+  DB.creditPayments=DB.creditPayments.filter(function(p){
+    var note=(p.note||'').toLowerCase();
+    if(note.indexOf('overpayment')>=0)return false;
+    if(note.indexOf('partial clearance')>=0)return false;
+    if(note.indexOf('cleared via overpayment')>=0)return false;
+    if(note.indexOf('balance cleared via extra')>=0)return false;
+    if(note.indexOf('opening balance cleared via')>=0)return false;
+    return true;
+  });
+  var removed=before-DB.creditPayments.length;
+  if(removed>0){
+    console.log('Migration: removed '+removed+' duplicate overpayment creditPayments entries');
     saveData();
   }
 }
@@ -8499,22 +8520,15 @@ function submitInvoice(){
 
 
       if(overpayment > 0){
-        // Customer paid MORE than the invoice — reduce their outstanding credit balance first
-        // (openingBalance debt + any unpaid invoices). If fully cleared, remainder = store credit we owe them
+        // Customer paid MORE than the invoice — reduce their outstanding credit balance directly.
+        // Do NOT push to creditPayments — the overpayment is already visible via the invoice's
+        // partPayment amount in the statement. A separate creditPayments entry would double-deduct.
         var currentDebt = Math.max(0, regC.creditBalance||0);
         if(overpayment >= currentDebt){
-          // Overpayment clears ALL debt; any remainder is store credit (we owe them)
           var storeCredit = overpayment - currentDebt;
           regC.creditBalance = storeCredit > 0 ? -storeCredit : 0;
-          // Log the debt clearance as a credit payment so it shows in the statement
-          if(currentDebt > 0){
-            DB.creditPayments.push({id:uid(),custId:regC.id,custName:regC.name,amount:currentDebt,payMode:payMode,bankId:bankId,posId:posId,date:date,month:month,by:DB.currentUser.name,note:'Cleared via overpayment on Invoice #'+invNum});
-          }
         } else {
-          // Partial overpayment — reduces debt but doesn't clear it
           regC.creditBalance = (regC.creditBalance||0) - overpayment;
-          // Log partial debt clearance
-          DB.creditPayments.push({id:uid(),custId:regC.id,custName:regC.name,amount:overpayment,payMode:payMode,bankId:bankId,posId:posId,date:date,month:month,by:DB.currentUser.name,note:'Partial clearance via overpayment on Invoice #'+invNum});
         }
       } else if(creditAmount > 0){
         // Customer still owes us the remaining amount
@@ -8541,7 +8555,7 @@ function submitInvoice(){
           var clears2=Math.min(extraReceived,currentDebt2);
           regC.creditBalance=regC.creditBalance-clears2;
           DB.cashflow.push({id:uid(),desc:'Opening/credit balance cleared — '+custName+' Invoice #'+invNum,amount:clears2,type:'in',cat:'Sales',payMode:payMode,bankId:bankId,posId:posId,date:date,month:month});
-          DB.creditPayments.push({id:uid(),custId:regC.id,custName:regC.name,amount:clears2,payMode:payMode,bankId:bankId,posId:posId,date:date,month:month,by:DB.currentUser.name,note:'Balance cleared via extra payment on Invoice #'+invNum});
+          // No creditPayments entry — balance adjustment is already in cashflow and reflected via invoice
           var remaining2=extraReceived-clears2;
           if(remaining2>0){
             // Still more than the debt — store as credit we owe them
