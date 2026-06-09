@@ -1483,6 +1483,8 @@ function applySnapshot(snapshot) {
   // ── One-time migration: stamp depositApplied on existing sale records ──
   // Finds negative deposit entries (auto-applied) and patches the matching sale items
   migrateDepositApplied();
+  // ── One-time migration: rename old deposit shortfall cashflow desc to new format ──
+  migrateDepositShortfallDesc();
 }
 
 function migrateDepositApplied(){
@@ -1514,6 +1516,27 @@ function migrateDepositApplied(){
   });
   if(patched>0){
     console.log('Migration: fixed '+patched+' deposit-covered invoice(s)');
+    saveData();
+  }
+}
+
+function migrateDepositShortfallDesc(){
+  // Renames old 'Deposit shortfall paid (mode) — Name Invoice #X' cashflow entries
+  // to new 'Invoice #X balance paid (mode) — Name' format so the daily closing picks them up
+  var changed=0;
+  (DB.cashflow||[]).forEach(function(c){
+    if(!c.isDepositApplied&&c.type==='in'&&c.cat==='Sales'&&
+       (c.desc||'').indexOf('Deposit shortfall paid')===0){
+      // Extract mode and rest: 'Deposit shortfall paid (cash) — Name Invoice #X'
+      var m=c.desc.match(/^Deposit shortfall paid \(([^)]+)\) — (.+?) Invoice #(.+)$/);
+      if(m){
+        c.desc='Invoice #'+m[3]+' balance paid ('+m[1]+') — '+m[2];
+        changed++;
+      }
+    }
+  });
+  if(changed>0){
+    console.log('Migration: renamed '+changed+' deposit shortfall cashflow entry/entries to new format');
     saveData();
   }
 }
