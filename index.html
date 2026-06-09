@@ -2084,10 +2084,11 @@ function _doOneDriveUpload(token, json, filename, onSuccess, onError) {
 }
 
 function autoBackupToOneDrive(silent) {
+  if (DB.currentUser && DB.sales) autoBackupSave('pre-drive');
   var json = localStorage.getItem(AUTO_BACKUP_PREFIX+'latest');
   if (!json) { if(!silent) showToast('No backup found. Save first.','error'); return; }
   var snapshot = JSON.parse(json);
-  var dateStr = (snapshot.exportedAt || new Date().toISOString()).slice(0,10);
+  var dateStr = new Date().toISOString().slice(0,10);
   var filename = 'gce_autobackup_' + dateStr + '.json';
   if (!silent) showToast('☁️ Uploading to OneDrive...', 'info');
   uploadToOneDrive(json, filename, function() {
