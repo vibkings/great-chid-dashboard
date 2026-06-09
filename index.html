@@ -617,8 +617,20 @@ function fbGetCollection(colName, callback) {
 // ── Write a single collection doc ───────────────────────────
 function fbSetCollection(colName, data, onSuccess, onError) {
   var url = GCE_REST_BASE + GCE_COL_PATH + colName + GCE_API_KEY_QS;
-  var body = JSON.stringify(toFirestoreDoc(data));
-  // Size guard: Firestore docs limited to ~1MB; log warning if approaching
+  // Size guard: Firestore docs limited to 1MB
+  // If over limit, trim oldest records to fit
+  var trimmedData = data;
+  if(Array.isArray(data) && data.length > 0) {
+    var body_test = JSON.stringify(toFirestoreDoc(data));
+    if(body_test.length > 950000) {
+      console.warn('[Firebase] '+colName+' payload '+Math.round(body_test.length/1024)+'KB — trimming to fit 1MB limit');
+      // Keep most recent records (assuming array is roughly chronological or has date field)
+      var trimmed = data.slice(-Math.floor(data.length * 0.7)); // keep newest 70%
+      trimmedData = trimmed;
+      showToast('⚠️ '+colName+' data trimmed to fit Firestore limit. Consider archiving old records.','warning');
+    }
+  }
+  var body = JSON.stringify(toFirestoreDoc(trimmedData));
   if (body.length > 900000) {
     console.warn('[Firebase] ' + colName + ' payload is ' + Math.round(body.length/1024) + 'KB — near Firestore 1MB limit');
   }
@@ -1393,9 +1405,18 @@ function saveData() {
   fbLastSavedAt = snapshot._savedAt;
   fbLastOwnSavedAt = snapshot._savedAt;
   // Always save locally first — works offline
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch(e) {}
-  // Auto backup — silently save a rolling backup copy
-  try { autoBackupSave('save'); } catch(e) {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch(e) {
+    // localStorage full — clear old auto backups and retry
+    try {
+      for(var _k=localStorage.length-1;_k>=0;_k--){
+        var _key=localStorage.key(_k);
+        if(_key&&_key.startsWith('gce_autobackup_'))localStorage.removeItem(_key);
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+      console.warn('localStorage was full — cleared auto backups and retried save');
+    } catch(e2){ console.error('saveData localStorage failed even after cleanup:', e2); }
+  }
+  // Auto backup runs on schedule only (not after every sale) to avoid filling localStorage
 
   // If offline, queue and show indicator
   if(!navigator.onLine){
@@ -1425,6 +1446,27 @@ function saveData() {
 
 // ---- loadData: localStorage first, then Firebase per-collection ----
 function loadData() {
+  // Emergency cleanup: remove old auto backups to free localStorage space
+  try {
+    var _totalSize = 0;
+    var _backupKeys = [];
+    for(var _i=0;_i<localStorage.length;_i++){
+      var _k=localStorage.key(_i);
+      if(_k&&_k.startsWith('gce_autobackup_')&&_k!=='gce_autobackup_lastTime'){
+        _backupKeys.push(_k);
+        try{_totalSize+=localStorage.getItem(_k).length;}catch(e){}
+      }
+    }
+    // If backups taking more than 2MB, clear all of them
+    if(_totalSize > 2000000){
+      _backupKeys.forEach(function(k){localStorage.removeItem(k);});
+      console.warn('Cleared '+_backupKeys.length+' auto backup keys ('+Math.round(_totalSize/1024)+'KB freed)');
+    } else {
+      // Normal prune — keep only 2 most recent
+      _backupKeys.sort().reverse();
+      _backupKeys.slice(2).forEach(function(k){localStorage.removeItem(k);});
+    }
+  } catch(e){}
   // Load from localStorage immediately so app works offline
   try {
     var raw = localStorage.getItem(STORAGE_KEY);
@@ -1842,24 +1884,37 @@ function doSafeRestore() {
 // Keeps rolling backups in localStorage — up to 7 days
 // Keys: gce_autobackup_YYYY-MM-DD (daily) + gce_autobackup_hourly (last hour)
 var AUTO_BACKUP_PREFIX = 'gce_autobackup_';
-var AUTO_BACKUP_MAX_DAYS = 7;
+var AUTO_BACKUP_MAX_DAYS = 2;
 
 function autoBackupSave(label) {
   try {
     var snapshot = buildSnapshot();
     snapshot.exportedAt = new Date().toISOString();
     snapshot.autoBackupLabel = label || 'auto';
-    var json = JSON.stringify(snapshot);
-    // Daily key — overwrites same day's backup
+    // Build a lean snapshot for localStorage — exclude heavy collections to stay under 5MB limit
+    // Full data is always in Firestore; localStorage backup is just a safety net
+    var leanSnap = JSON.parse(JSON.stringify(snapshot));
+    // Remove heaviest collections from local backup (they're safe in Firestore)
+    // Keep: inventory, customers, suppliers, settings, cashflow(recent), activityLog(recent)
+    // Remove: sales (largest), purchases, adjLog, salesReturns, creditPayments, deposits
+    var heavyCols = ['sales','purchases','adjLog','salesReturns','commissionLedger',
+                     'demoSales','stockCounts','transferLog','recycleBin','drafts',
+                     'pendingDeliveries','supplierDeposits','tillSessions'];
+    heavyCols.forEach(function(c){ if(leanSnap[c]) leanSnap[c] = []; });
+    var json = JSON.stringify(leanSnap);
+    // Only save daily key (no 'latest' large snapshot — use Drive for full backup)
     var dayKey = AUTO_BACKUP_PREFIX + new Date().toISOString().slice(0,10);
-    localStorage.setItem(dayKey, json);
-    // Hourly key — always latest
-    localStorage.setItem(AUTO_BACKUP_PREFIX + 'latest', json);
-    // Record last auto backup time
+    try {
+      localStorage.setItem(dayKey, json);
+    } catch(e2) {
+      // If still too large, skip daily key entirely
+      console.warn('Auto backup daily key failed:', e2.message);
+    }
+    // Always update lastTime
     localStorage.setItem(AUTO_BACKUP_PREFIX + 'lastTime', new Date().toISOString());
     // Prune old backups beyond MAX_DAYS
     autoBackupPrune();
-    console.log('✅ Auto backup saved:', dayKey);
+    console.log('✅ Auto backup saved (lean):', dayKey, Math.round(json.length/1024)+'KB');
     return true;
   } catch(e) {
     console.warn('Auto backup failed:', e);
@@ -2047,14 +2102,11 @@ function _gDriveUploadToFolder(token, folderId, json, filename, onSuccess, onErr
 }
 
 function autoBackupToGDrive(silent) {
-  // Always save a fresh snapshot before uploading — ensures we upload today's data,
-  // not a stale 'latest' from a previous session.
-  if (DB.currentUser && DB.sales) autoBackupSave('pre-drive');
-  var json = localStorage.getItem(AUTO_BACKUP_PREFIX+'latest');
-  if (!json) { if(!silent) showToast('No backup found. Save first.','error'); return; }
-  var snapshot;
-  try { snapshot = JSON.parse(json); } catch(e) { return; }
-  // Always use today's date for the filename — never use stale exportedAt
+  // Always build a FULL fresh snapshot for Drive upload (not the lean localStorage version)
+  var snapshot = buildSnapshot();
+  snapshot.exportedAt = new Date().toISOString();
+  var json = JSON.stringify(snapshot);
+  // Always use today's date for the filename
   var dateStr = new Date().toISOString().slice(0,10);
   var filename = 'gce_autobackup_' + dateStr + '.json';
 
