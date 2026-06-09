@@ -1655,15 +1655,19 @@ function recalcInventoryFromSales(){
 
   var qtySoldMap = {};
   salesToProcess.forEach(function(s){
-    var id = String(s.itemId||s.name);
-    if(!qtySoldMap[id]) qtySoldMap[id] = {itemId:s.itemId, name:s.name, qty:0};
+    // Use itemId as primary key, fall back to name — ensures each unique item is tracked separately
+    var id = s.itemId ? 'id_'+String(s.itemId) : 'name_'+String(s.name).toLowerCase().trim();
+    if(!qtySoldMap[id]) qtySoldMap[id] = {itemId:s.itemId||null, name:s.name, qty:0};
     qtySoldMap[id].qty += (s.qty||1);
   });
+  console.log('[RecalcInv] Unique items to deduct:', Object.keys(qtySoldMap).length);
 
   var preview = Object.values(qtySoldMap).map(function(r){
-    var inv = DB.inventory.find(function(i){return String(i.id)===String(r.itemId);});
-    var currentQty = inv ? inv.qty : '?';
-    var newQty = inv ? Math.max(0, inv.qty - r.qty) : '?';
+    var inv = r.itemId
+      ? DB.inventory.find(function(i){return String(i.id)===String(r.itemId);})
+      : DB.inventory.find(function(i){return i.name.toLowerCase().trim()===r.name.toLowerCase().trim();});
+    var currentQty = inv ? inv.qty : '(not in inventory)';
+    var newQty = inv ? Math.max(0, inv.qty - r.qty) : '-';
     return r.name+': '+currentQty+' -> '+newQty+' (-'+r.qty+')';
   }).join('\n');
 
@@ -1674,7 +1678,9 @@ function recalcInventoryFromSales(){
   var adjDate = new Date().toLocaleDateString();
   var changes = [];
   Object.values(qtySoldMap).forEach(function(r){
-    var inv = DB.inventory.find(function(i){return String(i.id)===String(r.itemId);});
+    var inv = r.itemId
+      ? DB.inventory.find(function(i){return String(i.id)===String(r.itemId);})
+      : DB.inventory.find(function(i){return i.name.toLowerCase().trim()===r.name.toLowerCase().trim();});
     if(!inv) return;
     var before = inv.qty;
     inv.qty = Math.max(0, inv.qty - r.qty);
