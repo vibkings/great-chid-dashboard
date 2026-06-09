@@ -10938,8 +10938,9 @@ function saveInvoiceEdit(invNum){
     }
   }
 
-  saveData();
-  // Recalculate totalSpent on affected customer(s)
+  // Recalculate totalSpent AND creditBalance for affected customers
+  // creditBalance is recalculated from scratch: sum of unpaid credit/part invoice amounts
+  // minus all credit payments made. This handles any payment type change correctly.
   var _affIds=[s0.custId, newCustId].filter(Boolean);
   _affIds.forEach(function(aid){
     var affCust=DB.customers.find(function(c){return String(c.id)===String(aid);});
@@ -10947,8 +10948,32 @@ function saveInvoiceEdit(invNum){
       var affSales=DB.sales.filter(function(s){return String(s.custId)===String(aid);});
       affCust.totalSpent=affSales.reduce(function(a,s){return a+s.total;},0);
       affCust.totalPurchases=[...new Set(affSales.map(function(s){return s.invoiceNum||s.id;}))].length;
+
+      // Recalculate creditBalance from transaction history
+      // Step 1: sum all unpaid amounts from credit/part invoices
+      var invMap={};
+      affSales.forEach(function(s){
+        var k=String(s.invoiceNum||s.id);
+        if(!invMap[k])invMap[k]={payment:s.payment,total:0,partPayment:s.partPayment||0,depositApplied:s.depositApplied||0};
+        invMap[k].total+=s.total;
+      });
+      var totalOwed=Object.values(invMap).reduce(function(a,inv){
+        if(inv.payment==='credit')return a+Math.max(0,inv.total-(inv.depositApplied||0));
+        if(inv.payment==='part')return a+Math.max(0,inv.total-(inv.partPayment||0)-(inv.depositApplied||0));
+        return a;
+      },0);
+      // Step 2: subtract all credit payments made
+      var totalPaid=(DB.creditPayments||[]).filter(function(p){
+        return String(p.custId)===String(aid)&&p.payMode!=='writeoff'&&p.payMode!=='commission';
+      }).reduce(function(a,p){return a+(p.amount||0);},0);
+      // Step 3: add opening balance debt
+      var openBal=affCust.openingBalance||0;
+      // creditBalance = total owed - total paid (floor at 0 unless we owe them)
+      var newCreditBal=Math.max(0, openBal + totalOwed - totalPaid);
+      affCust.creditBalance=newCreditBal;
     }
   });
+  saveData();
   logActivity('Invoice edited','Invoice #'+invNum+' — total: '+fmt(oldTotal)+' → '+fmt(newTotal)+'. Reason: '+reason,'Admin: '+DB.currentUser.name);
   // Close ALL invoice modals first before any re-render
   var editMod=document.getElementById('inv-edit-modal');if(editMod)editMod.remove();
