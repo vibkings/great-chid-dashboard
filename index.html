@@ -1632,6 +1632,71 @@ function migrateDepositApplied(){
   }
 }
 
+function recalcInventoryFromSales(){
+  var today = new Date().toISOString().slice(0,10);
+  var fromDate = prompt('Enter START date (YYYY-MM-DD). Example: '+today, today);
+  if(!fromDate) return;
+  var toDate = prompt('Enter END date (YYYY-MM-DD). Same as start for single day:', fromDate);
+  if(!toDate) toDate = fromDate;
+
+  var salesToProcess = DB.sales.filter(function(s){
+    if(!s.date) return false;
+    var d = parseSaleDate(s.date);
+    if(!d) return false;
+    var ds = new Date(d).toISOString().slice(0,10);
+    if(ds < fromDate || ds > toDate) return false;
+    if(s.supplyStatus === 'pending') return false;
+    return true;
+  });
+
+  if(!salesToProcess.length){
+    alert('No sales found for '+fromDate+' to '+toDate+'.');
+    return;
+  }
+
+  var qtySoldMap = {};
+  salesToProcess.forEach(function(s){
+    var id = String(s.itemId||s.name);
+    if(!qtySoldMap[id]) qtySoldMap[id] = {itemId:s.itemId, name:s.name, qty:0};
+    qtySoldMap[id].qty += (s.qty||1);
+  });
+
+  var preview = Object.values(qtySoldMap).map(function(r){
+    var inv = DB.inventory.find(function(i){return String(i.id)===String(r.itemId);});
+    var currentQty = inv ? inv.qty : '?';
+    var newQty = inv ? Math.max(0, inv.qty - r.qty) : '?';
+    return r.name+': '+currentQty+' -> '+newQty+' (-'+r.qty+')';
+  }).join('\n');
+
+  if(!confirm('Deduct the following from inventory for sales '+fromDate+' to '+toDate+':\n\n'+preview+'\n\nContinue?')){
+    return;
+  }
+
+  var adjDate = new Date().toLocaleDateString();
+  var changes = [];
+  Object.values(qtySoldMap).forEach(function(r){
+    var inv = DB.inventory.find(function(i){return String(i.id)===String(r.itemId);});
+    if(!inv) return;
+    var before = inv.qty;
+    inv.qty = Math.max(0, inv.qty - r.qty);
+    DB.adjLog.push({
+      id:uid(), itemId:inv.id, itemName:inv.name,
+      type:'remove', reason:'Sales recalculation ('+fromDate+' to '+toDate+')',
+      before:before, change:-r.qty, after:inv.qty,
+      date:adjDate, by:DB.currentUser.name
+    });
+    changes.push(inv.name+': '+before+' -> '+inv.qty);
+  });
+
+  saveData();
+  fbSetCollection('inventory', DB.inventory, null, null);
+  fbSetCollection('adjLog', DB.adjLog, null, null);
+  logActivity('Inventory recalculated', 'Sales deductions for '+fromDate+' to '+toDate+' - '+changes.length+' items', DB.currentUser.name);
+
+  alert('Done! '+changes.length+' item(s) adjusted:\n\n'+changes.join('\n'));
+  renderPanel();
+}
+
 function fixOverpaymentDuplicates(){
   if(!confirm('This will remove duplicate payment entries caused by overpayments and push the fix directly to Firestore.\n\nContinue?'))return;
   if(!DB.creditPayments||!DB.creditPayments.length){showToast('No credit payment entries found.','info');return;}
@@ -3411,6 +3476,9 @@ function buildSettings(){
     '<div class="tbl-wrap"><table><thead><tr><th>Terminal name</th><th>Terminal ID</th><th></th></tr></thead><tbody>'+posRows+'</tbody></table></div>'+
     (isAdmin()?'<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title" style="color:var(--danger)">⚠ Danger zone</p><p style="font-size:13px;color:#666;margin-bottom:1rem">Permanently delete all business data. This cannot be undone. Export a backup first.</p><button class="btn danger" style="font-size:13px;padding:8px 14px" onclick="clearAllData()">🗑 Clear all data</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title">🔧 Data Fixes</p>'+
+    '<p style="font-size:13px;color:#666;margin-bottom:10px">Recalculate inventory quantities by deducting all sales records from the current stock. Use this to fix inventory that reverted due to a save failure. You will select a date range to recalculate.</p>'+
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#0d6efd;color:#fff;border-color:#0d6efd" onclick="recalcInventoryFromSales()">📦 Recalculate Inventory from Sales</button>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
     '<p style="font-size:13px;color:#666;margin-bottom:10px">Remove duplicate payment entries created by overpayments — these can cause customer balances to appear lower than they should. This fix pushes directly to Firestore.</p>'+
     '<button class="btn" style="font-size:13px;padding:8px 14px;background:#c0392b;color:#fff;border-color:#c0392b" onclick="fixOverpaymentDuplicates()">🔧 Fix Duplicate Overpayment Entries</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
