@@ -1559,6 +1559,38 @@ function migrateDepositApplied(){
   }
 }
 
+function fixOverpaymentDuplicates(){
+  if(!confirm('This will remove duplicate payment entries caused by overpayments and push the fix directly to Firestore.\n\nContinue?'))return;
+  if(!DB.creditPayments||!DB.creditPayments.length){showToast('No credit payment entries found.','info');return;}
+  var before=DB.creditPayments.length;
+  DB.creditPayments=DB.creditPayments.filter(function(p){
+    var note=(p.note||'').toLowerCase();
+    if(note.indexOf('overpayment')>=0)return false;
+    if(note.indexOf('partial clearance')>=0)return false;
+    if(note.indexOf('cleared via overpayment')>=0)return false;
+    if(note.indexOf('balance cleared via extra')>=0)return false;
+    if(note.indexOf('opening balance cleared via')>=0)return false;
+    return true;
+  });
+  var removed=before-DB.creditPayments.length;
+  if(removed===0){showToast('No duplicate entries found — already clean.','success');return;}
+  // Save locally
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildSnapshot()));}catch(e){}
+  showToast('Removing '+removed+' duplicate entr'+(removed===1?'y':'ies')+' and pushing to Firestore...','info');
+  // Force-push directly to Firestore — bypasses sync cycle
+  fbSetCollection('creditPayments', DB.creditPayments,
+    function(){
+      showToast('✅ Fixed! Removed '+removed+' duplicate entr'+(removed===1?'y':'ies')+'. Firestore updated.','success');
+      saveData();
+      renderPanel();
+    },
+    function(err){
+      showToast('Firestore push failed: '+err+'. Trying saveData...','error');
+      saveData();
+    }
+  );
+}
+
 function migrateRemoveOverpaymentCreditEntries(){
   if(!DB.creditPayments||!DB.creditPayments.length)return;
   var before=DB.creditPayments.length;
@@ -3288,6 +3320,9 @@ function buildSettings(){
     '<div class="tbl-wrap"><table><thead><tr><th>Terminal name</th><th>Terminal ID</th><th></th></tr></thead><tbody>'+posRows+'</tbody></table></div>'+
     (isAdmin()?'<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title" style="color:var(--danger)">⚠ Danger zone</p><p style="font-size:13px;color:#666;margin-bottom:1rem">Permanently delete all business data. This cannot be undone. Export a backup first.</p><button class="btn danger" style="font-size:13px;padding:8px 14px" onclick="clearAllData()">🗑 Clear all data</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title">🔧 Data Fixes</p>'+
+    '<p style="font-size:13px;color:#666;margin-bottom:10px">Remove duplicate payment entries created by overpayments — these can cause customer balances to appear lower than they should. This fix pushes directly to Firestore.</p>'+
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#c0392b;color:#fff;border-color:#c0392b" onclick="fixOverpaymentDuplicates()">🔧 Fix Duplicate Overpayment Entries</button>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
     '<p style="font-size:13px;color:#666;margin-bottom:10px">Fix restocking discrepancy: reclassifies old supplier payment cashflow entries that were incorrectly tagged as Restock.</p>'+
     '<button class="btn" style="font-size:13px;padding:8px 14px;background:#4A3020;color:#fff;border-color:#1a237e" onclick="fixSupplierPaymentCategories()">🔧 Fix Restocking Categories</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
