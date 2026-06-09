@@ -7044,7 +7044,12 @@ function calcOutstandingAtDate(custId, invDate, invNum, invNet){
 
   // prevInvTotal = opening balance + prior unpaid − payments − return credits
   var prevInvTotal=Math.max(0,openingBal+prevOwed-prevPaid-prevReturnCredit);
-  var outstandingAtDate=prevInvTotal+Math.max(0,invNet);
+  // invNet can be negative for overpayments (e.g. part payment > invoice total)
+  // Overpayment reduces the previous balance further
+  var rawNet=invNet; // may be negative if caller passed pre-floored value
+  // Re-derive raw invNet from the invoice itself if needed
+  // outstandingAtDate = prevBalance + thisInvoiceNet (capped at 0 if overpaid)
+  var outstandingAtDate=Math.max(0, prevInvTotal + rawNet);
   return {prevInvTotal:prevInvTotal,outstandingAtDate:outstandingAtDate};
 }
 
@@ -7185,9 +7190,8 @@ function printCustomerInvoice(invNum,custId){
   var emptyRows='';var minRI=Math.max(12,invSales.length);for(var i=invSales.length;i<minRI;i++)emptyRows+='<tr><td style="height:22px">&nbsp;</td><td></td><td></td><td></td><td style="background:#fff5f5"></td><td></td></tr>';
   var partPaid=s0.partPayment||0;
   var depApplied=invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
-  var invNet=s0.payment==='credit'?Math.max(0,grandTotal-depApplied):s0.payment==='part'?Math.max(0,grandTotal-partPaid-depApplied):0;
-  // Always recalculate from transaction history — never trust stale cached balance
-  // calcOutstandingAtDate uses date+invoiceNum tiebreaker so it's always accurate
+  // Raw invNet: can be negative for overpayments — passed raw so calc handles correctly
+  var invNet=s0.payment==='credit'?(grandTotal-depApplied):s0.payment==='part'?(grandTotal-partPaid-depApplied):0;
   var _calcResult=custId?calcOutstandingAtDate(custId,s0.date,invNum,invNet):{prevInvTotal:0,outstandingAtDate:0};
   var prevInvTotal=_calcResult.prevInvTotal;
   var outstandingBal=_calcResult.outstandingAtDate;
@@ -8630,7 +8634,8 @@ function printInvoice(inv){
   var _invSales=DB.sales.filter(function(s){return s.invoiceNum===inv.invoiceNum;});
   var _invDepApplied=inv.depositApplied||_invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
   // Always calculate outstanding balance from transaction history (never from live creditBalance)
-  var _invNet=inv.payment==='credit'?Math.max(0,_invPrintTotal-_invDepApplied):inv.payment==='part'?Math.max(0,_invPrintTotal-(inv.partPayment||0)-_invDepApplied):0;
+  // Raw invNet: negative for overpayments
+  var _invNet=inv.payment==='credit'?(_invPrintTotal-_invDepApplied):inv.payment==='part'?(_invPrintTotal-(inv.partPayment||0)-_invDepApplied):0;
   var _invCustId=inv.custId||(_invSales[0]?_invSales[0].custId:null);
   var _calcPrint=_invCustId?calcOutstandingAtDate(_invCustId,inv.date,inv.invoiceNum,_invNet):{prevInvTotal:0,outstandingAtDate:0};
   var html=buildInvoiceHTML({invoiceNum:inv.invoiceNum,custName:inv.printName||inv.custName,custAddr:inv.custAddr,day:day,month:month2,year:year,rows:rows+emptyRows,itemCount:inv.items.length,subtotalAll:inv.subtotalAll||inv.grandTotal,invoiceDiscAmt:inv.invoiceDiscAmt||0,grandTotal:_invPrintTotal,payment:inv.payment,payMode:inv.payMode,depTopupMode:inv.depTopupMode||null,depositApplied:_invDepApplied,bankId:inv.bankId,posId:inv.posId,splitPayment:inv.splitPayment||null,seller:inv.seller,pendingSupply:anyPending,wasEverPending:inv.wasEverPending||anyPending||false,supplyDate:inv.supplyDate||null,partPayment:inv.partPayment||0,outstandingBal:_calcPrint.outstandingAtDate,prevInvTotal:_calcPrint.prevInvTotal});
@@ -10969,9 +10974,18 @@ function saveInvoiceEdit(invNum){
         if(inv.payment==='part')return a+Math.max(0,inv.total-(inv.partPayment||0)-(inv.depositApplied||0));
         return a;
       },0);
-      // Step 2: subtract all credit payments made
+      // Step 2: subtract only genuine credit payments (not overpayment clearances
+      // which are already accounted for via partPayment on the invoice)
       var totalPaid=(DB.creditPayments||[]).filter(function(p){
-        return String(p.custId)===String(aid)&&p.payMode!=='writeoff'&&p.payMode!=='commission';
+        if(String(p.custId)!==String(aid))return false;
+        if(p.payMode==='writeoff'||p.payMode==='commission')return false;
+        // Exclude overpayment/clearance entries — already in partPayment on invoice
+        var note=(p.note||'').toLowerCase();
+        if(note.indexOf('overpayment')>=0)return false;
+        if(note.indexOf('clearance')>=0)return false;
+        if(note.indexOf('cleared via')>=0)return false;
+        if(note.indexOf('balance cleared')>=0)return false;
+        return true;
       }).reduce(function(a,p){return a+(p.amount||0);},0);
       // Step 3: add opening balance debt
       var openBal=affCust.openingBalance||0;
@@ -11162,8 +11176,8 @@ function reprintInvoice(invNum){
   var cust=custId?DB.customers.find(function(c){return c.id==custId;}):null;
   var partPaid=s0.partPayment||0;
   var depApplied=invSales.reduce(function(a,s){return a+(s.depositApplied||0);},0);
-  var invNet=s0.payment==='credit'?Math.max(0,grandTotal-depApplied):s0.payment==='part'?Math.max(0,grandTotal-partPaid-depApplied):0;
-  // Always use transaction-history calc — never stale cached creditBalance
+  // Raw invNet: negative for overpayments
+  var invNet=s0.payment==='credit'?(grandTotal-depApplied):s0.payment==='part'?(grandTotal-partPaid-depApplied):0;
   var _calcResult2=custId?calcOutstandingAtDate(custId,s0.date,invNum,invNet):{prevInvTotal:0,outstandingAtDate:0};
   var prevInvTotal=_calcResult2.prevInvTotal;
   var outstandingBal=_calcResult2.outstandingAtDate;
