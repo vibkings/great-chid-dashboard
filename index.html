@@ -712,7 +712,7 @@ function buildCollectionSnapshot(colName) {
     demoSales: DB.demoSales||[],
     purchaseQuotations: DB.purchaseQuotations||[],
     demoInvoiceCounter: DB.demoInvoiceCounter||1,
-    activityLog: (DB.activityLog||[]).slice(0,200), // limit to 200
+    activityLog: (DB.activityLog||[]).slice(0,500), // limit to 500
     settings: DB.settings||{},
     creditCustomers: DB.creditCustomers||[],
     users: DB.users,
