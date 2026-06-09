@@ -1415,12 +1415,11 @@ function loadData() {
 function applySnapshot(snapshot) {
   if (!snapshot) return;
   DB.users = snapshot.users || DB.users;
-  // Inventory: use whichever has more items (protects recent additions)
+  // Inventory: merge by id — local wins for existing items (qty changes), add any new remote items
   var _snapInv = snapshot.inventory || [];
-  if(!DB.inventory||DB.inventory.length===0) DB.inventory = _snapInv;
-  else if(_snapInv.length > DB.inventory.length) DB.inventory = _snapInv;
-  else {
-    // Merge: add any items in snapshot not in local (by id)
+  if(!DB.inventory||DB.inventory.length===0){
+    DB.inventory = _snapInv;
+  } else {
     var _invIds={}; DB.inventory.forEach(function(i){if(i.id)_invIds[String(i.id)]=true;});
     _snapInv.forEach(function(i){if(i.id&&!_invIds[String(i.id)])DB.inventory.push(i);});
   }
@@ -1436,12 +1435,22 @@ function applySnapshot(snapshot) {
   DB.creditCustomers = snapshot.creditCustomers || [];
   DB.adjLog = snapshot.adjLog || [];
   DB.salesReturns = snapshot.salesReturns || [];
-  // For transferLog and warehouse: only overwrite if local is empty
-  // (protects against stale Firestore overwriting fresh local data)
-  if(!DB.transferLog||DB.transferLog.length===0) DB.transferLog = snapshot.transferLog || [];
-  else if(snapshot.transferLog&&snapshot.transferLog.length>DB.transferLog.length) DB.transferLog = snapshot.transferLog;
-  if(!DB.warehouse||DB.warehouse.length===0) DB.warehouse = snapshot.warehouse || [];
-  else if(snapshot.warehouse&&snapshot.warehouse.length>DB.warehouse.length) DB.warehouse = snapshot.warehouse;
+  // transferLog: merge by id — never lose local transfer records
+  var _snapTL = snapshot.transferLog || [];
+  if(!DB.transferLog||DB.transferLog.length===0){
+    DB.transferLog = _snapTL;
+  } else {
+    var _tlIds={}; DB.transferLog.forEach(function(e){if(e.id)_tlIds[String(e.id)]=true;});
+    _snapTL.forEach(function(e){if(e.id&&!_tlIds[String(e.id)])DB.transferLog.push(e);});
+  }
+  // warehouse: merge by id — local wins for existing items (qty changes), add new remote items
+  var _snapWH = snapshot.warehouse || [];
+  if(!DB.warehouse||DB.warehouse.length===0){
+    DB.warehouse = _snapWH;
+  } else {
+    var _whIds={}; DB.warehouse.forEach(function(i){if(i.id)_whIds[String(i.id)]=true;});
+    _snapWH.forEach(function(i){if(i.id&&!_whIds[String(i.id)])DB.warehouse.push(i);});
+  }
   DB.stockCounts = snapshot.stockCounts || [];
   DB.banks = snapshot.banks || DB.banks;
   DB.posTerminals = snapshot.posTerminals || DB.posTerminals;
@@ -1467,11 +1476,18 @@ function applySnapshot(snapshot) {
     }
     DB.invoiceYear=currentYr;
   }
-  // ActivityLog: always keep the longer list (more entries = more recent)
+  // ActivityLog: merge by id — never lose local entries that aren't in the snapshot yet
   var _snapLog = snapshot.activityLog || [];
-  if(!DB.activityLog||DB.activityLog.length===0) DB.activityLog = _snapLog;
-  else if(_snapLog.length > DB.activityLog.length) DB.activityLog = _snapLog;
-  // else keep local (it has more entries than remote snapshot)
+  if(!DB.activityLog||DB.activityLog.length===0){
+    DB.activityLog = _snapLog;
+  } else {
+    var _logIds={};
+    DB.activityLog.forEach(function(e){if(e.id)_logIds[e.id]=true;});
+    _snapLog.forEach(function(e){if(e.id&&!_logIds[e.id])DB.activityLog.push(e);});
+    // Keep sorted newest first, cap at 500
+    DB.activityLog.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+    if(DB.activityLog.length>500)DB.activityLog=DB.activityLog.slice(0,500);
+  }
   DB.supplierPayments = snapshot.supplierPayments || [];
   DB.tillSessions = snapshot.tillSessions || [];
   DB.supplierDeposits = snapshot.supplierDeposits || [];
