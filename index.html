@@ -3804,6 +3804,45 @@ function showCalculator(){
     '<div id="gce-calc-hist" style="min-height:44px;padding:0 14px 4px;border-bottom:1px solid var(--border)"></div>'+
     '<div id="gce-calc-disp" style="font-size:28px;font-weight:800;text-align:right;padding:10px 14px;color:var(--text1);word-break:break-all;min-height:48px">0</div>'+
     '<div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:6px">'+btnRows+'</div>';
+  // Make calculator draggable
+  var isDragging=false,dragStartX=0,dragStartY=0,ovStartX=0,ovStartY=0;
+  var header=ov.querySelector('div');
+  if(header){
+    header.style.cursor='move';
+    header.addEventListener('mousedown',function(e){
+      isDragging=true;
+      dragStartX=e.clientX;dragStartY=e.clientY;
+      var rect=ov.getBoundingClientRect();
+      ovStartX=rect.left;ovStartY=rect.top;
+      e.preventDefault();
+    });
+  }
+  document.addEventListener('mousemove',function(e){
+    if(!isDragging)return;
+    var dx=e.clientX-dragStartX,dy=e.clientY-dragStartY;
+    ov.style.right='auto';ov.style.top='auto';
+    ov.style.left=Math.max(0,Math.min(ovStartX+dx,window.innerWidth-290))+'px';
+    ov.style.top=Math.max(0,Math.min(ovStartY+dy,window.innerHeight-200))+'px';
+  });
+  document.addEventListener('mouseup',function(){isDragging=false;});
+  // Touch support
+  if(header){
+    header.addEventListener('touchstart',function(e){
+      isDragging=true;
+      var t=e.touches[0];
+      dragStartX=t.clientX;dragStartY=t.clientY;
+      var rect=ov.getBoundingClientRect();
+      ovStartX=rect.left;ovStartY=rect.top;
+    },{passive:true});
+  }
+  document.addEventListener('touchmove',function(e){
+    if(!isDragging)return;
+    var t=e.touches[0],dx=t.clientX-dragStartX,dy=t.clientY-dragStartY;
+    ov.style.right='auto';ov.style.top='auto';
+    ov.style.left=Math.max(0,Math.min(ovStartX+dx,window.innerWidth-290))+'px';
+    ov.style.top=Math.max(0,Math.min(ovStartY+dy,window.innerHeight-200))+'px';
+  },{passive:true});
+  document.addEventListener('touchend',function(){isDragging=false;});
   document.body.appendChild(ov);
   render();
 }
@@ -4121,8 +4160,15 @@ function renderApp(){
     if(g.payment==='credit'){todayCredit+=g.total;return;}
     if(g.payment==='deposit'){
       // Deposit portion goes to deposit bucket
-      // Shortfall is picked up separately from cashflow entries below
-      todayDeposit+=(g.depAmt||g.total);
+      todayDeposit+=(g.depAmt||0);
+      // Shortfall (topup) goes to correct mode — use invoice data directly (reliable)
+      var _topupAmt=g.topupAmt||0;
+      var _topupMode=g.depTopupMode||null;
+      if(_topupMode&&_topupAmt>0){
+        if(_topupMode==='pos')todayPos+=_topupAmt;
+        else if(_topupMode==='transfer')todayTransfer+=_topupAmt;
+        else todayCash+=_topupAmt;
+      }
       return;
     }
     if(g.payMode==='split'&&g.splitPayment){
@@ -4135,20 +4181,8 @@ function renderApp(){
     if(g.payMode==='transfer'){todayTransfer+=g.total;return;}
     todayCash+=g.total;
   });
-  // Deposit shortfall — use invoice-based calculation (reliable regardless of cashflow desc format)
-  // Already handled in the _todayInvMap loop above via depAmt/topupAmt
-  // Also add from cashflow entries as a safety net for any missed invoices
-  var _cfShortfallIds=new Set();
-  DB.cashflow.filter(function(c){
-    return !c.isDepositApplied&&!c.isExchange&&c.type==='in'&&c.cat==='Sales'&&
-    ((c.desc||'').indexOf('balance paid')>=0||(c.desc||'').indexOf('shortfall paid')>=0)&&
-    dateInRange(c.date,todayStr,todayStr);
-  }).forEach(function(c){
-    _cfShortfallIds.add(c.id);
-    if(c.payMode==='pos')todayPos+=c.amount;
-    else if(c.payMode==='transfer')todayTransfer+=c.amount;
-    else todayCash+=c.amount;
-  });
+  // Deposit shortfall is now handled directly in _todayInvMap loop above (invoice-based)
+  // No need for separate cashflow filter — avoids double-counting
   var openTill=DB.tillSessions&&DB.tillSessions.length?(DB.tillSessions.filter(function(t){return !t.closedAt;}).length>0):false;
   var tillFloat=0;
   if(DB.tillSessions&&DB.tillSessions.length){
