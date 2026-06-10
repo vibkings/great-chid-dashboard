@@ -440,6 +440,391 @@ input.inline-edit{border:none;border-radius:6px;padding:4px 7px;font-size:12px;w
 .bin-table-row:hover td{background:#fee2e2!important}
 .bin-empty{text-align:center;padding:3rem 2rem;color:var(--text3);font-size:13px}
 .bin-countdown{font-size:10.5px;color:var(--danger);font-weight:600}
+
+/* ═══════════════════════════════════════════════════════════════
+   BENTO GRID THEME — Clean flat card design, indigo accent
+   Activated by: body.theme-bento
+   ═══════════════════════════════════════════════════════════════ */
+body.theme-bento {
+  --bg:#F1F5F9;
+  --surface:#ffffff;
+  --surface2:#f8fafc;
+  --surface3:#f1f5f9;
+  --border:#e2e8f0;
+  --border2:#e8edf4;
+  --text:#0f172a;
+  --text2:#334155;
+  --text3:#64748b;
+  --table-hover:rgba(99,102,241,0.05);
+
+  --sidebar:#ffffff;
+  --sidebar-border:#e2e8f0;
+  --sidebar-hover:rgba(99,102,241,0.06);
+  --sidebar-active:rgba(99,102,241,0.1);
+
+  --primary:#6366F1;
+  --primary-dark:#4f46e5;
+  --primary-bg:rgba(99,102,241,0.08);
+  --secondary:#94a3b8;
+  --secondary-bg:#f8fafc;
+  --success:#16a34a;
+  --success-bg:#f0fdf4;
+  --danger:#dc2626;
+  --danger-bg:#fef2f2;
+  --warning:#d97706;
+  --warning-bg:#fffbeb;
+  --warning-text:#92400e;
+  --info:#0284c7;
+  --info-dark:#0369a1;
+  --info-bg:#f0f9ff;
+  --info-text:#0c4a6e;
+  --dark:#0f172a;
+  --light:#f8fafc;
+  --white:#ffffff;
+
+  --accent:var(--primary);
+  --accent2:var(--primary-dark);
+  --accent-glow:rgba(99,102,241,0.15);
+  --blue:var(--primary);
+  --blue-bg:var(--primary-bg);
+  --green:var(--success);
+  --green-bg:var(--success-bg);
+  --red:var(--danger);
+  --red-bg:var(--danger-bg);
+  --amber:var(--warning-text);
+  --amber-bg:var(--warning-bg);
+  --purple:#7c3aed;
+  --purple-bg:#f5f3ff;
+
+  --radius:10px;--radius-sm:8px;--radius-lg:14px;--radius-xl:18px;
+  --shadow:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.05);
+  --shadow-md:0 4px 12px rgba(0,0,0,.08),0 2px 4px rgba(0,0,0,.04);
+  --shadow-lg:0 10px 25px rgba(0,0,0,.1),0 4px 10px rgba(0,0,0,.05);
+  --shadow-card:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.05);
+  --transition:.18s cubic-bezier(.4,0,.2,1);
+
+  /* No neumorphic shadows */
+  --neu-shadow:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.05);
+  --neu-shadow-sm:0 1px 2px rgba(0,0,0,.06);
+  --neu-shadow-lg:0 8px 20px rgba(0,0,0,.1);
+  --neu-inset:inset 0 2px 4px rgba(0,0,0,.06);
+  --neu-inset-sm:inset 0 1px 3px rgba(0,0,0,.05);
+}
+
+/* ── Bento Layout ── */
+body.theme-bento .sidebar {
+  background:#ffffff;
+  border-right:1px solid #e2e8f0;
+  box-shadow:none;
+}
+body.theme-bento .main { background:#F1F5F9; }
+body.theme-bento .topbar {
+  background:#ffffff;
+  border-bottom:1px solid #e2e8f0;
+  box-shadow:0 1px 3px rgba(0,0,0,.06);
+}
+
+/* ── Bento Sidebar ── */
+body.theme-bento .logo-mark {
+  background:linear-gradient(135deg,#6366F1,#8b5cf6);
+  color:#fff;
+  box-shadow:none;
+}
+body.theme-bento .nav-item {
+  border-radius:8px;
+  box-shadow:none;
+}
+body.theme-bento .nav-item:hover {
+  background:rgba(99,102,241,0.06);
+  color:#6366F1;
+  box-shadow:none;
+}
+body.theme-bento .nav-item.active {
+  background:rgba(99,102,241,0.1);
+  color:#6366F1;
+  box-shadow:none;
+  border-left:3px solid #6366F1;
+}
+body.theme-bento .nav-collapse-btn {
+  box-shadow:none;
+  border:1px solid #e2e8f0;
+}
+body.theme-bento .nav-collapse-btn:hover { box-shadow:none; background:#f1f5f9; }
+body.theme-bento .nav-collapse-btn:active { box-shadow:none; background:#e2e8f0; }
+body.theme-bento .user-block { box-shadow:none; border:1px solid #e2e8f0; }
+body.theme-bento .user-block:hover { box-shadow:var(--shadow); }
+body.theme-bento .user-block:active { box-shadow:none; background:#f8fafc; }
+
+/* ── Bento Buttons ── */
+body.theme-bento .btn {
+  background:#ffffff;
+  border:1px solid #e2e8f0;
+  box-shadow:0 1px 2px rgba(0,0,0,.05);
+  color:#334155;
+}
+body.theme-bento .btn:hover {
+  box-shadow:var(--shadow-md);
+  transform:translateY(-1px);
+  border-color:#cbd5e1;
+}
+body.theme-bento .btn:active {
+  transform:translateY(0);
+  box-shadow:none;
+  background:#f8fafc;
+}
+body.theme-bento .btn.primary {
+  background:linear-gradient(135deg,#6366F1,#4f46e5);
+  color:#fff;
+  border:none;
+  box-shadow:0 2px 8px rgba(99,102,241,0.3);
+}
+body.theme-bento .btn.primary:hover {
+  background:linear-gradient(135deg,#4f46e5,#4338ca);
+  box-shadow:0 4px 12px rgba(99,102,241,0.35);
+}
+body.theme-bento .btn.success {
+  background:linear-gradient(135deg,#16a34a,#15803d);
+  color:#fff;
+  border:none;
+  box-shadow:0 2px 8px rgba(22,163,74,0.25);
+}
+body.theme-bento .btn.danger {
+  background:#fff;
+  color:#dc2626;
+  border:1px solid #fecaca;
+  box-shadow:none;
+}
+body.theme-bento .btn.danger:hover { background:#fef2f2; box-shadow:none; }
+body.theme-bento .btn.info {
+  background:#fff;
+  color:#6366F1;
+  border:1px solid #c7d2fe;
+  box-shadow:none;
+}
+body.theme-bento .btn.info:hover { background:#eef2ff; box-shadow:none; }
+
+/* ── Bento Cards ── */
+body.theme-bento .card {
+  background:#ffffff;
+  border:1px solid #e2e8f0;
+  border-radius:14px;
+  box-shadow:0 1px 3px rgba(0,0,0,.07);
+}
+body.theme-bento .card:hover { box-shadow:var(--shadow-md); }
+body.theme-bento .section-box {
+  background:#ffffff;
+  border:1px solid #e2e8f0;
+  border-radius:14px;
+  box-shadow:0 1px 3px rgba(0,0,0,.07);
+}
+body.theme-bento .profit-box {
+  background:#ffffff;
+  border:1px solid #e2e8f0;
+  border-radius:14px;
+  box-shadow:0 1px 3px rgba(0,0,0,.07);
+}
+
+/* ── Bento Metrics ── */
+body.theme-bento .mc {
+  background:#ffffff;
+  border:1px solid #e2e8f0;
+  border-radius:14px;
+  box-shadow:0 1px 3px rgba(0,0,0,.07);
+}
+body.theme-bento .mc:hover { box-shadow:var(--shadow-md); transform:translateY(-2px); }
+body.theme-bento .mc::before { background:#6366F1; }
+
+/* ── Bento Tables ── */
+body.theme-bento .tbl-wrap {
+  background:#ffffff;
+  border:1px solid #e2e8f0;
+  border-radius:14px;
+  box-shadow:0 1px 3px rgba(0,0,0,.07);
+}
+body.theme-bento th {
+  background:#f8fafc;
+  color:#64748b;
+}
+body.theme-bento tr:hover td { background:rgba(99,102,241,0.04)!important; }
+
+/* ── Bento Forms ── */
+body.theme-bento input,
+body.theme-bento select,
+body.theme-bento textarea {
+  background:#ffffff;
+  border:1px solid #e2e8f0;
+  box-shadow:none;
+}
+body.theme-bento input:focus,
+body.theme-bento select:focus,
+body.theme-bento textarea:focus {
+  border-color:#6366F1;
+  box-shadow:0 0 0 3px rgba(99,102,241,0.12);
+  outline:none;
+}
+body.theme-bento input.inline-edit {
+  border:1px solid #e2e8f0;
+  box-shadow:none;
+}
+body.theme-bento .sale-summary {
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+  box-shadow:none;
+}
+
+/* ── Bento Subtabs ── */
+body.theme-bento .subtab {
+  background:#ffffff;
+  border:1px solid #e2e8f0;
+  box-shadow:none;
+  color:#64748b;
+}
+body.theme-bento .subtab:hover { background:#f8fafc; color:#6366F1; border-color:#c7d2fe; }
+body.theme-bento .subtab.active {
+  background:#6366F1;
+  color:#ffffff;
+  border-color:#6366F1;
+  box-shadow:0 2px 8px rgba(99,102,241,0.25);
+}
+
+/* ── Bento Alerts ── */
+body.theme-bento .alert {
+  background:#fffbeb;
+  border-left:3px solid #d97706;
+  box-shadow:none;
+  border-radius:8px;
+}
+body.theme-bento .alert.danger { background:#fef2f2; border-left-color:#dc2626; }
+body.theme-bento .alert.info { background:#f0f9ff; border-left-color:#6366F1; }
+body.theme-bento .alert.success { background:#f0fdf4; border-left-color:#16a34a; }
+
+/* ── Bento Progress bars ── */
+body.theme-bento .bar-track {
+  background:#f1f5f9;
+  box-shadow:none;
+}
+body.theme-bento .bar-fill { background:linear-gradient(90deg,#6366F1,#8b5cf6); }
+body.theme-bento .cust-bar-wrap {
+  background:#f1f5f9;
+  box-shadow:none;
+}
+
+/* ── Bento Sec-title ── */
+body.theme-bento .sec-title::before { background:#6366F1; }
+
+/* ── Bento Dropdowns ── */
+body.theme-bento #s-reg-cust-dd,
+body.theme-bento #pi-item-dropdown,
+body.theme-bento #inv-item-dropdown,
+body.theme-bento #pu-sup-dd,
+body.theme-bento #sup-pay-filter-dd,
+body.theme-bento #prod-report-dd,
+body.theme-bento #ei-cust-dd,
+body.theme-bento #pcm-bank,
+body.theme-bento #pcm-pos {
+  background:#ffffff!important;
+  border:1px solid #e2e8f0!important;
+  box-shadow:var(--shadow-md)!important;
+}
+body.theme-bento #s-reg-cust-dd div,
+body.theme-bento #pi-item-dropdown div,
+body.theme-bento #inv-item-dropdown div,
+body.theme-bento #pu-sup-dd div,
+body.theme-bento #sup-pay-filter-dd div,
+body.theme-bento #prod-report-dd div,
+body.theme-bento #ei-cust-dd div {
+  background:#ffffff;
+  color:#0f172a;
+}
+
+/* ── Bento Dark mode adjustments ── */
+body.theme-bento.dark-mode {
+  --bg:#0f1117;
+  --surface:#1e2130;
+  --surface2:#252837;
+  --surface3:#2a2d3a;
+  --border:#2a2d3a;
+  --border2:#333649;
+  --text:#e2e8f0;
+  --text2:#94a3b8;
+  --text3:#64748b;
+  --primary:#818cf8;
+  --primary-dark:#6366F1;
+  --primary-bg:rgba(99,102,241,0.15);
+}
+body.theme-bento.dark-mode .sidebar { background:#1e2130; border-color:#2a2d3a; }
+body.theme-bento.dark-mode .topbar { background:#1e2130; border-color:#2a2d3a; }
+body.theme-bento.dark-mode .card,
+body.theme-bento.dark-mode .section-box,
+body.theme-bento.dark-mode .mc,
+body.theme-bento.dark-mode .tbl-wrap,
+body.theme-bento.dark-mode .profit-box { background:#1e2130; border-color:#2a2d3a; }
+body.theme-bento.dark-mode .btn { background:#252837; border-color:#2a2d3a; color:#94a3b8; }
+body.theme-bento.dark-mode input,
+body.theme-bento.dark-mode select,
+body.theme-bento.dark-mode textarea { background:#252837; border-color:#2a2d3a; color:#e2e8f0; }
+body.theme-bento.dark-mode th { background:#252837; }
+body.theme-bento.dark-mode .subtab { background:#252837; border-color:#2a2d3a; }
+body.theme-bento.dark-mode .subtab.active { background:#6366F1; color:#fff; }
+body.theme-bento.dark-mode .sale-summary { background:#252837; border-color:#2a2d3a; }
+
+/* ── Bento Auth Screen ── */
+body.theme-bento .auth-screen {
+  background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f0f9ff 100%);
+}
+body.theme-bento .auth-card {
+  background:#ffffff;
+  box-shadow:0 20px 40px rgba(0,0,0,.1),0 4px 12px rgba(0,0,0,.06);
+  border:1px solid #e2e8f0;
+  border-radius:20px;
+}
+body.theme-bento .auth-logo {
+  background:linear-gradient(135deg,#6366F1,#8b5cf6);
+  color:#fff;
+  box-shadow:0 4px 12px rgba(99,102,241,0.3);
+}
+body.theme-bento .auth-input {
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+  box-shadow:none;
+}
+body.theme-bento .auth-input:focus {
+  border-color:#6366F1;
+  box-shadow:0 0 0 3px rgba(99,102,241,0.12);
+  background:#fff;
+}
+body.theme-bento .auth-btn {
+  background:linear-gradient(135deg,#6366F1,#4f46e5);
+  box-shadow:0 4px 12px rgba(99,102,241,0.3);
+}
+body.theme-bento .auth-btn:hover {
+  background:linear-gradient(135deg,#4f46e5,#4338ca);
+  box-shadow:0 6px 16px rgba(99,102,241,0.35);
+}
+body.theme-bento .auth-hint {
+  background:#f8fafc;
+  box-shadow:none;
+  border:1px solid #e2e8f0;
+}
+body.theme-bento .auth-error {
+  background:#fef2f2;
+  box-shadow:none;
+  border:1px solid #fecaca;
+}
+
+/* ── Bento Sync badge ── */
+body.theme-bento .sync-badge { background:#ffffff; }
+body.theme-bento .sync-badge.connected { background:#f0fdf4; }
+body.theme-bento .sync-badge.error { background:#fef2f2; }
+
+/* ── Bento Reminder banner ── */
+body.theme-bento .reminder-banner {
+  background:#fef2f2;
+  box-shadow:none;
+  border:1px solid #fecaca;
+  border-left:3px solid #dc2626;
+}
+
 </style>
 </head>
 <body>
@@ -3816,7 +4201,25 @@ function toggleDarkMode(){
   var btn=document.getElementById('dark-mode-btn');
   if(btn)btn.textContent=on?'🌙':'☀️';
 }
+function getCurrentTheme(){
+  return localStorage.getItem('gce_theme')||'neuro';
+}
+function switchTheme(){
+  var current=getCurrentTheme();
+  var next=current==='neuro'?'bento':'neuro';
+  document.body.classList.remove('theme-neuro','theme-bento');
+  document.body.classList.add('theme-'+next);
+  localStorage.setItem('gce_theme',next);
+  var btn=document.getElementById('theme-switch-btn');
+  if(btn)btn.title=next==='bento'?'Switch to Neumorphic':'Switch to Bento Grid';
+  if(btn)btn.textContent=next==='bento'?'🎨':'✏️';
+}
+function initTheme(){
+  var t=getCurrentTheme();
+  document.body.classList.add('theme-'+t);
+}
 function applyDarkMode(){
+  initTheme(); // Apply saved theme (neuro or bento) on load
   if(localStorage.getItem('darkMode')==='1'){
     document.body.classList.add('dark-mode');
   }
@@ -4115,6 +4518,7 @@ function renderApp(){
           '<button class="btn sm" onclick="exportBackup()" title="Export data backup">&#11015; Backup</button>'+
           '<button class="btn sm" onclick="showAutoBackupPanel()" title="Auto backup history" style="color:#15803d;border-color:#86efac">🔄</button>'+
           '<button class="btn sm" onclick="showCalculator()" title="Calculator" style="font-size:14px;padding:4px 8px">🧮</button>'+
+          '<button class="btn sm" onclick="switchTheme()" id="theme-switch-btn" title="'+(getCurrentTheme()==='bento'?'Switch to Neumorphic':'Switch to Bento Grid')+'" style="font-size:14px;padding:4px 8px">'+(getCurrentTheme()==='bento'?'🎨':'✏️')+'</button>'+
           '<button class="btn sm" onclick="toggleDarkMode()" title="Toggle dark/light mode" id="dark-mode-btn" style="font-size:14px;padding:4px 8px">'+(isDarkMode()?'☀️':'🌙')+'</button>'+
           '<button class="btn sm" onclick="doLogout()">Sign out</button>'+
         '</div>'+
