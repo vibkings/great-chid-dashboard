@@ -520,7 +520,7 @@ var DB={
   users:[{id:1,name:'Admin',username:'vibkings',password:'vibkings',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
   adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],commissionLedger:[],proformas:[],
-  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],
+  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],salesArchive:[],
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
   invoiceCounter:1,demoInvoiceCounter:1,
@@ -604,7 +604,7 @@ var GCE_COLLECTIONS = [
   'supplierPayments','tillSessions','activityLog','settings','supplierDeposits','demoSales',
   'creditCustomers','users','banks','posTerminals','categories',
   'expenseCats','transferLog','warehouse','recycleBin','drafts',
-  'pendingDeliveries','meta' // meta = invoiceCounter, invoiceYear, etc.
+  'pendingDeliveries','salesArchive','meta' // meta = invoiceCounter, invoiceYear, etc.
 ];
 
 var STORAGE_KEY      = 'gce_business_data';
@@ -819,7 +819,7 @@ function applyCollection(colName, payload) {
     // Collections that use ID-based merge (never overwrite local entries)
     var mergeCols = ['activityLog','inventory','warehouse','transferLog','adjLog',
                      'stockCounts','recycleBin','drafts','pendingDeliveries',
-                     'supplierDeposits','tillSessions','commissionLedger','proformas','demoSales'];
+                     'supplierDeposits','tillSessions','commissionLedger','proformas','demoSales','salesArchive'];
     // Users: never overwrite local — local credentials always win
     var localWinCols = ['users'];
     if(localWinCols.indexOf(col) >= 0) {
@@ -1461,6 +1461,8 @@ function saveData() {
   DB._savedAt = snapshot._savedAt;
   fbLastSavedAt = snapshot._savedAt;
   fbLastOwnSavedAt = snapshot._savedAt;
+  // Auto-archive old sales if collection is getting large (>800KB)
+  try { if(DB.sales && JSON.stringify(DB.sales).length > 800000) archiveOldSales(false); } catch(e) {}
   // Always save locally first — works offline
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch(e) {}
   // Auto backup — silently save a rolling backup copy
@@ -1527,6 +1529,13 @@ function applySnapshot(snapshot) {
     _snapInv.forEach(function(i){if(i.id&&!_invIds[String(i.id)])DB.inventory.push(i);});
   }
   DB.sales = snapshot.sales || [];
+  // salesArchive: merge by id — never lose local archive entries
+  var _snapArch = snapshot.salesArchive || [];
+  if(!DB.salesArchive||DB.salesArchive.length===0){ DB.salesArchive = _snapArch; }
+  else {
+    var _archIds={}; DB.salesArchive.forEach(function(s){if(s.id)_archIds[String(s.id)]=true;});
+    _snapArch.forEach(function(s){if(s.id&&!_archIds[String(s.id)])DB.salesArchive.push(s);});
+  }
   DB.purchases = snapshot.purchases || [];
   DB.cashflow = snapshot.cashflow || [];
   DB.creditPayments = snapshot.creditPayments || [];
@@ -1757,11 +1766,80 @@ function migrateDepositShortfallDesc(){
   }
 }
 
+
+// ── Sales Archive System ─────────────────────────────────────────
+// Moves sales older than ARCHIVE_DAYS to salesArchive collection
+// so main sales collection stays under Firestore 1MB limit
+var ARCHIVE_DAYS = 30;
+
+function getArchiveCutoffDate() {
+  var d = new Date();
+  d.setDate(d.getDate() - ARCHIVE_DAYS);
+  return d;
+}
+
+function manualArchiveSales(){
+  var n = archiveOldSales(true);
+  if(n > 0){
+    showToast('Done! '+n+' sales archived. Active: '+(DB.sales||[]).length+', Archived: '+(DB.salesArchive||[]).length,'success');
+    renderPanel();
+  } else {
+    showToast('No sales old enough to archive (all within 90 days).','info');
+  }
+}
+
+function archiveOldSales(force) {
+  if(!DB.sales||!DB.sales.length) return 0;
+  if(!DB.salesArchive) DB.salesArchive = [];
+
+  // Only archive if sales payload is large OR force=true
+  var payload = JSON.stringify(DB.sales);
+  if(!force && payload.length < 800000) return 0; // under 800KB — no need yet
+
+  var cutoff = getArchiveCutoffDate();
+  var toArchive = [];
+  var toKeep = [];
+
+  DB.sales.forEach(function(s){
+    var d = parseDate(s.date);
+    if(d && d < cutoff) {
+      toArchive.push(s);
+    } else {
+      toKeep.push(s);
+    }
+  });
+
+  if(!toArchive.length) return 0;
+
+  // Move to archive
+  var archiveIds = {};
+  DB.salesArchive.forEach(function(s){ if(s.id) archiveIds[String(s.id)] = true; });
+  toArchive.forEach(function(s){
+    if(!archiveIds[String(s.id)]) DB.salesArchive.push(s);
+  });
+  DB.sales = toKeep;
+
+  console.log('[Archive] Moved '+toArchive.length+' sales to archive. Remaining: '+toKeep.length);
+
+  // Push both to Firestore immediately
+  fbSetCollection('sales', DB.sales, null, null);
+  fbSetCollection('salesArchive', DB.salesArchive, null, null);
+  logActivity('Sales archived', toArchive.length+' records older than 30 days moved to archive', 'System');
+
+  return toArchive.length;
+}
+
+function getAllSales() {
+  // Returns all sales (current + archive) merged — used for reports and history
+  var all = (DB.sales||[]).concat(DB.salesArchive||[]);
+  return all;
+}
+
 function buildSnapshot() {
   var now = new Date().toISOString();
   DB._savedAt = now;
   return {
-    users: DB.users, inventory: DB.inventory, sales: DB.sales,
+    users: DB.users, inventory: DB.inventory, sales: DB.sales, salesArchive: DB.salesArchive||[],
     purchases: DB.purchases, cashflow: DB.cashflow, drafts: DB.drafts || [],
     pendingDeliveries: DB.pendingDeliveries || [],
     suppliers: DB.suppliers, customers: DB.customers,
@@ -3505,6 +3583,10 @@ function buildSettings(){
     '<div class="tbl-wrap"><table><thead><tr><th>Terminal name</th><th>Terminal ID</th><th></th></tr></thead><tbody>'+posRows+'</tbody></table></div>'+
     (isAdmin()?'<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title" style="color:var(--danger)">⚠ Danger zone</p><p style="font-size:13px;color:#666;margin-bottom:1rem">Permanently delete all business data. This cannot be undone. Export a backup first.</p><button class="btn danger" style="font-size:13px;padding:8px 14px" onclick="clearAllData()">🗑 Clear all data</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title">🔧 Data Fixes</p>'+
+    '<p style="font-size:13px;color:#666;margin-bottom:6px">Move sales records older than 30 days to archive. They remain visible in sales history but are stored separately to keep Firestore under its 1MB limit.</p>'+
+    '<p style="font-size:12px;color:var(--text3);margin-bottom:10px">Current: <b>'+((DB.sales||[]).length)+' active sales</b> · <b>'+((DB.salesArchive||[]).length)+' archived</b></p>'+
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#0d6efd;color:#fff;border-color:#0d6efd" onclick="manualArchiveSales()">📦 Archive Sales Older Than 30 Days</button>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
     '<p style="font-size:13px;color:#666;margin-bottom:10px">Remove duplicate payment entries created by overpayments — these can cause customer balances to appear lower than they should. This fix pushes directly to Firestore.</p>'+
     '<button class="btn" style="font-size:13px;padding:8px 14px;background:#c0392b;color:#fff;border-color:#c0392b" onclick="fixOverpaymentDuplicates()">🔧 Fix Duplicate Overpayment Entries</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
@@ -6884,7 +6966,7 @@ function buildCustomers(){
         ?'<span style="color:var(--danger)">Owes '+fmt(creditBalance)+'</span>'
         :'<span style="color:var(--success)">Cleared</span>';
       // Group sales by invoice for this customer
-      var custSales=DB.sales.filter(function(s){return s.custId==cust.id;});
+      var custSales=getAllSales().filter(function(s){return s.custId==cust.id;});
       var invGroups={};
       custSales.forEach(function(s){var k=s.invoiceNum||s.id;if(!invGroups[k])invGroups[k]={invoiceNum:s.invoiceNum||' - ',date:s.date,items:[],total:0,profit:0,payment:s.payment,payMode:s.payMode,bankId:s.bankId,posId:s.posId,seller:s.seller,dueDate:s.dueDate||null,_s:s};invGroups[k].items.push(s);invGroups[k].total+=s.total;invGroups[k].profit+=s.profit;});
       var invKeys=Object.keys(invGroups).sort(function(a,b){return invGroups[b]._s.date>invGroups[a]._s.date?1:-1;});
@@ -7054,7 +7136,7 @@ function buildCustomers(){
           +'</div>':'')+ 
         (function(){
           var custPays2=(DB.creditPayments||[]).filter(function(p){return String(p.custId)==String(cust.id);});
-          var custSales2=DB.sales.filter(function(s){return String(s.custId)==String(cust.id);});
+          var custSales2=getAllSales().filter(function(s){return String(s.custId)==String(cust.id);});
           if(!custPays2.length&&!custSales2.length&&!(cust.openingBalance>0))return '';
           var allTx=[];
           if(cust.openingBalance>0)allTx.push({type:'opening',date:'-',label:'Opening balance',amount:cust.openingBalance,mode:'-',by:'Setup'});
@@ -7292,7 +7374,7 @@ function calcOutstandingAtDate(custId, invDate, invNum, invNet){
 
   // Only unpaid (credit) or partially paid invoices BEFORE this one
   var prevInvMap={};
-  DB.sales.filter(function(s){
+  getAllSales().filter(function(s){
     return String(s.custId)==sCustId &&
       (s.payment==='credit'||s.payment==='part') &&
       String(s.invoiceNum||s.id)!==String(invNum) &&
