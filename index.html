@@ -2442,56 +2442,120 @@ function autoBackupDownload(key) {
 
 // ── Google Drive backup integration ──────────────────────────
 var GDrive = {
-  clientId: '897745552019-8q6fbec8unf6ii87c1sschfhc4ptfinm.apps.googleusercontent.com',
+  clientId: '18374685378-mc1du1csu19dith7nc466rpn3tj41k23.apps.googleusercontent.com',
   scope: 'https://www.googleapis.com/auth/drive.file',
   token: null,
   tokenExpiry: 0
 };
 
 function gDriveGetToken(onSuccess, onError) {
-  // Check existing token
+  // 1. Check existing access token
   var saved = localStorage.getItem('gce_gdrive_token');
   var expiry = parseInt(localStorage.getItem('gce_gdrive_token_expiry')||'0');
   if (saved && Date.now() < expiry) { GDrive.token = saved; onSuccess(saved); return; }
 
-  // Get clientId from settings
+  // 2. Try refresh token via Worker (fully automatic — no popup)
+  var refreshToken = localStorage.getItem('gce_gdrive_refresh_token');
+  if (refreshToken) {
+    gDriveRefreshToken(refreshToken, onSuccess, function(refreshErr) {
+      console.warn('Refresh token failed:', refreshErr, '— falling back to popup auth');
+      localStorage.removeItem('gce_gdrive_refresh_token');
+      gDrivePopupAuth(onSuccess, onError);
+    });
+    return;
+  }
+
+  // 3. No refresh token — show auth popup (only needed once ever)
+  gDrivePopupAuth(onSuccess, onError);
+}
+
+function gDriveRefreshToken(refreshToken, onSuccess, onError) {
+  // Worker exchanges refresh token for new access token
+  var workerUrl = 'https://greatchid-inventory.valentineahize.workers.dev/gdrive/refresh';
+  fetch(workerUrl, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({refresh_token: refreshToken})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if (data.access_token) {
+      var expiresIn = parseInt(data.expires_in||'3600');
+      localStorage.setItem('gce_gdrive_token', data.access_token);
+      localStorage.setItem('gce_gdrive_token_expiry', String(Date.now() + expiresIn*1000 - 60000));
+      GDrive.token = data.access_token;
+      onSuccess(data.access_token);
+    } else {
+      if (onError) onError(data.error || 'Token refresh failed');
+    }
+  })
+  .catch(function(e){ if (onError) onError(e.message); });
+}
+
+function gDrivePopupAuth(onSuccess, onError) {
   var clientId = localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId;
   if (!clientId) {
     if (onError) onError('Google Drive not configured. Click "Connect Google Drive" first.');
     return;
   }
-  // Auto-save if using default
   if (!localStorage.getItem('gce_gdrive_client_id')) {
     localStorage.setItem('gce_gdrive_client_id', clientId);
   }
 
+  // Authorization code flow with offline access — gets refresh token
   var redirectUri = window.location.origin + window.location.pathname;
   var authUrl = 'https://accounts.google.com/o/oauth2/v2/auth' +
     '?client_id=' + encodeURIComponent(clientId) +
     '&redirect_uri=' + encodeURIComponent(redirectUri) +
-    '&response_type=token' +
+    '&response_type=code' +
     '&scope=' + encodeURIComponent(GDrive.scope) +
-    '&prompt=select_account';
+    '&access_type=offline' +
+    '&prompt=consent';
 
   var popup = window.open(authUrl, 'Google Auth', 'width=500,height=600,left=200,top=100');
   var interval = setInterval(function() {
     try {
       if (!popup || popup.closed) { clearInterval(interval); if(onError) onError('Auth cancelled.'); return; }
       var href = popup.location.href;
-      if (href && href.includes('access_token')) {
+      if (href && (href.includes('code=') || href.includes('error='))) {
         clearInterval(interval);
         popup.close();
-        var hash = href.split('#')[1] || href.split('?')[1] || '';
-        var params = new URLSearchParams(hash);
-        var token = params.get('access_token');
-        var expiresIn = parseInt(params.get('expires_in')||'3600');
-        localStorage.setItem('gce_gdrive_token', token);
-        localStorage.setItem('gce_gdrive_token_expiry', String(Date.now() + expiresIn*1000 - 60000));
-        GDrive.token = token;
-        onSuccess(token);
+        var params = new URLSearchParams(href.split('?')[1]||'');
+        var code = params.get('code');
+        var err = params.get('error');
+        if (err) { if(onError) onError('Auth error: '+err); return; }
+        if (!code) { if(onError) onError('No auth code received'); return; }
+        // Exchange code for tokens via Worker
+        gDriveExchangeCode(code, redirectUri, onSuccess, onError);
       }
-    } catch(e) {} // cross-origin — wait for redirect back
+    } catch(e) {} // cross-origin — wait
   }, 500);
+}
+
+function gDriveExchangeCode(code, redirectUri, onSuccess, onError) {
+  var workerUrl = 'https://greatchid-inventory.valentineahize.workers.dev/gdrive/token';
+  fetch(workerUrl, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({code: code, redirect_uri: redirectUri})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if (data.access_token) {
+      var expiresIn = parseInt(data.expires_in||'3600');
+      localStorage.setItem('gce_gdrive_token', data.access_token);
+      localStorage.setItem('gce_gdrive_token_expiry', String(Date.now() + expiresIn*1000 - 60000));
+      GDrive.token = data.access_token;
+      if (data.refresh_token) {
+        localStorage.setItem('gce_gdrive_refresh_token', data.refresh_token);
+        console.log('Google Drive refresh token saved — auto-refresh enabled');
+      }
+      onSuccess(data.access_token);
+    } else {
+      if (onError) onError(data.error || 'Token exchange failed');
+    }
+  })
+  .catch(function(e){ if (onError) onError(e.message); });
 }
 
 function gDriveUpload(json, filename, onSuccess, onError) {
@@ -2568,16 +2632,18 @@ function autoBackupToGDrive(silent) {
   var dateStr = new Date().toISOString().slice(0,10);
   var filename = 'gce_autobackup_' + dateStr + '.json';
 
-  // If silent (auto-trigger), check token validity FIRST.
-  // If token is expired/missing, skip rather than attempt popup (browsers block it).
-  // The next manual "Upload Now" will refresh the token, after which auto works again.
+  // With refresh token support, auto-backup always proceeds.
+  // gDriveGetToken will automatically refresh the token via Worker if expired.
+  // Only skip silently if there's NO refresh token AND token is expired (user hasn't connected yet)
   if (silent) {
     var saved = localStorage.getItem('gce_gdrive_token');
     var expiry = parseInt(localStorage.getItem('gce_gdrive_token_expiry')||'0');
-    if (!saved || Date.now() >= expiry) {
-      console.warn('GDrive auto-backup skipped: token expired. Use "Upload Now" to re-authenticate.');
+    var hasRefresh = !!localStorage.getItem('gce_gdrive_refresh_token');
+    if (!saved && !hasRefresh) {
+      console.warn('GDrive auto-backup skipped: not connected yet. Click Upload Now to connect.');
       return;
     }
+    // Token expired but we have refresh token — proceed, gDriveGetToken will auto-refresh
   }
 
   if (!silent) showToast('☁️ Uploading to Google Drive...', 'info');
@@ -2593,7 +2659,7 @@ function autoBackupToGDrive(silent) {
 }
 
 function showGDriveSetup() {
-  var existing = localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId || '';
+  var existing = GDrive.clientId; // Always use current clientId from code
   var lastBackup = localStorage.getItem('gce_gdrive_last_backup');
   var lastLabel = lastBackup ? new Date(lastBackup).toLocaleString() : 'Never';
   showConfirm({
