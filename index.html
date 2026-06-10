@@ -440,391 +440,6 @@ input.inline-edit{border:none;border-radius:6px;padding:4px 7px;font-size:12px;w
 .bin-table-row:hover td{background:#fee2e2!important}
 .bin-empty{text-align:center;padding:3rem 2rem;color:var(--text3);font-size:13px}
 .bin-countdown{font-size:10.5px;color:var(--danger);font-weight:600}
-
-/* ═══════════════════════════════════════════════════════════════
-   BENTO GRID THEME — Clean flat card design, indigo accent
-   Activated by: body.theme-bento
-   ═══════════════════════════════════════════════════════════════ */
-body.theme-bento {
-  --bg:#F1F5F9;
-  --surface:#ffffff;
-  --surface2:#f8fafc;
-  --surface3:#f1f5f9;
-  --border:#e2e8f0;
-  --border2:#e8edf4;
-  --text:#0f172a;
-  --text2:#334155;
-  --text3:#64748b;
-  --table-hover:rgba(99,102,241,0.05);
-
-  --sidebar:#ffffff;
-  --sidebar-border:#e2e8f0;
-  --sidebar-hover:rgba(99,102,241,0.06);
-  --sidebar-active:rgba(99,102,241,0.1);
-
-  --primary:#6366F1;
-  --primary-dark:#4f46e5;
-  --primary-bg:rgba(99,102,241,0.08);
-  --secondary:#94a3b8;
-  --secondary-bg:#f8fafc;
-  --success:#16a34a;
-  --success-bg:#f0fdf4;
-  --danger:#dc2626;
-  --danger-bg:#fef2f2;
-  --warning:#d97706;
-  --warning-bg:#fffbeb;
-  --warning-text:#92400e;
-  --info:#0284c7;
-  --info-dark:#0369a1;
-  --info-bg:#f0f9ff;
-  --info-text:#0c4a6e;
-  --dark:#0f172a;
-  --light:#f8fafc;
-  --white:#ffffff;
-
-  --accent:var(--primary);
-  --accent2:var(--primary-dark);
-  --accent-glow:rgba(99,102,241,0.15);
-  --blue:var(--primary);
-  --blue-bg:var(--primary-bg);
-  --green:var(--success);
-  --green-bg:var(--success-bg);
-  --red:var(--danger);
-  --red-bg:var(--danger-bg);
-  --amber:var(--warning-text);
-  --amber-bg:var(--warning-bg);
-  --purple:#7c3aed;
-  --purple-bg:#f5f3ff;
-
-  --radius:10px;--radius-sm:8px;--radius-lg:14px;--radius-xl:18px;
-  --shadow:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.05);
-  --shadow-md:0 4px 12px rgba(0,0,0,.08),0 2px 4px rgba(0,0,0,.04);
-  --shadow-lg:0 10px 25px rgba(0,0,0,.1),0 4px 10px rgba(0,0,0,.05);
-  --shadow-card:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.05);
-  --transition:.18s cubic-bezier(.4,0,.2,1);
-
-  /* No neumorphic shadows */
-  --neu-shadow:0 1px 3px rgba(0,0,0,.07),0 1px 2px rgba(0,0,0,.05);
-  --neu-shadow-sm:0 1px 2px rgba(0,0,0,.06);
-  --neu-shadow-lg:0 8px 20px rgba(0,0,0,.1);
-  --neu-inset:inset 0 2px 4px rgba(0,0,0,.06);
-  --neu-inset-sm:inset 0 1px 3px rgba(0,0,0,.05);
-}
-
-/* ── Bento Layout ── */
-body.theme-bento .sidebar {
-  background:#ffffff;
-  border-right:1px solid #e2e8f0;
-  box-shadow:none;
-}
-body.theme-bento .main { background:#F1F5F9; }
-body.theme-bento .topbar {
-  background:#ffffff;
-  border-bottom:1px solid #e2e8f0;
-  box-shadow:0 1px 3px rgba(0,0,0,.06);
-}
-
-/* ── Bento Sidebar ── */
-body.theme-bento .logo-mark {
-  background:linear-gradient(135deg,#6366F1,#8b5cf6);
-  color:#fff;
-  box-shadow:none;
-}
-body.theme-bento .nav-item {
-  border-radius:8px;
-  box-shadow:none;
-}
-body.theme-bento .nav-item:hover {
-  background:rgba(99,102,241,0.06);
-  color:#6366F1;
-  box-shadow:none;
-}
-body.theme-bento .nav-item.active {
-  background:rgba(99,102,241,0.1);
-  color:#6366F1;
-  box-shadow:none;
-  border-left:3px solid #6366F1;
-}
-body.theme-bento .nav-collapse-btn {
-  box-shadow:none;
-  border:1px solid #e2e8f0;
-}
-body.theme-bento .nav-collapse-btn:hover { box-shadow:none; background:#f1f5f9; }
-body.theme-bento .nav-collapse-btn:active { box-shadow:none; background:#e2e8f0; }
-body.theme-bento .user-block { box-shadow:none; border:1px solid #e2e8f0; }
-body.theme-bento .user-block:hover { box-shadow:var(--shadow); }
-body.theme-bento .user-block:active { box-shadow:none; background:#f8fafc; }
-
-/* ── Bento Buttons ── */
-body.theme-bento .btn {
-  background:#ffffff;
-  border:1px solid #e2e8f0;
-  box-shadow:0 1px 2px rgba(0,0,0,.05);
-  color:#334155;
-}
-body.theme-bento .btn:hover {
-  box-shadow:var(--shadow-md);
-  transform:translateY(-1px);
-  border-color:#cbd5e1;
-}
-body.theme-bento .btn:active {
-  transform:translateY(0);
-  box-shadow:none;
-  background:#f8fafc;
-}
-body.theme-bento .btn.primary {
-  background:linear-gradient(135deg,#6366F1,#4f46e5);
-  color:#fff;
-  border:none;
-  box-shadow:0 2px 8px rgba(99,102,241,0.3);
-}
-body.theme-bento .btn.primary:hover {
-  background:linear-gradient(135deg,#4f46e5,#4338ca);
-  box-shadow:0 4px 12px rgba(99,102,241,0.35);
-}
-body.theme-bento .btn.success {
-  background:linear-gradient(135deg,#16a34a,#15803d);
-  color:#fff;
-  border:none;
-  box-shadow:0 2px 8px rgba(22,163,74,0.25);
-}
-body.theme-bento .btn.danger {
-  background:#fff;
-  color:#dc2626;
-  border:1px solid #fecaca;
-  box-shadow:none;
-}
-body.theme-bento .btn.danger:hover { background:#fef2f2; box-shadow:none; }
-body.theme-bento .btn.info {
-  background:#fff;
-  color:#6366F1;
-  border:1px solid #c7d2fe;
-  box-shadow:none;
-}
-body.theme-bento .btn.info:hover { background:#eef2ff; box-shadow:none; }
-
-/* ── Bento Cards ── */
-body.theme-bento .card {
-  background:#ffffff;
-  border:1px solid #e2e8f0;
-  border-radius:14px;
-  box-shadow:0 1px 3px rgba(0,0,0,.07);
-}
-body.theme-bento .card:hover { box-shadow:var(--shadow-md); }
-body.theme-bento .section-box {
-  background:#ffffff;
-  border:1px solid #e2e8f0;
-  border-radius:14px;
-  box-shadow:0 1px 3px rgba(0,0,0,.07);
-}
-body.theme-bento .profit-box {
-  background:#ffffff;
-  border:1px solid #e2e8f0;
-  border-radius:14px;
-  box-shadow:0 1px 3px rgba(0,0,0,.07);
-}
-
-/* ── Bento Metrics ── */
-body.theme-bento .mc {
-  background:#ffffff;
-  border:1px solid #e2e8f0;
-  border-radius:14px;
-  box-shadow:0 1px 3px rgba(0,0,0,.07);
-}
-body.theme-bento .mc:hover { box-shadow:var(--shadow-md); transform:translateY(-2px); }
-body.theme-bento .mc::before { background:#6366F1; }
-
-/* ── Bento Tables ── */
-body.theme-bento .tbl-wrap {
-  background:#ffffff;
-  border:1px solid #e2e8f0;
-  border-radius:14px;
-  box-shadow:0 1px 3px rgba(0,0,0,.07);
-}
-body.theme-bento th {
-  background:#f8fafc;
-  color:#64748b;
-}
-body.theme-bento tr:hover td { background:rgba(99,102,241,0.04)!important; }
-
-/* ── Bento Forms ── */
-body.theme-bento input,
-body.theme-bento select,
-body.theme-bento textarea {
-  background:#ffffff;
-  border:1px solid #e2e8f0;
-  box-shadow:none;
-}
-body.theme-bento input:focus,
-body.theme-bento select:focus,
-body.theme-bento textarea:focus {
-  border-color:#6366F1;
-  box-shadow:0 0 0 3px rgba(99,102,241,0.12);
-  outline:none;
-}
-body.theme-bento input.inline-edit {
-  border:1px solid #e2e8f0;
-  box-shadow:none;
-}
-body.theme-bento .sale-summary {
-  background:#f8fafc;
-  border:1px solid #e2e8f0;
-  box-shadow:none;
-}
-
-/* ── Bento Subtabs ── */
-body.theme-bento .subtab {
-  background:#ffffff;
-  border:1px solid #e2e8f0;
-  box-shadow:none;
-  color:#64748b;
-}
-body.theme-bento .subtab:hover { background:#f8fafc; color:#6366F1; border-color:#c7d2fe; }
-body.theme-bento .subtab.active {
-  background:#6366F1;
-  color:#ffffff;
-  border-color:#6366F1;
-  box-shadow:0 2px 8px rgba(99,102,241,0.25);
-}
-
-/* ── Bento Alerts ── */
-body.theme-bento .alert {
-  background:#fffbeb;
-  border-left:3px solid #d97706;
-  box-shadow:none;
-  border-radius:8px;
-}
-body.theme-bento .alert.danger { background:#fef2f2; border-left-color:#dc2626; }
-body.theme-bento .alert.info { background:#f0f9ff; border-left-color:#6366F1; }
-body.theme-bento .alert.success { background:#f0fdf4; border-left-color:#16a34a; }
-
-/* ── Bento Progress bars ── */
-body.theme-bento .bar-track {
-  background:#f1f5f9;
-  box-shadow:none;
-}
-body.theme-bento .bar-fill { background:linear-gradient(90deg,#6366F1,#8b5cf6); }
-body.theme-bento .cust-bar-wrap {
-  background:#f1f5f9;
-  box-shadow:none;
-}
-
-/* ── Bento Sec-title ── */
-body.theme-bento .sec-title::before { background:#6366F1; }
-
-/* ── Bento Dropdowns ── */
-body.theme-bento #s-reg-cust-dd,
-body.theme-bento #pi-item-dropdown,
-body.theme-bento #inv-item-dropdown,
-body.theme-bento #pu-sup-dd,
-body.theme-bento #sup-pay-filter-dd,
-body.theme-bento #prod-report-dd,
-body.theme-bento #ei-cust-dd,
-body.theme-bento #pcm-bank,
-body.theme-bento #pcm-pos {
-  background:#ffffff!important;
-  border:1px solid #e2e8f0!important;
-  box-shadow:var(--shadow-md)!important;
-}
-body.theme-bento #s-reg-cust-dd div,
-body.theme-bento #pi-item-dropdown div,
-body.theme-bento #inv-item-dropdown div,
-body.theme-bento #pu-sup-dd div,
-body.theme-bento #sup-pay-filter-dd div,
-body.theme-bento #prod-report-dd div,
-body.theme-bento #ei-cust-dd div {
-  background:#ffffff;
-  color:#0f172a;
-}
-
-/* ── Bento Dark mode adjustments ── */
-body.theme-bento.dark-mode {
-  --bg:#0f1117;
-  --surface:#1e2130;
-  --surface2:#252837;
-  --surface3:#2a2d3a;
-  --border:#2a2d3a;
-  --border2:#333649;
-  --text:#e2e8f0;
-  --text2:#94a3b8;
-  --text3:#64748b;
-  --primary:#818cf8;
-  --primary-dark:#6366F1;
-  --primary-bg:rgba(99,102,241,0.15);
-}
-body.theme-bento.dark-mode .sidebar { background:#1e2130; border-color:#2a2d3a; }
-body.theme-bento.dark-mode .topbar { background:#1e2130; border-color:#2a2d3a; }
-body.theme-bento.dark-mode .card,
-body.theme-bento.dark-mode .section-box,
-body.theme-bento.dark-mode .mc,
-body.theme-bento.dark-mode .tbl-wrap,
-body.theme-bento.dark-mode .profit-box { background:#1e2130; border-color:#2a2d3a; }
-body.theme-bento.dark-mode .btn { background:#252837; border-color:#2a2d3a; color:#94a3b8; }
-body.theme-bento.dark-mode input,
-body.theme-bento.dark-mode select,
-body.theme-bento.dark-mode textarea { background:#252837; border-color:#2a2d3a; color:#e2e8f0; }
-body.theme-bento.dark-mode th { background:#252837; }
-body.theme-bento.dark-mode .subtab { background:#252837; border-color:#2a2d3a; }
-body.theme-bento.dark-mode .subtab.active { background:#6366F1; color:#fff; }
-body.theme-bento.dark-mode .sale-summary { background:#252837; border-color:#2a2d3a; }
-
-/* ── Bento Auth Screen ── */
-body.theme-bento .auth-screen {
-  background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f0f9ff 100%);
-}
-body.theme-bento .auth-card {
-  background:#ffffff;
-  box-shadow:0 20px 40px rgba(0,0,0,.1),0 4px 12px rgba(0,0,0,.06);
-  border:1px solid #e2e8f0;
-  border-radius:20px;
-}
-body.theme-bento .auth-logo {
-  background:linear-gradient(135deg,#6366F1,#8b5cf6);
-  color:#fff;
-  box-shadow:0 4px 12px rgba(99,102,241,0.3);
-}
-body.theme-bento .auth-input {
-  background:#f8fafc;
-  border:1px solid #e2e8f0;
-  box-shadow:none;
-}
-body.theme-bento .auth-input:focus {
-  border-color:#6366F1;
-  box-shadow:0 0 0 3px rgba(99,102,241,0.12);
-  background:#fff;
-}
-body.theme-bento .auth-btn {
-  background:linear-gradient(135deg,#6366F1,#4f46e5);
-  box-shadow:0 4px 12px rgba(99,102,241,0.3);
-}
-body.theme-bento .auth-btn:hover {
-  background:linear-gradient(135deg,#4f46e5,#4338ca);
-  box-shadow:0 6px 16px rgba(99,102,241,0.35);
-}
-body.theme-bento .auth-hint {
-  background:#f8fafc;
-  box-shadow:none;
-  border:1px solid #e2e8f0;
-}
-body.theme-bento .auth-error {
-  background:#fef2f2;
-  box-shadow:none;
-  border:1px solid #fecaca;
-}
-
-/* ── Bento Sync badge ── */
-body.theme-bento .sync-badge { background:#ffffff; }
-body.theme-bento .sync-badge.connected { background:#f0fdf4; }
-body.theme-bento .sync-badge.error { background:#fef2f2; }
-
-/* ── Bento Reminder banner ── */
-body.theme-bento .reminder-banner {
-  background:#fef2f2;
-  box-shadow:none;
-  border:1px solid #fecaca;
-  border-left:3px solid #dc2626;
-}
-
 </style>
 </head>
 <body>
@@ -1002,20 +617,8 @@ function fbGetCollection(colName, callback) {
 // ── Write a single collection doc ───────────────────────────
 function fbSetCollection(colName, data, onSuccess, onError) {
   var url = GCE_REST_BASE + GCE_COL_PATH + colName + GCE_API_KEY_QS;
-  // Size guard: Firestore docs limited to 1MB
-  // If over limit, trim oldest records to fit
-  var trimmedData = data;
-  if(Array.isArray(data) && data.length > 0) {
-    var body_test = JSON.stringify(toFirestoreDoc(data));
-    if(body_test.length > 950000) {
-      console.warn('[Firebase] '+colName+' payload '+Math.round(body_test.length/1024)+'KB — trimming to fit 1MB limit');
-      // Keep most recent records (assuming array is roughly chronological or has date field)
-      var trimmed = data.slice(-Math.floor(data.length * 0.7)); // keep newest 70%
-      trimmedData = trimmed;
-      showToast('⚠️ '+colName+' data trimmed to fit Firestore limit. Consider archiving old records.','warning');
-    }
-  }
-  var body = JSON.stringify(toFirestoreDoc(trimmedData));
+  var body = JSON.stringify(toFirestoreDoc(data));
+  // Size guard: Firestore docs limited to ~1MB; log warning if approaching
   if (body.length > 900000) {
     console.warn('[Firebase] ' + colName + ' payload is ' + Math.round(body.length/1024) + 'KB — near Firestore 1MB limit');
   }
@@ -1097,7 +700,7 @@ function buildCollectionSnapshot(colName) {
     demoSales: DB.demoSales||[],
     purchaseQuotations: DB.purchaseQuotations||[],
     demoInvoiceCounter: DB.demoInvoiceCounter||1,
-    activityLog: (DB.activityLog||[]).slice(0,500), // limit to 500
+    activityLog: (DB.activityLog||[]).slice(0,200), // limit to 200
     settings: DB.settings||{},
     creditCustomers: DB.creditCustomers||[],
     users: DB.users,
@@ -1143,27 +746,15 @@ function applyCollection(colName, payload) {
   if (map[colName] && Array.isArray(data)) {
     var col = map[colName];
     // These collections use ID-based merge — local entries must never be overwritten by stale remote
-    var mergeCols = ['activityLog','inventory','warehouse','transferLog','adjLog','stockCounts','recycleBin','drafts','pendingDeliveries','supplierDeposits','tillSessions','commissionLedger','proformas','demoSales'];
-    if(mergeCols.indexOf(col) >= 0) {
-      if(!DB[col]) DB[col] = [];
-      // If local was intentionally cleared (cleared flag set), don't merge back old remote data
-      var clearedKey = 'gce_cleared_'+col;
-      var clearedAt = parseInt(localStorage.getItem(clearedKey)||'0');
-      var isClearedRecently = clearedAt > 0 && (Date.now()-clearedAt) < 30000; // within 30s
-      if(isClearedRecently) {
-        // Skip merge — user just cleared this collection
-        return;
-      }
-      if(DB[col].length > 0) {
-        var existingIds = {};
-        DB[col].forEach(function(r){ if(r.id) existingIds[String(r.id)] = true; });
-        data.forEach(function(r){ if(r.id && !existingIds[String(r.id)]) DB[col].push(r); });
-        if(col === 'activityLog'){
-          DB[col].sort(function(a,b){return (b.ts||0)-(a.ts||0);});
-          if(DB[col].length > 500) DB[col] = DB[col].slice(0,500);
-        }
-      } else {
-        DB[col] = data;
+    var mergeCols = ['activityLog','inventory','warehouse','transferLog'];
+    if(mergeCols.indexOf(col) >= 0 && DB[col] && DB[col].length > 0) {
+      var existingIds = {};
+      DB[col].forEach(function(r){ if(r.id) existingIds[String(r.id)] = true; });
+      data.forEach(function(r){ if(r.id && !existingIds[String(r.id)]) DB[col].push(r); });
+      // For activityLog: sort newest first, cap at 500
+      if(col === 'activityLog'){
+        DB[col].sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+        if(DB[col].length > 500) DB[col] = DB[col].slice(0,500);
       }
     } else {
       DB[col] = data;
@@ -1790,18 +1381,9 @@ function saveData() {
   fbLastSavedAt = snapshot._savedAt;
   fbLastOwnSavedAt = snapshot._savedAt;
   // Always save locally first — works offline
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch(e) {
-    // localStorage full — clear old auto backups and retry
-    try {
-      for(var _k=localStorage.length-1;_k>=0;_k--){
-        var _key=localStorage.key(_k);
-        if(_key&&_key.startsWith('gce_autobackup_'))localStorage.removeItem(_key);
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-      console.warn('localStorage was full — cleared auto backups and retried save');
-    } catch(e2){ console.error('saveData localStorage failed even after cleanup:', e2); }
-  }
-  // Auto backup runs on schedule only (not after every sale) to avoid filling localStorage
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch(e) {}
+  // Auto backup — silently save a rolling backup copy
+  try { autoBackupSave('save'); } catch(e) {}
 
   // If offline, queue and show indicator
   if(!navigator.onLine){
@@ -1831,27 +1413,6 @@ function saveData() {
 
 // ---- loadData: localStorage first, then Firebase per-collection ----
 function loadData() {
-  // Emergency cleanup: remove old auto backups to free localStorage space
-  try {
-    var _totalSize = 0;
-    var _backupKeys = [];
-    for(var _i=0;_i<localStorage.length;_i++){
-      var _k=localStorage.key(_i);
-      if(_k&&_k.startsWith('gce_autobackup_')&&_k!=='gce_autobackup_lastTime'){
-        _backupKeys.push(_k);
-        try{_totalSize+=localStorage.getItem(_k).length;}catch(e){}
-      }
-    }
-    // If backups taking more than 2MB, clear all of them
-    if(_totalSize > 2000000){
-      _backupKeys.forEach(function(k){localStorage.removeItem(k);});
-      console.warn('Cleared '+_backupKeys.length+' auto backup keys ('+Math.round(_totalSize/1024)+'KB freed)');
-    } else {
-      // Normal prune — keep only 2 most recent
-      _backupKeys.sort().reverse();
-      _backupKeys.slice(2).forEach(function(k){localStorage.removeItem(k);});
-    }
-  } catch(e){}
   // Load from localStorage immediately so app works offline
   try {
     var raw = localStorage.getItem(STORAGE_KEY);
@@ -1888,10 +1449,7 @@ function applySnapshot(snapshot) {
   DB.suppliers = snapshot.suppliers || [];
   DB.customers = snapshot.customers || [];
   DB.creditCustomers = snapshot.creditCustomers || [];
-  // adjLog: merge by id — never lose local adjustment entries
-  var _snapAdj = snapshot.adjLog || [];
-  if(!DB.adjLog||DB.adjLog.length===0){ DB.adjLog = _snapAdj; }
-  else { var _adjIds={}; DB.adjLog.forEach(function(e){if(e.id)_adjIds[String(e.id)]=true;}); _snapAdj.forEach(function(e){if(e.id&&!_adjIds[String(e.id)])DB.adjLog.push(e);}); }
+  DB.adjLog = snapshot.adjLog || [];
   DB.salesReturns = snapshot.salesReturns || [];
   // transferLog: merge by id — never lose local transfer records
   var _snapTL = snapshot.transferLog || [];
@@ -2015,76 +1573,6 @@ function migrateDepositApplied(){
     console.log('Migration: fixed '+patched+' deposit-covered invoice(s)');
     saveData();
   }
-}
-
-function recalcInventoryFromSales(){
-  var today = new Date().toISOString().slice(0,10);
-  var fromDate = prompt('Enter START date (YYYY-MM-DD). Example: '+today, today);
-  if(!fromDate) return;
-  var toDate = prompt('Enter END date (YYYY-MM-DD). Same as start for single day:', fromDate);
-  if(!toDate) toDate = fromDate;
-
-  var salesToProcess = DB.sales.filter(function(s){
-    if(!s.date) return false;
-    // Use dateInRange which handles locale date formats correctly
-    if(!dateInRange(s.date, fromDate, toDate)) return false;
-    if(s.supplyStatus === 'pending') return false;
-    return true;
-  });
-  console.log('[RecalcInv] Found '+salesToProcess.length+' sales for '+fromDate+' to '+toDate);
-
-  if(!salesToProcess.length){
-    alert('No sales found for '+fromDate+' to '+toDate+'.');
-    return;
-  }
-
-  var qtySoldMap = {};
-  salesToProcess.forEach(function(s){
-    // Use itemId as primary key, fall back to name — ensures each unique item is tracked separately
-    var id = s.itemId ? 'id_'+String(s.itemId) : 'name_'+String(s.name).toLowerCase().trim();
-    if(!qtySoldMap[id]) qtySoldMap[id] = {itemId:s.itemId||null, name:s.name, qty:0};
-    qtySoldMap[id].qty += (s.qty||1);
-  });
-  console.log('[RecalcInv] Unique items to deduct:', Object.keys(qtySoldMap).length);
-
-  var preview = Object.values(qtySoldMap).map(function(r){
-    var inv = r.itemId
-      ? DB.inventory.find(function(i){return String(i.id)===String(r.itemId);})
-      : DB.inventory.find(function(i){return i.name.toLowerCase().trim()===r.name.toLowerCase().trim();});
-    var currentQty = inv ? inv.qty : '(not in inventory)';
-    var newQty = inv ? Math.max(0, inv.qty - r.qty) : '-';
-    return r.name+': '+currentQty+' -> '+newQty+' (-'+r.qty+')';
-  }).join('\n');
-
-  if(!confirm('Deduct the following from inventory for sales '+fromDate+' to '+toDate+':\n\n'+preview+'\n\nContinue?')){
-    return;
-  }
-
-  var adjDate = new Date().toLocaleDateString();
-  var changes = [];
-  Object.values(qtySoldMap).forEach(function(r){
-    var inv = r.itemId
-      ? DB.inventory.find(function(i){return String(i.id)===String(r.itemId);})
-      : DB.inventory.find(function(i){return i.name.toLowerCase().trim()===r.name.toLowerCase().trim();});
-    if(!inv) return;
-    var before = inv.qty;
-    inv.qty = Math.max(0, inv.qty - r.qty);
-    DB.adjLog.push({
-      id:uid(), itemId:inv.id, itemName:inv.name,
-      type:'remove', reason:'Sales recalculation ('+fromDate+' to '+toDate+')',
-      before:before, change:-r.qty, after:inv.qty,
-      date:adjDate, by:DB.currentUser.name
-    });
-    changes.push(inv.name+': '+before+' -> '+inv.qty);
-  });
-
-  saveData();
-  fbSetCollection('inventory', DB.inventory, null, null);
-  fbSetCollection('adjLog', DB.adjLog, null, null);
-  logActivity('Inventory recalculated', 'Sales deductions for '+fromDate+' to '+toDate+' - '+changes.length+' items', DB.currentUser.name);
-
-  alert('Done! '+changes.length+' item(s) adjusted:\n\n'+changes.join('\n'));
-  renderPanel();
 }
 
 function fixOverpaymentDuplicates(){
@@ -2342,37 +1830,24 @@ function doSafeRestore() {
 // Keeps rolling backups in localStorage — up to 7 days
 // Keys: gce_autobackup_YYYY-MM-DD (daily) + gce_autobackup_hourly (last hour)
 var AUTO_BACKUP_PREFIX = 'gce_autobackup_';
-var AUTO_BACKUP_MAX_DAYS = 2;
+var AUTO_BACKUP_MAX_DAYS = 7;
 
 function autoBackupSave(label) {
   try {
     var snapshot = buildSnapshot();
     snapshot.exportedAt = new Date().toISOString();
     snapshot.autoBackupLabel = label || 'auto';
-    // Build a lean snapshot for localStorage — exclude heavy collections to stay under 5MB limit
-    // Full data is always in Firestore; localStorage backup is just a safety net
-    var leanSnap = JSON.parse(JSON.stringify(snapshot));
-    // Remove heaviest collections from local backup (they're safe in Firestore)
-    // Keep: inventory, customers, suppliers, settings, cashflow(recent), activityLog(recent)
-    // Remove: sales (largest), purchases, adjLog, salesReturns, creditPayments, deposits
-    var heavyCols = ['sales','purchases','adjLog','salesReturns','commissionLedger',
-                     'demoSales','stockCounts','transferLog','recycleBin','drafts',
-                     'pendingDeliveries','supplierDeposits','tillSessions'];
-    heavyCols.forEach(function(c){ if(leanSnap[c]) leanSnap[c] = []; });
-    var json = JSON.stringify(leanSnap);
-    // Only save daily key (no 'latest' large snapshot — use Drive for full backup)
+    var json = JSON.stringify(snapshot);
+    // Daily key — overwrites same day's backup
     var dayKey = AUTO_BACKUP_PREFIX + new Date().toISOString().slice(0,10);
-    try {
-      localStorage.setItem(dayKey, json);
-    } catch(e2) {
-      // If still too large, skip daily key entirely
-      console.warn('Auto backup daily key failed:', e2.message);
-    }
-    // Always update lastTime
+    localStorage.setItem(dayKey, json);
+    // Hourly key — always latest
+    localStorage.setItem(AUTO_BACKUP_PREFIX + 'latest', json);
+    // Record last auto backup time
     localStorage.setItem(AUTO_BACKUP_PREFIX + 'lastTime', new Date().toISOString());
     // Prune old backups beyond MAX_DAYS
     autoBackupPrune();
-    console.log('✅ Auto backup saved (lean):', dayKey, Math.round(json.length/1024)+'KB');
+    console.log('✅ Auto backup saved:', dayKey);
     return true;
   } catch(e) {
     console.warn('Auto backup failed:', e);
@@ -2454,25 +1929,23 @@ function gDriveGetToken(onSuccess, onError) {
   var expiry = parseInt(localStorage.getItem('gce_gdrive_token_expiry')||'0');
   if (saved && Date.now() < expiry) { GDrive.token = saved; onSuccess(saved); return; }
 
-  // 2. Try refresh token via Worker (fully automatic — no popup)
+  // 2. Try refresh token via Worker (fully automatic)
   var refreshToken = localStorage.getItem('gce_gdrive_refresh_token');
   if (refreshToken) {
-    gDriveRefreshToken(refreshToken, onSuccess, function(refreshErr) {
-      console.warn('Refresh token failed:', refreshErr, '— falling back to popup auth');
+    gDriveRefreshToken(refreshToken, onSuccess, function(err) {
+      console.warn('Refresh failed:', err, '- falling back to redirect auth');
       localStorage.removeItem('gce_gdrive_refresh_token');
-      gDrivePopupAuth(onSuccess, onError);
+      gDriveRedirectAuth(onSuccess, onError);
     });
     return;
   }
 
-  // 3. No refresh token — show auth popup (only needed once ever)
-  gDrivePopupAuth(onSuccess, onError);
+  // 3. No refresh token — redirect to Google auth (only needed once ever)
+  gDriveRedirectAuth(onSuccess, onError);
 }
 
 function gDriveRefreshToken(refreshToken, onSuccess, onError) {
-  // Worker exchanges refresh token for new access token
-  var workerUrl = 'https://greatchid-inventory.valentineahize.workers.dev/gdrive/refresh';
-  fetch(workerUrl, {
+  fetch('https://greatchid-inventory.valentineahize.workers.dev/gdrive/refresh', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({refresh_token: refreshToken})
@@ -2486,23 +1959,16 @@ function gDriveRefreshToken(refreshToken, onSuccess, onError) {
       GDrive.token = data.access_token;
       onSuccess(data.access_token);
     } else {
-      if (onError) onError(data.error || 'Token refresh failed');
+      if (onError) onError(data.error || 'Refresh failed');
     }
   })
   .catch(function(e){ if (onError) onError(e.message); });
 }
 
-function gDrivePopupAuth(onSuccess, onError) {
-  var clientId = localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId;
-  if (!clientId) {
-    if (onError) onError('Google Drive not configured. Click "Connect Google Drive" first.');
-    return;
-  }
-  if (!localStorage.getItem('gce_gdrive_client_id')) {
-    localStorage.setItem('gce_gdrive_client_id', clientId);
-  }
-
-  // Authorization code flow with offline access — gets refresh token
+function gDriveRedirectAuth(onSuccess, onError) {
+  var clientId = GDrive.clientId;
+  localStorage.setItem('gce_gdrive_client_id', clientId);
+  localStorage.setItem('gce_gdrive_auth_pending', '1');
   var redirectUri = window.location.origin + window.location.pathname;
   var authUrl = 'https://accounts.google.com/o/oauth2/v2/auth' +
     '?client_id=' + encodeURIComponent(clientId) +
@@ -2511,30 +1977,11 @@ function gDrivePopupAuth(onSuccess, onError) {
     '&scope=' + encodeURIComponent(GDrive.scope) +
     '&access_type=offline' +
     '&prompt=consent';
-
-  var popup = window.open(authUrl, 'Google Auth', 'width=500,height=600,left=200,top=100');
-  var interval = setInterval(function() {
-    try {
-      if (!popup || popup.closed) { clearInterval(interval); if(onError) onError('Auth cancelled.'); return; }
-      var href = popup.location.href;
-      if (href && (href.includes('code=') || href.includes('error='))) {
-        clearInterval(interval);
-        popup.close();
-        var params = new URLSearchParams(href.split('?')[1]||'');
-        var code = params.get('code');
-        var err = params.get('error');
-        if (err) { if(onError) onError('Auth error: '+err); return; }
-        if (!code) { if(onError) onError('No auth code received'); return; }
-        // Exchange code for tokens via Worker
-        gDriveExchangeCode(code, redirectUri, onSuccess, onError);
-      }
-    } catch(e) {} // cross-origin — wait
-  }, 500);
+  window.location.href = authUrl;
 }
 
 function gDriveExchangeCode(code, redirectUri, onSuccess, onError) {
-  var workerUrl = 'https://greatchid-inventory.valentineahize.workers.dev/gdrive/token';
-  fetch(workerUrl, {
+  fetch('https://greatchid-inventory.valentineahize.workers.dev/gdrive/token', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify({code: code, redirect_uri: redirectUri})
@@ -2548,7 +1995,7 @@ function gDriveExchangeCode(code, redirectUri, onSuccess, onError) {
       GDrive.token = data.access_token;
       if (data.refresh_token) {
         localStorage.setItem('gce_gdrive_refresh_token', data.refresh_token);
-        console.log('Google Drive refresh token saved — auto-refresh enabled');
+        console.log('Refresh token saved - auto-backup enabled permanently');
       }
       onSuccess(data.access_token);
     } else {
@@ -2556,6 +2003,27 @@ function gDriveExchangeCode(code, redirectUri, onSuccess, onError) {
     }
   })
   .catch(function(e){ if (onError) onError(e.message); });
+}
+
+function gDriveHandleRedirect() {
+  // Called on page load - check if returning from Google auth
+  var params = new URLSearchParams(window.location.search);
+  var code = params.get('code');
+  var error = params.get('error');
+  if (!code && !error) return;
+  if (!localStorage.getItem('gce_gdrive_auth_pending')) return;
+  localStorage.removeItem('gce_gdrive_auth_pending');
+  // Clean URL
+  var cleanUrl = window.location.origin + window.location.pathname;
+  window.history.replaceState({}, document.title, cleanUrl);
+  if (error) { showToast('Google Drive auth error: ' + error, 'error'); return; }
+  showToast('Connecting to Google Drive...', 'info');
+  gDriveExchangeCode(code, cleanUrl, function() {
+    showToast('Google Drive connected! Auto-backup enabled permanently.', 'success');
+    setTimeout(function(){ autoBackupToGDrive(false); }, 1000);
+  }, function(err) {
+    showToast('Google Drive connection failed: ' + err, 'error');
+  });
 }
 
 function gDriveUpload(json, filename, onSuccess, onError) {
@@ -2624,26 +2092,27 @@ function _gDriveUploadToFolder(token, folderId, json, filename, onSuccess, onErr
 }
 
 function autoBackupToGDrive(silent) {
-  // Always build a FULL fresh snapshot for Drive upload (not the lean localStorage version)
-  var snapshot = buildSnapshot();
-  snapshot.exportedAt = new Date().toISOString();
-  var json = JSON.stringify(snapshot);
-  // Always use today's date for the filename
+  // Always save a fresh snapshot before uploading — ensures we upload today's data,
+  // not a stale 'latest' from a previous session.
+  if (DB.currentUser && DB.sales) autoBackupSave('pre-drive');
+  var json = localStorage.getItem(AUTO_BACKUP_PREFIX+'latest');
+  if (!json) { if(!silent) showToast('No backup found. Save first.','error'); return; }
+  var snapshot;
+  try { snapshot = JSON.parse(json); } catch(e) { return; }
+  // Always use today's date for the filename — never use stale exportedAt
   var dateStr = new Date().toISOString().slice(0,10);
   var filename = 'gce_autobackup_' + dateStr + '.json';
 
-  // With refresh token support, auto-backup always proceeds.
-  // gDriveGetToken will automatically refresh the token via Worker if expired.
-  // Only skip silently if there's NO refresh token AND token is expired (user hasn't connected yet)
+  // With refresh token, auto-backup works silently even when access token expired
   if (silent) {
-    var saved = localStorage.getItem('gce_gdrive_token');
-    var expiry = parseInt(localStorage.getItem('gce_gdrive_token_expiry')||'0');
-    var hasRefresh = !!localStorage.getItem('gce_gdrive_refresh_token');
-    if (!saved && !hasRefresh) {
-      console.warn('GDrive auto-backup skipped: not connected yet. Click Upload Now to connect.');
+    var _saved = localStorage.getItem('gce_gdrive_token');
+    var _expiry = parseInt(localStorage.getItem('gce_gdrive_token_expiry')||'0');
+    var _hasRefresh = !!localStorage.getItem('gce_gdrive_refresh_token');
+    if (!_saved && !_hasRefresh) {
+      console.warn('GDrive auto-backup skipped: not connected. Click Upload Now to connect.');
       return;
     }
-    // Token expired but we have refresh token — proceed, gDriveGetToken will auto-refresh
+    // If token expired but refresh token exists, gDriveGetToken will auto-refresh
   }
 
   if (!silent) showToast('☁️ Uploading to Google Drive...', 'info');
@@ -2659,7 +2128,7 @@ function autoBackupToGDrive(silent) {
 }
 
 function showGDriveSetup() {
-  var existing = GDrive.clientId; // Always use current clientId from code
+  var existing = GDrive.clientId;
   var lastBackup = localStorage.getItem('gce_gdrive_last_backup');
   var lastLabel = lastBackup ? new Date(lastBackup).toLocaleString() : 'Never';
   showConfirm({
@@ -3713,15 +3182,7 @@ function buildActivityLog(){
 
 function clearActivityLog(){
   if(!confirm('Clear all activity log entries? This cannot be undone.'))return;
-  DB.activityLog=[];
-  // Set cleared flag so applyCollection won't merge old entries back for 30s
-  localStorage.setItem('gce_cleared_activityLog', String(Date.now()));
-  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(buildSnapshot()));}catch(e){}
-  // Force-push empty array directly to Firestore
-  fbSetCollection('activityLog',[],
-    function(){saveData();renderPanel();showToast('Activity log cleared.','success');},
-    function(){saveData();renderPanel();}
-  );
+  DB.activityLog=[];saveData();renderPanel();
 }
 
 function buildRecycleBin() {
@@ -3932,9 +3393,6 @@ function buildSettings(){
     '<div class="tbl-wrap"><table><thead><tr><th>Terminal name</th><th>Terminal ID</th><th></th></tr></thead><tbody>'+posRows+'</tbody></table></div>'+
     (isAdmin()?'<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title" style="color:var(--danger)">⚠ Danger zone</p><p style="font-size:13px;color:#666;margin-bottom:1rem">Permanently delete all business data. This cannot be undone. Export a backup first.</p><button class="btn danger" style="font-size:13px;padding:8px 14px" onclick="clearAllData()">🗑 Clear all data</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title">🔧 Data Fixes</p>'+
-    '<p style="font-size:13px;color:#666;margin-bottom:10px">Recalculate inventory quantities by deducting all sales records from the current stock. Use this to fix inventory that reverted due to a save failure. You will select a date range to recalculate.</p>'+
-    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#0d6efd;color:#fff;border-color:#0d6efd" onclick="recalcInventoryFromSales()">📦 Recalculate Inventory from Sales</button>'+
-    '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
     '<p style="font-size:13px;color:#666;margin-bottom:10px">Remove duplicate payment entries created by overpayments — these can cause customer balances to appear lower than they should. This fix pushes directly to Firestore.</p>'+
     '<button class="btn" style="font-size:13px;padding:8px 14px;background:#c0392b;color:#fff;border-color:#c0392b" onclick="fixOverpaymentDuplicates()">🔧 Fix Duplicate Overpayment Entries</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
@@ -4267,25 +3725,9 @@ function toggleDarkMode(){
   var btn=document.getElementById('dark-mode-btn');
   if(btn)btn.textContent=on?'🌙':'☀️';
 }
-function getCurrentTheme(){
-  return localStorage.getItem('gce_theme')||'neuro';
-}
-function switchTheme(){
-  var current=getCurrentTheme();
-  var next=current==='neuro'?'bento':'neuro';
-  document.body.classList.remove('theme-neuro','theme-bento');
-  document.body.classList.add('theme-'+next);
-  localStorage.setItem('gce_theme',next);
-  var btn=document.getElementById('theme-switch-btn');
-  if(btn)btn.title=next==='bento'?'Switch to Neumorphic':'Switch to Bento Grid';
-  if(btn)btn.textContent=next==='bento'?'🎨':'✏️';
-}
-function initTheme(){
-  var t=getCurrentTheme();
-  document.body.classList.add('theme-'+t);
-}
 function applyDarkMode(){
-  initTheme(); // Apply saved theme (neuro or bento) on load
+  initTheme();
+  gDriveHandleRedirect(); // Handle Google auth redirect if returning from OAuth
   if(localStorage.getItem('darkMode')==='1'){
     document.body.classList.add('dark-mode');
   }
@@ -4584,7 +4026,6 @@ function renderApp(){
           '<button class="btn sm" onclick="exportBackup()" title="Export data backup">&#11015; Backup</button>'+
           '<button class="btn sm" onclick="showAutoBackupPanel()" title="Auto backup history" style="color:#15803d;border-color:#86efac">🔄</button>'+
           '<button class="btn sm" onclick="showCalculator()" title="Calculator" style="font-size:14px;padding:4px 8px">🧮</button>'+
-          '<button class="btn sm" onclick="switchTheme()" id="theme-switch-btn" title="'+(getCurrentTheme()==='bento'?'Switch to Neumorphic':'Switch to Bento Grid')+'" style="font-size:14px;padding:4px 8px">'+(getCurrentTheme()==='bento'?'🎨':'✏️')+'</button>'+
           '<button class="btn sm" onclick="toggleDarkMode()" title="Toggle dark/light mode" id="dark-mode-btn" style="font-size:14px;padding:4px 8px">'+(isDarkMode()?'☀️':'🌙')+'</button>'+
           '<button class="btn sm" onclick="doLogout()">Sign out</button>'+
         '</div>'+
