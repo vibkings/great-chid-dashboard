@@ -3010,7 +3010,7 @@ function buildClosingReport(){
     else if(g.payMode==='transfer')transfer+=g.total;
     else cash+=g.total;
   });
-  var totalPaid=cash+pos+transfer+deposit; // part payment already in cash/pos/transfer
+  var totalPaid=cash+pos+transfer; // deposit excluded — already collected on deposit date
   // Credit payments received today — split by mode so they appear in till cash
   var cpToday=(DB.creditPayments||[]).filter(function(p){return p.payMode!=='writeoff'&&p.payMode!=='commission'&&dateInRange(p.date,closingDate,closingDate);});
   var cpTotal=cpToday.reduce(function(a,p){return a+p.amount;},0);
@@ -13280,6 +13280,21 @@ function buildFinance(){
   // Use actual cashflow income (captures part-payment overpayments correctly)
   var cashflowInF   = DB.cashflow.filter(function(c){return c.type==='in'&&c.cat==='Sales'&&!c.isDepositApplied&&!c.isExchange&&inRange(c.date,c.month);});
   var cashIn        = cashflowInF.reduce(function(a,c){return a+c.amount;},0);
+  // Add deposit shortfall amounts from invoices not captured in cashflow
+  // (for deposit invoices with a topup, the shortfall may not have a cashflow entry)
+  var _depShortfallCFIds=new Set(cashflowInF.filter(function(c){return (c.desc||'').indexOf('balance paid')>=0;}).map(function(c){return c.id;}));
+  var _invMapReport={};
+  salesF.forEach(function(s){var k=String(s.invoiceNum||s.id);if(!_invMapReport[k])_invMapReport[k]={payment:s.payment,total:0,depAmt:0,depTopupMode:s.depTopupMode||null};_invMapReport[k].total+=s.total;_invMapReport[k].depAmt+=(s.depositApplied||0);});
+  Object.values(_invMapReport).forEach(function(g){
+    if(g.payment==='deposit'&&g.depTopupMode){
+      var _shortfall=Math.max(0,g.total-g.depAmt);
+      // Only add if no cashflow entry already covers it
+      if(_shortfall>0){
+        var _covered=cashflowInF.some(function(c){return (c.desc||'').indexOf('balance paid')>=0&&Math.abs(c.amount-_shortfall)<1;});
+        if(!_covered) cashIn+=_shortfall;
+      }
+    }
+  });
   var expTotal      = expF.reduce(function(a,c){return a+c.amount;},0);
   var purchTotal    = purchF.reduce(function(a,p){return a+(p.grandTotal||0);},0);
   var depAppliedF   = DB.cashflow.filter(function(c){return c.isDepositApplied&&c.type==='in'&&inRange(c.date,c.month);});
