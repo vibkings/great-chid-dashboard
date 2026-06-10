@@ -2039,24 +2039,33 @@ function gDriveExchangeCode(code, redirectUri, onSuccess, onError) {
 }
 
 function gDriveHandleRedirect() {
-  // Called on page load - check if returning from Google auth
+  // Called on page load - check if returning from Google OAuth redirect
   var params = new URLSearchParams(window.location.search);
   var code = params.get('code');
   var error = params.get('error');
+  // Process if we have a code OR error — regardless of pending flag
+  // (flag may be lost if page reloaded during auth)
   if (!code && !error) return;
-  if (!localStorage.getItem('gce_gdrive_auth_pending')) return;
   localStorage.removeItem('gce_gdrive_auth_pending');
-  // Clean URL
+  // Clean URL immediately
   var cleanUrl = window.location.origin + window.location.pathname;
   window.history.replaceState({}, document.title, cleanUrl);
-  if (error) { showToast('Google Drive auth error: ' + error, 'error'); return; }
-  showToast('Connecting to Google Drive...', 'info');
-  gDriveExchangeCode(code, cleanUrl, function() {
-    showToast('Google Drive connected! Auto-backup enabled permanently.', 'success');
-    setTimeout(function(){ autoBackupToGDrive(false); }, 1000);
-  }, function(err) {
-    showToast('Google Drive connection failed: ' + err, 'error');
-  });
+  if (error) {
+    console.warn('Google Drive auth error:', error);
+    setTimeout(function(){ showToast('Google Drive auth error: ' + error, 'error'); }, 2000);
+    return;
+  }
+  // Delay slightly to let app finish loading before showing toast
+  setTimeout(function(){
+    showToast('Connecting to Google Drive...', 'info');
+    gDriveExchangeCode(code, cleanUrl, function() {
+      showToast('Google Drive connected! Auto-backup enabled permanently.', 'success');
+      setTimeout(function(){ autoBackupToGDrive(false); }, 1500);
+    }, function(err) {
+      showToast('Google Drive connection failed: ' + err, 'error');
+      console.error('gDriveExchangeCode error:', err);
+    });
+  }, 1500);
 }
 
 function gDriveUpload(json, filename, onSuccess, onError) {
