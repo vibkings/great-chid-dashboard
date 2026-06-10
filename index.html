@@ -3725,6 +3725,22 @@ function toggleDarkMode(){
   var btn=document.getElementById('dark-mode-btn');
   if(btn)btn.textContent=on?'🌙':'☀️';
 }
+function getCurrentTheme(){
+  return localStorage.getItem('gce_theme')||'neuro';
+}
+function switchTheme(){
+  var current=getCurrentTheme();
+  var next=current==='neuro'?'bento':'neuro';
+  document.body.classList.remove('theme-neuro','theme-bento');
+  document.body.classList.add('theme-'+next);
+  localStorage.setItem('gce_theme',next);
+  var btn=document.getElementById('theme-switch-btn');
+  if(btn){btn.title=next==='bento'?'Switch to Neumorphic':'Switch to Bento Grid';btn.textContent=next==='bento'?'🎨':'✏️';}
+}
+function initTheme(){
+  var t=getCurrentTheme();
+  document.body.classList.add('theme-'+t);
+}
 function applyDarkMode(){
   initTheme();
   gDriveHandleRedirect(); // Handle Google auth redirect if returning from OAuth
@@ -4026,6 +4042,7 @@ function renderApp(){
           '<button class="btn sm" onclick="exportBackup()" title="Export data backup">&#11015; Backup</button>'+
           '<button class="btn sm" onclick="showAutoBackupPanel()" title="Auto backup history" style="color:#15803d;border-color:#86efac">🔄</button>'+
           '<button class="btn sm" onclick="showCalculator()" title="Calculator" style="font-size:14px;padding:4px 8px">🧮</button>'+
+          '<button class="btn sm" onclick="switchTheme()" id="theme-switch-btn" title="'+(getCurrentTheme()==='bento'?'Switch to Neumorphic':'Switch to Bento Grid')+'" style="font-size:14px;padding:4px 8px">'+(getCurrentTheme()==='bento'?'🎨':'✏️')+'</button>'+
           '<button class="btn sm" onclick="toggleDarkMode()" title="Toggle dark/light mode" id="dark-mode-btn" style="font-size:14px;padding:4px 8px">'+(isDarkMode()?'☀️':'🌙')+'</button>'+
           '<button class="btn sm" onclick="doLogout()">Sign out</button>'+
         '</div>'+
