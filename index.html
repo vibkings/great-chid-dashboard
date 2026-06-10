@@ -3056,7 +3056,8 @@ function buildClosingReport(){
   // These have cat:'Sales', payMode=cash/pos/transfer, no isDepositApplied flag
   var depTopupToday=DB.cashflow.filter(function(c){
     return !c.isDepositApplied&&!c.isExchange&&c.type==='in'&&c.cat==='Sales'&&
-    (c.desc||'').indexOf('balance paid')>=0&&dateInRange(c.date,closingDate,closingDate);
+    ((c.desc||'').indexOf('balance paid')>=0||(c.desc||'').indexOf('shortfall paid')>=0)&&
+    dateInRange(c.date,closingDate,closingDate);
   });
   depTopupToday.forEach(function(c){
     if(c.payMode==='pos')pos+=c.amount;
@@ -4134,11 +4135,16 @@ function renderApp(){
     if(g.payMode==='transfer'){todayTransfer+=g.total;return;}
     todayCash+=g.total;
   });
-  // Deposit shortfall cashflow entries — add to correct payment mode
+  // Deposit shortfall — use invoice-based calculation (reliable regardless of cashflow desc format)
+  // Already handled in the _todayInvMap loop above via depAmt/topupAmt
+  // Also add from cashflow entries as a safety net for any missed invoices
+  var _cfShortfallIds=new Set();
   DB.cashflow.filter(function(c){
     return !c.isDepositApplied&&!c.isExchange&&c.type==='in'&&c.cat==='Sales'&&
-    (c.desc||'').indexOf('balance paid')>=0&&dateInRange(c.date,todayStr,todayStr);
+    ((c.desc||'').indexOf('balance paid')>=0||(c.desc||'').indexOf('shortfall paid')>=0)&&
+    dateInRange(c.date,todayStr,todayStr);
   }).forEach(function(c){
+    _cfShortfallIds.add(c.id);
     if(c.payMode==='pos')todayPos+=c.amount;
     else if(c.payMode==='transfer')todayTransfer+=c.amount;
     else todayCash+=c.amount;
