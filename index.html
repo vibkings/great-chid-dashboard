@@ -13336,11 +13336,13 @@ function buildFinance(){
   var _invMapReport={};
   salesF.forEach(function(s){var k=String(s.invoiceNum||s.id);if(!_invMapReport[k])_invMapReport[k]={payment:s.payment,total:0,depAmt:0,depTopupMode:s.depTopupMode||null};_invMapReport[k].total+=s.total;_invMapReport[k].depAmt+=(s.depositApplied||0);});
   Object.values(_invMapReport).forEach(function(g){
-    if(g.payment==='deposit'&&g.depTopupMode){
+    if(g.payment==='deposit'){
       var _shortfall=Math.max(0,g.total-g.depAmt);
-      // Only add if no cashflow entry already covers it
+      // Add shortfall if not already in cashflow (works even when depTopupMode is null)
       if(_shortfall>0){
-        var _covered=cashflowInF.some(function(c){return (c.desc||'').indexOf('balance paid')>=0&&Math.abs(c.amount-_shortfall)<1;});
+        var _covered=cashflowInF.some(function(c){
+          return !c.isDepositApplied&&Math.abs(c.amount-_shortfall)<1;
+        });
         if(!_covered) cashIn+=_shortfall;
       }
     }
