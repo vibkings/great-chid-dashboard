@@ -2986,12 +2986,23 @@ function buildClosingReport(){
   invList.forEach(function(g){
     if(g.payment==='credit'){credit+=g.total;}
     else if(g.payment==='deposit'){
-      // Deposit portion goes to deposit bucket
-      // Shortfall (topup) goes to its actual payment mode — read from cashflow entry
       var _depAmt=g.depAmt||0;
       deposit+=_depAmt;
-      // Shortfall cashflow entry is already added via the standard cashflow loop below
-      // (it has cat:'Sales', payMode=cash/pos/transfer, no isDepositApplied flag)
+      // Add shortfall directly from invoice data
+      var _topupAmt2=Math.max(0,g.total-_depAmt);
+      var _topupMode2=g.depTopupMode||null;
+      if(_topupAmt2>0){
+        if(!_topupMode2){
+          var _cfE=DB.cashflow.find(function(c){
+            return !c.isDepositApplied&&c.type==='in'&&c.cat==='Sales'&&
+            Math.abs(c.amount-_topupAmt2)<1&&dateInRange(c.date,closingDate,closingDate);
+          });
+          _topupMode2=_cfE?(_cfE.payMode||'cash'):'cash';
+        }
+        if(_topupMode2==='pos')pos+=_topupAmt2;
+        else if(_topupMode2==='transfer')transfer+=_topupAmt2;
+        else cash+=_topupAmt2;
+      }
     }
     else if(g.payment==='part'){
       // Distribute part payment into its actual mode (cash/pos/transfer)
@@ -3054,16 +3065,7 @@ function buildClosingReport(){
   });
   // Deposit shortfall cashflow entries — real cash paid by customer for the shortfall
   // These have cat:'Sales', payMode=cash/pos/transfer, no isDepositApplied flag
-  var depTopupToday=DB.cashflow.filter(function(c){
-    return !c.isDepositApplied&&!c.isExchange&&c.type==='in'&&c.cat==='Sales'&&
-    ((c.desc||'').indexOf('balance paid')>=0||(c.desc||'').indexOf('shortfall paid')>=0)&&
-    dateInRange(c.date,closingDate,closingDate);
-  });
-  depTopupToday.forEach(function(c){
-    if(c.payMode==='pos')pos+=c.amount;
-    else if(c.payMode==='transfer')transfer+=c.amount;
-    else cash+=c.amount;
-  });
+  // Deposit shortfall now handled directly in invList loop above (invoice-based)
   // Deposit applications today (informational — cash was received earlier)
   var depAppliedToday=DB.cashflow.filter(function(c){
     return c.isDepositApplied&&c.type==='in'&&dateInRange(c.date,closingDate,closingDate);
@@ -4164,7 +4166,15 @@ function renderApp(){
       // Shortfall (topup) goes to correct mode — use invoice data directly (reliable)
       var _topupAmt=g.topupAmt||0;
       var _topupMode=g.depTopupMode||null;
-      if(_topupMode&&_topupAmt>0){
+      if(_topupAmt>0){
+        // If no topupMode stamped (old data), fall back to cashflow entry or default cash
+        if(!_topupMode){
+          var _cfEntry=DB.cashflow.find(function(c){
+            return !c.isDepositApplied&&c.type==='in'&&c.cat==='Sales'&&
+            Math.abs(c.amount-_topupAmt)<1&&dateInRange(c.date,todayStr,todayStr);
+          });
+          _topupMode=_cfEntry?(_cfEntry.payMode||'cash'):'cash';
+        }
         if(_topupMode==='pos')todayPos+=_topupAmt;
         else if(_topupMode==='transfer')todayTransfer+=_topupAmt;
         else todayCash+=_topupAmt;
