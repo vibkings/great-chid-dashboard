@@ -746,12 +746,23 @@ function applyCollection(colName, payload) {
   if (map[colName] && Array.isArray(data)) {
     var col = map[colName];
     // These collections use ID-based merge — local entries must never be overwritten by stale remote
-    var mergeCols = ['activityLog','inventory','warehouse','transferLog'];
-    if(mergeCols.indexOf(col) >= 0 && DB[col] && DB[col].length > 0) {
+    // Collections that use ID-based merge (never overwrite local entries)
+    var mergeCols = ['activityLog','inventory','warehouse','transferLog','adjLog',
+                     'stockCounts','recycleBin','drafts','pendingDeliveries',
+                     'supplierDeposits','tillSessions','commissionLedger','proformas','demoSales'];
+    // Users: never overwrite local — local credentials always win
+    var localWinCols = ['users'];
+    if(localWinCols.indexOf(col) >= 0) {
+      // Only add new users not in local — never replace existing
+      if(!DB[col]||DB[col].length===0){ DB[col]=data; }
+      else {
+        var _uIds={}; DB[col].forEach(function(r){if(r.id)_uIds[String(r.id)]=true;});
+        data.forEach(function(r){if(r.id&&!_uIds[String(r.id)])DB[col].push(r);});
+      }
+    } else if(mergeCols.indexOf(col) >= 0 && DB[col] && DB[col].length > 0) {
       var existingIds = {};
       DB[col].forEach(function(r){ if(r.id) existingIds[String(r.id)] = true; });
       data.forEach(function(r){ if(r.id && !existingIds[String(r.id)]) DB[col].push(r); });
-      // For activityLog: sort newest first, cap at 500
       if(col === 'activityLog'){
         DB[col].sort(function(a,b){return (b.ts||0)-(a.ts||0);});
         if(DB[col].length > 500) DB[col] = DB[col].slice(0,500);
@@ -1430,7 +1441,13 @@ function loadData() {
 
 function applySnapshot(snapshot) {
   if (!snapshot) return;
-  DB.users = snapshot.users || DB.users;
+  // Users: never overwrite local users from snapshot — local credentials always win
+  var _snapUsers = snapshot.users || [];
+  if(!DB.users||DB.users.length===0){ DB.users = _snapUsers; }
+  else {
+    var _snapUIds={}; DB.users.forEach(function(u){if(u.id)_snapUIds[String(u.id)]=true;});
+    _snapUsers.forEach(function(u){if(u.id&&!_snapUIds[String(u.id)])DB.users.push(u);});
+  }
   // Inventory: merge by id — local wins for existing items (qty changes), add any new remote items
   var _snapInv = snapshot.inventory || [];
   if(!DB.inventory||DB.inventory.length===0){
