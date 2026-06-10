@@ -1634,6 +1634,8 @@ function applySnapshot(snapshot) {
   migrateDepositShortfallDesc();
   // ── One-time migration: fix default admin credentials ──
   migrateAdminCredentials();
+  // Auto-archive old sales on every load to keep Firestore under limit
+  setTimeout(function(){ archiveOldSales(false); }, 3000);
   // Remove duplicate overpayment creditPayments entries (they double-deduct in statement)
   migrateRemoveOverpaymentCreditEntries();
   // Remove any items in recycleBin from inventory/warehouse (prevents re-appearance after stale sync)
@@ -1794,7 +1796,7 @@ function archiveOldSales(force) {
 
   // Only archive if sales payload is large OR force=true
   var payload = JSON.stringify(DB.sales);
-  if(!force && payload.length < 800000) return 0; // under 800KB — no need yet
+  if(!force && payload.length < 500000) return 0; // under 500KB — no need yet
 
   var cutoff = getArchiveCutoffDate();
   var toArchive = [];
