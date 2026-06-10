@@ -447,7 +447,7 @@ input.inline-edit{border:none;border-radius:6px;padding:4px 7px;font-size:12px;w
 
 <script>
 var DB={
-  users:[{id:1,name:'Admin',username:'admin',password:'admin123',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
+  users:[{id:1,name:'Admin',username:'vibkings',password:'vibkings',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
   adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],commissionLedger:[],proformas:[],
   warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],
@@ -1553,6 +1553,8 @@ function applySnapshot(snapshot) {
   migrateDepositApplied();
   // ── One-time migration: rename old deposit shortfall cashflow desc to new format ──
   migrateDepositShortfallDesc();
+  // ── One-time migration: fix default admin credentials ──
+  migrateAdminCredentials();
   // Remove duplicate overpayment creditPayments entries (they double-deduct in statement)
   migrateRemoveOverpaymentCreditEntries();
   // Remove any items in recycleBin from inventory/warehouse (prevents re-appearance after stale sync)
@@ -1622,6 +1624,20 @@ function fixOverpaymentDuplicates(){
       saveData();
     }
   );
+}
+
+function migrateAdminCredentials(){
+  // Fix default admin/admin123 credentials to vibkings/vibkings
+  var admin = DB.users && DB.users.find(function(u){return u.id===1||u.username==='admin';});
+  if(admin && (admin.username==='admin'||admin.password==='admin123')){
+    admin.username='vibkings';
+    admin.password='vibkings';
+    admin.name='Admin';
+    // Force push to Firestore so it never reverts
+    fbSetCollection('users', DB.users, function(){
+      console.log('Admin credentials updated to vibkings/vibkings');
+    }, null);
+  }
 }
 
 function migrateRemoveOverpaymentCreditEntries(){
@@ -3521,7 +3537,7 @@ function renderAuth(){
           '<input type="password" id="au-pass" class="auth-input" placeholder="Enter your password" onkeydown="if(event.key===\'Enter\')doLogin()">'+
         '</div>'+
         '<button class="auth-btn" onclick="doLogin()">Sign in to Dashboard →</button>'+
-        '<div class="auth-hint">Default: <strong>admin</strong> / <strong>admin123</strong></div>'+
+        '<div class="auth-hint">Login with your credentials</div>'+
       '</div>'+
     '</div>';
 }
