@@ -1490,11 +1490,30 @@ function saveData() {
         fbLastSync = new Date();
         updateSyncStatus('synced');
         localStorage.removeItem(STORAGE_KEY+'_pending');
+        // Auto-upload to Google Drive once per day after successful Firestore sync
+        tryDailyDriveBackup();
       } else {
         updateSyncStatus('error');
       }
     });
   }, 400);
+}
+
+// Upload to Google Drive once per day — called after every successful save
+// Safe to call often: skips if already uploaded today
+var _driveUploadInProgress = false;
+function tryDailyDriveBackup() {
+  if (_driveUploadInProgress) return;
+  var hasRefresh = !!localStorage.getItem('gce_gdrive_refresh_token');
+  if (!hasRefresh) return; // not connected
+  var today = new Date().toISOString().slice(0,10);
+  var lastDate = localStorage.getItem('gce_gdrive_last_backup_date') || '';
+  if (lastDate === today) return; // already backed up today
+  _driveUploadInProgress = true;
+  setTimeout(function() {
+    autoBackupToGDrive(true);
+    _driveUploadInProgress = false;
+  }, 3000);
 }
 
 // ---- loadData: localStorage first, then Firebase per-collection ----
@@ -2597,38 +2616,17 @@ function showAutoBackupPanel() {
 // ── Hook auto backup into saveData ───────────────────────────
 var _origSaveData = null;
 function initAutoBackup() {
-  // Save every hour — only when logged in and data is loaded
-  setInterval(function() {
-    if (DB.currentUser && DB.sales && DB.sales.length >= 0) {
-      autoBackupSave('hourly');
-      // Auto-upload to Google Drive once per day if configured
-      var clientId = localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId;
-      if (clientId) {
-        var today = new Date().toISOString().slice(0,10);
-        var lastDate = localStorage.getItem('gce_gdrive_last_backup_date') || '';
-        if (lastDate !== today) {
-          setTimeout(function(){ autoBackupToGDrive(true); }, 5000);
-        }
-      }
-    }
-  }, 60 * 60 * 1000);
+  // Hourly timer removed — Drive backup now triggers after each saveData() via tryDailyDriveBackup()
+  // This survives page reloads since it hooks into the save cycle, not a timer
 }
 
 // Called after login to do the startup backup
 function initAutoBackupAfterLogin() {
   if (DB.currentUser) {
+    // Try daily Drive upload on login (in case page was reloaded before save fired today)
     setTimeout(function() {
-      autoBackupSave('startup');
-      // Also try daily Drive upload on login
-      var clientId = localStorage.getItem('gce_gdrive_client_id') || GDrive.clientId;
-      if (clientId) {
-        var today = new Date().toISOString().slice(0,10);
-        var lastDate = localStorage.getItem('gce_gdrive_last_backup_date') || '';
-        if (lastDate !== today) {
-          setTimeout(function(){ autoBackupToGDrive(true); }, 8000);
-        }
-      }
-    }, 4000);
+      tryDailyDriveBackup();
+    }, 6000); // wait for Firestore to connect first
   }
 }
 
