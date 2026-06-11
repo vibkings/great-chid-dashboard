@@ -9020,7 +9020,7 @@ async function submitInvoice(){
 
   // Distribute discount proportionally across items
   invoiceItems.forEach(function(l){
-    var pi=partialItems.find(function(p){return p.lineId===l.lineId;})||{supplied:l.qty,pending:0,ordered:l.qty};
+    var pi=partialItems.find(function(p){return p.lineId===l.lineId;})||{supplied:pendingSupply?0:l.qty,pending:pendingSupply?l.qty:0,ordered:l.qty};
     var itemSubtotal=l.price*l.qty;
     var itemDisc=subtotalAll>0?(invoiceDiscAmt*(itemSubtotal/subtotalAll)):0;
     var itemTotal=itemSubtotal-itemDisc;
@@ -9057,7 +9057,7 @@ async function submitInvoice(){
       pendingSupply:pendingSupply||(pi.pending>0),
       suppliedQty:pendingSupply?0:pi.supplied,
       pendingQty:pendingSupply?l.qty:pi.pending,
-      supplyStatus:(pendingSupply||pi.pending===l.qty)?'pending':pi.pending>0?'partial':'supplied',
+      supplyStatus:pendingSupply?'pending':(pi.pending===l.qty?'pending':pi.pending>0?'partial':'supplied'),
       supplyDate:(pendingSupply||pi.pending>0)?null:date,
       prevCreditBalance:payment==='credit'||payment==='part'?_prevCreditBalance:null
     });
