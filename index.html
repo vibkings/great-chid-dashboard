@@ -822,12 +822,32 @@ function applyCollection(colName, payload) {
                      'supplierDeposits','tillSessions','commissionLedger','proformas','demoSales','salesArchive'];
     // Users: never overwrite local — local credentials always win
     var localWinCols = ['users'];
+    // Customers/suppliers: timestamp-based merge — most recently updated wins
+    var tsWinCols = ['customers','suppliers'];
     if(localWinCols.indexOf(col) >= 0) {
-      // Only add new users not in local — never replace existing
       if(!DB[col]||DB[col].length===0){ DB[col]=data; }
       else {
         var _uIds={}; DB[col].forEach(function(r){if(r.id)_uIds[String(r.id)]=true;});
         data.forEach(function(r){if(r.id&&!_uIds[String(r.id)])DB[col].push(r);});
+      }
+    } else if(tsWinCols.indexOf(col) >= 0) {
+      if(!DB[col]||DB[col].length===0){ DB[col]=data; }
+      else {
+        var _tsMap={};
+        DB[col].forEach(function(r,i){if(r.id)_tsMap[String(r.id)]={idx:i,ts:r._updatedAt||0};});
+        data.forEach(function(r){
+          if(!r.id)return;
+          var key=String(r.id);
+          if(_tsMap[key]!==undefined){
+            // Keep whichever was updated more recently
+            var localTs=_tsMap[key].ts||0;
+            var remoteTs=r._updatedAt||0;
+            if(remoteTs>localTs) DB[col][_tsMap[key].idx]=r; // remote is newer
+            // else keep local
+          } else {
+            DB[col].push(r); // new remote record
+          }
+        });
       }
     } else if(mergeCols.indexOf(col) >= 0 && DB[col] && DB[col].length > 0) {
       var existingIds = {};
@@ -1006,22 +1026,23 @@ function startFirebaseListener() {
       });
 
       // ── Object/entity collections: merge remote into local ──────────────────────
-      // For customers: remote (Firestore) is authoritative — always take remote version
-      // for existing records so that creditBalance/totalSpent updates are not lost on reload.
-      // For other entity cols: add new remote records, keep local for existing.
-      var remoteWinCols = ['customers','suppliers'];
-      remoteWinCols.forEach(function(col) {
+      // Customers/suppliers: timestamp-based merge — most recently updated record wins
+      var tsWinCols2 = ['customers','suppliers'];
+      tsWinCols2.forEach(function(col) {
         var remote = remoteDB[col] || [];
         if (!DB[col]) DB[col] = [];
         var localMap = {};
-        DB[col].forEach(function(rec, idx) { if (rec.id) localMap[String(rec.id)] = idx; });
+        DB[col].forEach(function(rec, idx) { if (rec.id) localMap[String(rec.id)] = {idx:idx,ts:rec._updatedAt||0}; });
         remote.forEach(function(rec) {
           if (!rec.id) return;
           var key = String(rec.id);
           if (localMap[key] !== undefined) {
-            DB[col][localMap[key]] = rec; // replace stale local with authoritative remote
+            var localTs = localMap[key].ts||0;
+            var remoteTs = rec._updatedAt||0;
+            if(remoteTs > localTs) DB[col][localMap[key].idx] = rec; // remote newer
+            // else keep local (local has more recent creditBalance update)
           } else {
-            DB[col].push(rec); // new record not yet local
+            DB[col].push(rec);
           }
         });
       });
@@ -1634,6 +1655,8 @@ function applySnapshot(snapshot) {
   migrateDepositShortfallDesc();
   // ── One-time migration: fix default admin credentials ──
   migrateAdminCredentials();
+  // Stamp _updatedAt on all customers that don't have it yet
+  migrateCustomerTimestamps();
   // Auto-archive old sales on every load to keep Firestore under limit
   setTimeout(function(){ archiveOldSales(false); }, 3000);
   // Remove duplicate overpayment creditPayments entries (they double-deduct in statement)
@@ -2710,6 +2733,7 @@ function applyManualCreditAdjust(){
     if(isNaN(newBal)||newBal<0)return;
     console.log('Adjusting '+c.name+': '+fmt(c.creditBalance||0)+' → '+fmt(newBal));
     c.creditBalance=newBal;
+    c._updatedAt=Date.now();
     fixed++;
   });
   if(fixed>0){
@@ -6935,6 +6959,7 @@ function saveEditCustomer(){
   if(newOpeningBal!==oldOpeningBal){
     var diff=newOpeningBal-oldOpeningBal;
     cust.creditBalance=(cust.creditBalance||0)+diff;
+    cust._updatedAt=Date.now();
     cust.openingBalance=newOpeningBal;
   }
   saveData();
@@ -8884,6 +8909,7 @@ function submitInvoice(){
             var tu=_localDepTopup;
             if(tu.mode==='credit'){
               regC.creditBalance=(regC.creditBalance||0)+_shortfall;
+              regC._updatedAt=Date.now();
               creditAmount=0;grandTotal=0;cashReceived=0;
             } else {
               // Only real cashflow entry for this invoice — the shortfall paid
@@ -8923,8 +8949,10 @@ function submitInvoice(){
         if(overpayment >= currentDebt){
           var storeCredit = overpayment - currentDebt;
           regC.creditBalance = storeCredit > 0 ? -storeCredit : 0;
+          regC._updatedAt=Date.now();
         } else {
           regC.creditBalance = (regC.creditBalance||0) - overpayment;
+          regC._updatedAt=Date.now();
         }
       } else if(creditAmount > 0){
         // Customer still owes us the remaining amount
@@ -8934,12 +8962,14 @@ function submitInvoice(){
           var appliedCredit=Math.min(existingCredit,creditAmount);
           var remainingCreditDebt=creditAmount-appliedCredit;
           regC.creditBalance=(regC.creditBalance||0)+appliedCredit;
-          if(remainingCreditDebt>0){regC.creditBalance=(regC.creditBalance||0)+remainingCreditDebt;}
+          regC._updatedAt=Date.now();
+          if(remainingCreditDebt>0){regC.creditBalance=(regC.creditBalance||0)+remainingCreditDebt;regC._updatedAt=Date.now();}
           if(appliedCredit>0){
             DB.cashflow.push({id:uid(),desc:'Store credit applied — '+custName+' Invoice #'+invNum,amount:appliedCredit,type:'in',cat:'Sales',payMode:'credit',date:date,month:month});
           }
         } else {
           regC.creditBalance=(regC.creditBalance||0)+creditAmount;
+          regC._updatedAt=Date.now();
         }
       }
       // creditAmount === 0 and no overpayment = exact payment, balance unchanged
@@ -8950,12 +8980,14 @@ function submitInvoice(){
         if(extraReceived>0&&currentDebt2>0){
           var clears2=Math.min(extraReceived,currentDebt2);
           regC.creditBalance=regC.creditBalance-clears2;
+          regC._updatedAt=Date.now();
           DB.cashflow.push({id:uid(),desc:'Opening/credit balance cleared — '+custName+' Invoice #'+invNum,amount:clears2,type:'in',cat:'Sales',payMode:payMode,bankId:bankId,posId:posId,date:date,month:month});
           // No creditPayments entry — balance adjustment is already in cashflow and reflected via invoice
           var remaining2=extraReceived-clears2;
           if(remaining2>0){
             // Still more than the debt — store as credit we owe them
             regC.creditBalance=(regC.creditBalance||0)-remaining2;
+            regC._updatedAt=Date.now();
           }
         }
       }
@@ -9998,7 +10030,7 @@ function processReturn(invoiceId){
     DB.cashflow.push({id:uid(),desc:'Sales return refund (Transfer) — Invoice #'+items[0].invoiceNum+' ('+items[0].custName+')',amount:totalRefund,type:'out',cat:'Sales Return',payMode:'transfer',bankId:retBankId||null,bankName:retBankName,date:date,month:month,isReturn:true});
   } else if(refundType==='credit'&&items[0].custId){
     var cust=DB.customers.find(function(c){return c.id==items[0].custId;});
-    if(cust)cust.creditBalance=Math.max(0,(cust.creditBalance||0)-totalRefund);
+    if(cust){cust.creditBalance=Math.max(0,(cust.creditBalance||0)-totalRefund);cust._updatedAt=Date.now();}
   }
 
   saveData();
@@ -11402,6 +11434,7 @@ function saveInvoiceEdit(invNum){
       // creditBalance = total owed - total paid (floor at 0 unless we owe them)
       var newCreditBal=Math.max(0, openBal + totalOwed - totalPaid);
       affCust.creditBalance=newCreditBal;
+      affCust._updatedAt=Date.now();
     }
   });
   saveData();
@@ -15209,7 +15242,7 @@ function clearCredit(id){
     confirmLabel:'✓ Clear debt',
     cancelLabel:'Cancel'
   },function(){
-    c.creditBalance=0;saveData();renderApp();
+    c.creditBalance=0;c._updatedAt=Date.now();saveData();renderApp();
   });
 }
 
@@ -16451,6 +16484,7 @@ function writeOffCredit(custId){
 
   // Reduce credit balance
   cust.creditBalance=Math.round((balance-amt)*100)/100;
+  cust._updatedAt=Date.now();
 
   // Record as write-off in credit payments (mode = writeoff, not added to cashflow income)
   if(!DB.creditPayments)DB.creditPayments=[];
@@ -16684,6 +16718,7 @@ function applyCommissionToDebt(custId){
   cust.commissionBalance=Math.max(0,commBal-apply);
   // Reduce credit balance (outstanding debt)
   cust.creditBalance=Math.max(0,debt-apply);
+  cust._updatedAt=Date.now();
   // Log commission as paid (used for debt)
   DB.commissionLedger.push({id:uid(),custId:cust.id,custName:cust.name,type:'paid',amount:apply,note:'Applied to outstanding debt',date:date,month:month,by:DB.currentUser?DB.currentUser.name:'Admin'});
   // Log as credit payment
@@ -17759,6 +17794,27 @@ function buildProductReport(){
 }
 /* ══════════════════════════════════════════════════════════════ */
 
+function migrateCustomerTimestamps(){
+  // One-time migration: stamp _updatedAt on all existing customers
+  // so timestamp-based merge knows which version is more recent
+  var now=Date.now();
+  var changed=0;
+  (DB.customers||[]).forEach(function(c){
+    if(!c._updatedAt){c._updatedAt=now;changed++;}
+  });
+  if(changed>0){
+    fbSetCollection('customers',DB.customers,function(){
+      console.log('Migration: stamped _updatedAt on '+changed+' customers');
+    },null);
+  }
+}
+
+function _stampCustomerUpdated(custId){
+  // Stamp _updatedAt on customer so timestamp-based merge keeps most recent version
+  var c=DB.customers.find(function(x){return String(x.id)===String(custId);});
+  if(c) c._updatedAt=Date.now();
+}
+
 function recordCreditPayment(custId){
   var cust=DB.customers.find(function(c){return c.id==custId;});
   if(!cust){alert('Customer not found.');return;}
@@ -17782,6 +17838,7 @@ function recordCreditPayment(custId){
   var month=rawDate.toISOString().slice(0,7);
   // Reduce credit balance
   cust.creditBalance=Math.round((cust.creditBalance-amt)*100)/100;
+  cust._updatedAt=Date.now();
   // Store payment record
   if(!DB.creditPayments)DB.creditPayments=[];
   DB.creditPayments.push({id:uid(),custId:custId,custName:cust.name,amount:amt,payMode:mode,bankId:bankId,posId:posId,date:date,month:month,by:DB.currentUser.name});
