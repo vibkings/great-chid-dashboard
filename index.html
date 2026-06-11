@@ -1506,9 +1506,11 @@ function tryDailyDriveBackup() {
   if (_driveUploadInProgress) return;
   var hasRefresh = !!localStorage.getItem('gce_gdrive_refresh_token');
   if (!hasRefresh) return; // not connected
-  var today = new Date().toISOString().slice(0,10);
-  var lastDate = localStorage.getItem('gce_gdrive_last_backup_date') || '';
-  if (lastDate === today) return; // already backed up today
+  // Upload every hour (not just once per day) — check last upload time
+  var INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+  var lastBackup = localStorage.getItem('gce_gdrive_last_backup') || '';
+  var lastMs = lastBackup ? new Date(lastBackup).getTime() : 0;
+  if (Date.now() - lastMs < INTERVAL_MS) return; // uploaded within last hour
   _driveUploadInProgress = true;
   setTimeout(function() {
     autoBackupToGDrive(true);
@@ -2616,17 +2618,20 @@ function showAutoBackupPanel() {
 // ── Hook auto backup into saveData ───────────────────────────
 var _origSaveData = null;
 function initAutoBackup() {
-  // Hourly timer removed — Drive backup now triggers after each saveData() via tryDailyDriveBackup()
-  // This survives page reloads since it hooks into the save cycle, not a timer
+  // Safety net: check every 10 minutes if an hourly backup is due
+  // (covers cases where no saveData() fires for a long time)
+  setInterval(function() {
+    if (DB.currentUser) tryDailyDriveBackup();
+  }, 10 * 60 * 1000); // every 10 minutes
 }
 
 // Called after login to do the startup backup
 function initAutoBackupAfterLogin() {
   if (DB.currentUser) {
-    // Try daily Drive upload on login (in case page was reloaded before save fired today)
+    // Try on login — in case it's been over an hour since last backup
     setTimeout(function() {
       tryDailyDriveBackup();
-    }, 6000); // wait for Firestore to connect first
+    }, 8000); // wait for Firestore to connect first
   }
 }
 
