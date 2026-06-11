@@ -2875,9 +2875,12 @@ function moveToRecycleBin(type, item, sourceName) {
     data: JSON.parse(JSON.stringify(item)),
     deletedAt: new Date().toISOString(),
     deletedBy: DB.currentUser ? DB.currentUser.name : 'Unknown',
-    expiresAt: new Date(Date.now() + BIN_RETENTION_DAYS * 86400000).toISOString()
+    expiresAt: new Date(Date.now() + BIN_RETENTION_DAYS * 86400000).toISOString(),
+    _updatedAt: Date.now()
   };
   DB.recycleBin.push(binItem);
+  // Immediately push recycleBin to Firestore so bin items survive page reload
+  fbSetCollection('recycleBin', DB.recycleBin, null, null);
   // Log the deletion
   logActivity('Item deleted',
     (sourceName||type)+': '+(item.name||item.id||'item')+
@@ -2886,17 +2889,24 @@ function moveToRecycleBin(type, item, sourceName) {
 }
 
 // Remove any inventory/warehouse items that are already in recycleBin
-// (prevents deleted items from reappearing after stale Firestore sync)
+// ONLY checks items deleted in the last 5 minutes (same session) to avoid
+// incorrectly removing legitimate items on reload due to stale bin data.
 function purgeBinnedFromCollections(){
   if(!DB.recycleBin||!DB.recycleBin.length)return;
-  var binnedIds={};
+  var fiveMinAgo=Date.now()-5*60*1000;
+  var recentBinnedIds={};
   DB.recycleBin.forEach(function(b){
-    if(b.data&&b.data.id)binnedIds[String(b.data.id)]=(binnedIds[String(b.data.id)]||0)+1;
+    // Only purge if deleted very recently (this session, not from old Firestore data)
+    var deletedTs=b._updatedAt||new Date(b.deletedAt||0).getTime();
+    if(b.data&&b.data.id&&deletedTs>fiveMinAgo){
+      recentBinnedIds[String(b.data.id)]=true;
+    }
   });
+  if(!Object.keys(recentBinnedIds).length)return;
   var before=DB.inventory.length;
-  DB.inventory=DB.inventory.filter(function(i){return !binnedIds[String(i.id)];});
-  DB.warehouse=DB.warehouse.filter(function(i){return !binnedIds[String(i.id)];});
-  if(DB.inventory.length!==before)console.log('purgeBinnedFromCollections: removed '+(before-DB.inventory.length)+' deleted items from inventory');
+  DB.inventory=DB.inventory.filter(function(i){return !recentBinnedIds[String(i.id)];});
+  DB.warehouse=DB.warehouse.filter(function(i){return !recentBinnedIds[String(i.id)];});
+  if(DB.inventory.length!==before)console.log('purgeBinnedFromCollections: removed '+(before-DB.inventory.length)+' recently deleted items from inventory');
 }
 
 function autoPurgeBin() {
