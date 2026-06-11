@@ -8554,39 +8554,84 @@ function showDepositTopupDialog(cust,depBal,invoiceTotal,shortfall,creditLimit,c
   var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
   var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
   var creditOpt=creditLimit>0&&availableCredit>=shortfall?'<option value="credit">Add to credit balance</option>':'';
+  var modeOpts='<option value="cash">Cash</option><option value="pos">POS</option><option value="transfer">Bank Transfer</option>'+creditOpt;
   overlay.innerHTML=
-    '<div style="background:var(--white);border-radius:14px;width:100%;max-width:420px;box-shadow:0 20px 50px rgba(0,0,0,.3);overflow:hidden">'+
-      '<div style="background:#f59e0b;padding:14px 18px;display:flex;justify-content:space-between;align-items:center">'+
+    '<div style="background:var(--white);border-radius:14px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
+      '<div style="background:#f59e0b;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0">'+
         '<div>'+
           '<div style="font-size:15px;font-weight:800;color:#fff">Deposit Shortfall</div>'+
-          '<div style="font-size:11px;color:rgba(255,255,255,.9);margin-top:2px">'+esc(cust.name)+' - deposit not enough to cover invoice</div>'+
+          '<div style="font-size:11px;color:rgba(255,255,255,.9);margin-top:2px">'+esc(cust.name)+' — Balance needed: '+fmt(shortfall)+'</div>'+
         '</div>'+
         '<button onclick="document.getElementById(\'dep-topup-overlay\').remove()" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:16px;cursor:pointer">&times;</button>'+
       '</div>'+
       '<div style="padding:16px 18px">'+
+        // Summary cards
         '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">'+
-          '<div style="background:var(--primary-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Invoice Total</div><div style="font-size:15px;font-weight:800;color:#111">'+fmt(invoiceTotal)+'</div></div>'+
-          '<div style="background:var(--success-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Deposit Available</div><div style="font-size:15px;font-weight:800;color:#15803d">'+fmt(depBal)+'</div></div>'+
-          '<div style="background:var(--danger-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Balance Needed</div><div style="font-size:15px;font-weight:800;color:#dc2626">'+fmt(shortfall)+'</div></div>'+
+          '<div style="background:var(--primary-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Invoice Total</div><div style="font-size:14px;font-weight:800;color:#111">'+fmt(invoiceTotal)+'</div></div>'+
+          '<div style="background:var(--success-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Deposit</div><div style="font-size:14px;font-weight:800;color:#15803d">'+fmt(depBal)+'</div></div>'+
+          '<div style="background:var(--danger-bg);border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#6b7280;font-weight:600;text-transform:uppercase;margin-bottom:4px">Balance</div><div style="font-size:14px;font-weight:800;color:#dc2626">'+fmt(shortfall)+'</div></div>'+
         '</div>'+
-        '<div style="font-size:12px;font-weight:700;color:var(--text1,#374151);margin-bottom:10px">How will the customer pay the balance of '+fmt(shortfall)+'?</div>'+
-        '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">'+
-          '<select id="dep-topup-mode" onchange="depTopupModeChange()" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:600">'+
-            '<option value="cash">Cash</option>'+
-            '<option value="pos">POS</option>'+
-            '<option value="transfer">Bank Transfer</option>'+
-            creditOpt+
-          '</select>'+
-          '<div id="dep-topup-bank-row" style="display:none"><select id="dep-topup-bank" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px"><option value="">-- Select bank --</option>'+bankOpts+'</select></div>'+
-          '<div id="dep-topup-pos-row" style="display:none"><select id="dep-topup-pos" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px"><option value="">-- Select POS --</option>'+posOpts+'</select></div>'+
+        // Payment type toggle
+        '<div style="display:flex;gap:8px;margin-bottom:12px">'+
+          '<button id="dep-pay-single-btn" onclick="depTopupSetMode(\'single\')" style="flex:1;padding:9px;border-radius:8px;border:2px solid #6366F1;background:#6366F1;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Single Payment</button>'+
+          '<button id="dep-pay-split-btn" onclick="depTopupSetMode(\'split\')" style="flex:1;padding:9px;border-radius:8px;border:2px solid #e2e8f0;background:var(--surface2);color:var(--text1);font-size:12px;font-weight:700;cursor:pointer">Split Payment</button>'+
         '</div>'+
-        '<div style="display:flex;gap:8px">'+
+        // Single payment section
+        '<div id="dep-single-section">'+
+          '<div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:8px">How will the customer pay '+fmt(shortfall)+'?</div>'+
+          '<select id="dep-topup-mode" onchange="depTopupModeChange()" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:600;margin-bottom:8px">'+modeOpts+'</select>'+
+          '<div id="dep-topup-bank-row" style="display:none"><select id="dep-topup-bank" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;margin-bottom:8px"><option value="">-- Select bank --</option>'+bankOpts+'</select></div>'+
+          '<div id="dep-topup-pos-row" style="display:none"><select id="dep-topup-pos" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;margin-bottom:8px"><option value="">-- Select POS --</option>'+posOpts+'</select></div>'+
+        '</div>'+
+        // Split payment section
+        '<div id="dep-split-section" style="display:none">'+
+          '<div style="font-size:12px;font-weight:700;color:var(--text1);margin-bottom:8px">Split the balance of '+fmt(shortfall)+'</div>'+
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+            // Mode 1
+            '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px">'+
+              '<div style="font-size:11px;font-weight:700;color:#6366F1;margin-bottom:6px">MODE 1</div>'+
+              '<select id="dep-split-mode1" onchange="depSplitModeChange()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:6px">'+modeOpts+'</select>'+
+              '<input type="number" id="dep-split-amt1" placeholder="Amount" oninput="depSplitAmtChange(1)" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-weight:700;margin-bottom:6px">'+
+              '<div id="dep-split-bank1-row" style="display:none"><select id="dep-split-bank1" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"><option value="">-- Bank --</option>'+bankOpts+'</select></div>'+
+              '<div id="dep-split-pos1-row" style="display:none"><select id="dep-split-pos1" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"><option value="">-- POS --</option>'+posOpts+'</select></div>'+
+            '</div>'+
+            // Mode 2
+            '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px">'+
+              '<div style="font-size:11px;font-weight:700;color:#6366F1;margin-bottom:6px">MODE 2</div>'+
+              '<select id="dep-split-mode2" onchange="depSplitModeChange()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;margin-bottom:6px"><option value="cash">Cash</option><option value="pos">POS</option><option value="transfer">Bank Transfer</option></select>'+
+              '<input type="number" id="dep-split-amt2" placeholder="Amount (auto)" readonly style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;font-weight:700;background:#f8fafc;margin-bottom:6px">'+
+              '<div id="dep-split-bank2-row" style="display:none"><select id="dep-split-bank2" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"><option value="">-- Bank --</option>'+bankOpts+'</select></div>'+
+              '<div id="dep-split-pos2-row" style="display:none"><select id="dep-split-pos2" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px"><option value="">-- POS --</option>'+posOpts+'</select></div>'+
+            '</div>'+
+          '</div>'+
+          '<div id="dep-split-balance" style="text-align:center;font-size:12px;color:#6b7280;margin-top:8px">Enter Mode 1 amount</div>'+
+        '</div>'+
+        '<div style="display:flex;gap:8px;margin-top:14px">'+
           '<button onclick="confirmDepositTopup()" style="flex:1;padding:11px;background:#16a34a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#10003; Complete Sale</button>'+
-          '<button onclick="document.getElementById(\'dep-topup-overlay\').remove()" style="padding:11px 16px;background:var(--surface2);color:var(--text1,#374151);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
+          '<button onclick="document.getElementById(\'dep-topup-overlay\').remove()" style="padding:11px 16px;background:var(--surface2);color:var(--text1);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer">Cancel</button>'+
         '</div>'+
       '</div>'+
     '</div>';
+  overlay._shortfall=shortfall;
   document.body.appendChild(overlay);
+}
+
+function depTopupSetMode(mode){
+  var single=document.getElementById('dep-single-section');
+  var split=document.getElementById('dep-split-section');
+  var sBtn=document.getElementById('dep-pay-single-btn');
+  var spBtn=document.getElementById('dep-pay-split-btn');
+  if(mode==='single'){
+    if(single)single.style.display='block';
+    if(split)split.style.display='none';
+    if(sBtn){sBtn.style.background='#6366F1';sBtn.style.color='#fff';sBtn.style.borderColor='#6366F1';}
+    if(spBtn){spBtn.style.background='var(--surface2)';spBtn.style.color='var(--text1)';spBtn.style.borderColor='#e2e8f0';}
+  } else {
+    if(single)single.style.display='none';
+    if(split)split.style.display='block';
+    if(sBtn){sBtn.style.background='var(--surface2)';sBtn.style.color='var(--text1)';sBtn.style.borderColor='#e2e8f0';}
+    if(spBtn){spBtn.style.background='#6366F1';spBtn.style.color='#fff';spBtn.style.borderColor='#6366F1';}
+  }
 }
 
 function depTopupModeChange(){
@@ -8597,11 +8642,60 @@ function depTopupModeChange(){
   if(posRow)posRow.style.display=mode==='pos'?'block':'none';
 }
 
+function depSplitModeChange(){
+  var m1=(document.getElementById('dep-split-mode1')||{}).value;
+  var m2=(document.getElementById('dep-split-mode2')||{}).value;
+  var b1=document.getElementById('dep-split-bank1-row');
+  var p1=document.getElementById('dep-split-pos1-row');
+  var b2=document.getElementById('dep-split-bank2-row');
+  var p2=document.getElementById('dep-split-pos2-row');
+  if(b1)b1.style.display=m1==='transfer'?'block':'none';
+  if(p1)p1.style.display=m1==='pos'?'block':'none';
+  if(b2)b2.style.display=m2==='transfer'?'block':'none';
+  if(p2)p2.style.display=m2==='pos'?'block':'none';
+}
+
+function depSplitAmtChange(which){
+  var ov=document.getElementById('dep-topup-overlay');
+  if(!ov)return;
+  var shortfall=ov._shortfall||0;
+  var amt1=parseFloat((document.getElementById('dep-split-amt1')||{}).value)||0;
+  var rem=Math.max(0,shortfall-amt1);
+  var amt2El=document.getElementById('dep-split-amt2');
+  if(amt2El)amt2El.value=rem>0?rem:'';
+  var bal=document.getElementById('dep-split-balance');
+  if(bal){
+    if(amt1>shortfall){bal.textContent='⚠ Mode 1 exceeds balance needed';bal.style.color='#dc2626';}
+    else if(amt1>0){bal.textContent='Mode 2: '+fmt(rem);bal.style.color='#16a34a';}
+    else{bal.textContent='Enter Mode 1 amount';bal.style.color='#6b7280';}
+  }
+}
+
 function confirmDepositTopup(){
-  var mode=document.getElementById('dep-topup-mode').value;
-  var bankId=(document.getElementById('dep-topup-bank')||{}).value||'';
-  var posId=(document.getElementById('dep-topup-pos')||{}).value||'';
-  window._depTopup={mode:mode,bankId:bankId,posId:posId};
+  var splitSection=document.getElementById('dep-split-section');
+  var isSplit=splitSection&&splitSection.style.display!=='none';
+  if(isSplit){
+    var ov=document.getElementById('dep-topup-overlay');
+    var shortfall=ov?ov._shortfall:0;
+    var m1=(document.getElementById('dep-split-mode1')||{}).value||'cash';
+    var m2=(document.getElementById('dep-split-mode2')||{}).value||'cash';
+    var a1=parseFloat((document.getElementById('dep-split-amt1')||{}).value)||0;
+    var a2=parseFloat((document.getElementById('dep-split-amt2')||{}).value)||0;
+    if(a1<=0){alert('Enter the Mode 1 amount.');return;}
+    if(Math.abs(a1+a2-shortfall)>1){alert('Mode 1 + Mode 2 must equal '+fmt(shortfall));return;}
+    var b1=(document.getElementById('dep-split-bank1')||{}).value||'';
+    var b2=(document.getElementById('dep-split-bank2')||{}).value||'';
+    var p1=(document.getElementById('dep-split-pos1')||{}).value||'';
+    var p2=(document.getElementById('dep-split-pos2')||{}).value||'';
+    if(m1==='transfer'&&!b1){alert('Select bank for Mode 1.');return;}
+    if(m2==='transfer'&&!b2){alert('Select bank for Mode 2.');return;}
+    window._depTopup={mode:'split',splitMode1:m1,splitAmt1:a1,splitMode2:m2,splitAmt2:a2,bankId:b1||b2,posId:p1||p2,bankId1:b1,bankId2:b2,posId1:p1,posId2:p2};
+  } else {
+    var mode=document.getElementById('dep-topup-mode').value;
+    var bankId=(document.getElementById('dep-topup-bank')||{}).value||'';
+    var posId=(document.getElementById('dep-topup-pos')||{}).value||'';
+    window._depTopup={mode:mode,bankId:bankId,posId:posId};
+  }
   document.getElementById('dep-topup-overlay').remove();
   submitInvoice();
 }
@@ -8939,17 +9033,24 @@ function submitInvoice(){
               regC.creditBalance=(regC.creditBalance||0)+_shortfall;
               regC._updatedAt=Date.now();
               creditAmount=0;grandTotal=0;cashReceived=0;
+            } else if(tu.mode==='split'){
+              // Split topup — two cashflow entries
+              DB.cashflow.push({id:uid(),desc:'Invoice #'+invNum+' balance paid ('+tu.splitMode1+') — '+regC.name,
+                amount:tu.splitAmt1,type:'in',cat:'Sales',payMode:tu.splitMode1,bankId:tu.bankId1||null,posId:tu.posId1||null,date:date,month:month,_updatedAt:Date.now()});
+              DB.cashflow.push({id:uid(),desc:'Invoice #'+invNum+' balance paid ('+tu.splitMode2+') — '+regC.name,
+                amount:tu.splitAmt2,type:'in',cat:'Sales',payMode:tu.splitMode2,bankId:tu.bankId2||null,posId:tu.posId2||null,date:date,month:month,_updatedAt:Date.now()});
+              // Stamp split topup on sale items
+              _savedTopupMode='split';
+              cashReceived=0;creditAmount=0;grandTotal=0;
             } else {
-              // Only real cashflow entry for this invoice — the shortfall paid
+              // Single mode shortfall
               DB.cashflow.push({id:uid(),desc:'Invoice #'+invNum+' balance paid ('+tu.mode+') — '+regC.name,
-                amount:_shortfall,type:'in',cat:'Sales',payMode:tu.mode,bankId:tu.bankId||null,posId:tu.posId||null,date:date,month:month});
+                amount:_shortfall,type:'in',cat:'Sales',payMode:tu.mode,bankId:tu.bankId||null,posId:tu.posId||null,date:date,month:month,_updatedAt:Date.now()});
               cashReceived=0;creditAmount=0;grandTotal=0;
             }
             _localDepTopup=null;
           }
-          // else: shortfall exists but no topup mode set — will fall through as credit
         } else {
-          // Deposit covers full amount — no cash entry needed
           cashReceived=0;creditAmount=0;grandTotal=0;
           _localDepTopup=null;
         }
