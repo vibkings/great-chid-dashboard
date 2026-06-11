@@ -6101,7 +6101,7 @@ function selectAdjItem(id){
   if(dd)dd.style.display='none';
 }
 
-function applyAdjustment(){var itemId=document.getElementById('adj-item').value,type=document.getElementById('adj-type').value,qty=parseInt(document.getElementById('adj-qty').value)||0,reason=document.getElementById('adj-reason').value.trim(),item=DB.inventory.find(function(i){return i.id==itemId;});if(!item){alert('Select item.');return;}if(qty<=0){alert('Enter qty.');return;}if(!reason){alert('Enter reason.');return;}var change=type==='add'?qty:-qty,newQty=Math.max(0,item.qty+change);DB.adjLog.push({id:uid(),itemId:item.id,itemName:item.name,type:type,reason:reason,before:item.qty,change:change,after:newQty,date:new Date().toLocaleDateString(),by:DB.currentUser.name});item.qty=newQty;['adj-qty','adj-reason'].forEach(function(id){document.getElementById(id).value='';}); var ais=document.getElementById('adj-item-search');if(ais)ais.value=''; var aih=document.getElementById('adj-item');if(aih)aih.value=''; var aid=document.getElementById('adj-item-display');if(aid)aid.innerHTML=''; saveData(); fbSetCollection('inventory',DB.inventory,null,null); fbSetCollection('adjLog',DB.adjLog,null,null); logActivity('Stock adjusted',item.name+' | '+item.qty+change+' → '+newQty+' ('+reason+')',type); showToast('Stock adjusted — saved.','success'); renderApp();}
+function applyAdjustment(){var itemId=document.getElementById('adj-item').value,type=document.getElementById('adj-type').value,qty=parseInt(document.getElementById('adj-qty').value)||0,reason=document.getElementById('adj-reason').value.trim(),item=DB.inventory.find(function(i){return i.id==itemId;});if(!item){alert('Select item.');return;}if(qty<=0){alert('Enter qty.');return;}if(!reason){alert('Enter reason.');return;}var change=type==='add'?qty:-qty,newQty=Math.max(0,item.qty+change);DB.adjLog.push({id:uid(),itemId:item.id,itemName:item.name,type:type,reason:reason,before:item.qty,change:change,after:newQty,date:new Date().toLocaleDateString(),by:DB.currentUser.name});item.qty=newQty;['adj-qty','adj-reason'].forEach(function(id){document.getElementById(id).value='';}); var ais=document.getElementById('adj-item-search');if(ais)ais.value=''; var aih=document.getElementById('adj-item');if(aih)aih.value=''; var aid=document.getElementById('adj-item-display');if(aid)aid.innerHTML=''; saveData(); fbSetCollection('inventory',DB.inventory,null,null); fbSetCollection('adjLog',DB.adjLog,null,null); logActivity('Stock adjustment',item.name+' | '+(newQty-change)+' → '+newQty+' ('+reason+')',type); showToast('Stock adjusted — saved.','success'); renderApp();}
 function saveEdit(id){
   var item=DB.inventory.find(function(i){return i.id==id;});if(!item)return;
   var name=document.getElementById('pe-name-'+id).value.trim(),cost=parseFloat(document.getElementById('pe-cost-'+id).value)||0,sell=parseFloat(document.getElementById('pe-sell-'+id).value)||0,minQty=parseInt(document.getElementById('pe-min-'+id).value)||1,cat=document.getElementById('pe-cat-'+id).value.trim(),supId=document.getElementById('pe-sup-'+id).value;
@@ -7776,7 +7776,7 @@ function buildInvoiceHTML(inv){
       '<div class="pay-row">'+
         '<div class="pay-cell">'+
           '<div class="pay-label">Payment type</div>'+
-          '<div class="pay-val">'+(inv.payment==='credit'?'\u26a0 CREDIT (amount owed)':inv.payment==='part'?'PART PAYMENT':inv.payMode==='split'?'SPLIT PAYMENT':inv.payment==='deposit'?(inv.depTopupMode?'DEPOSIT + '+(inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'TRANSFER':inv.depTopupMode==='split'?'SPLIT':'CASH'):'DEPOSIT'):'CASH SALE')+'</div>'+
+          '<div class="pay-val">'+(inv.payment==='credit'?'\u26a0 CREDIT (amount owed)':inv.payment==='part'?'PART PAYMENT':inv.payMode==='split'?'SPLIT PAYMENT':inv.payment==='deposit'?(inv.depTopupMode?'DEPOSIT + '+(inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'TRANSFER':inv.depTopupMode==='split'?'SPLIT':inv.depTopupMode==='credit'?'CREDIT':'CASH'):'DEPOSIT'):'CASH SALE')+'</div>'+
         '</div>'+
         (inv.payment==='credit'&&inv.dueDate?(function(){
           var _d=new Date(inv.dueDate);
@@ -7794,7 +7794,7 @@ function buildInvoiceHTML(inv){
           '<div class="pay-label">Payment mode</div>'+
           '<div class="pay-val">'+(inv.payment==='credit'?'Credit':
             inv.payment==='deposit'?(inv.depTopupMode?
-              'Deposit: '+fmt(inv.depositApplied||0)+' + '+(inv.depTopupMode==='split'?'Split Payment':inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'Transfer':'Cash')+': '+fmt((inv.grandTotal||0)-(inv.depositApplied||0)):
+              'Deposit: '+fmt(inv.depositApplied||0)+' + '+(inv.depTopupMode==='split'?'Split Payment':inv.depTopupMode==='credit'?'Credit':inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'Transfer':'Cash')+': '+fmt((inv.grandTotal||0)-(inv.depositApplied||0)):
               'Deposit: '+fmt(inv.depositApplied||inv.grandTotal||0)):
             inv.payMode==='pos'?'POS terminal':
             inv.payMode==='transfer'?'Bank transfer'+(inv.bankId?' ('+getBankName(inv.bankId)+')':''):
@@ -7956,7 +7956,7 @@ function buildInvoiceHTML(inv){
     (inv.payment==='deposit'?
       // Deposit: TOTAL → LESS DEPOSIT → AMOUNT PAID (shortfall)
       (inv.depositApplied>0?'<tr style="background:#e0f2fe"><td colspan="4" style="text-align:right;font-size:9px;color:#0369a1">LESS: DEPOSIT APPLIED</td><td colspan="2" class="right" style="font-size:10px;color:#0369a1;font-weight:700">- '+fmt(inv.depositApplied)+'</td></tr>':'')+
-      '<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d;font-weight:700">AMOUNT PAID'+(inv.depTopupMode?' ('+(inv.depTopupMode==='split'?'Split':inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'Transfer':'Cash')+')':'')+'</td><td colspan="2" class="right" style="font-size:10px;color:#15803d;font-weight:800">'+fmt(Math.max(0,(inv.grandTotal||0)-(inv.depositApplied||0)))+'</td></tr>'
+      '<tr style="background:#f0fdf4"><td colspan="4" style="text-align:right;font-size:9px;color:#15803d;font-weight:700">AMOUNT PAID'+(inv.depTopupMode?' ('+(inv.depTopupMode==='split'?'Split':inv.depTopupMode==='credit'?'Credit':inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'Transfer':'Cash')+')':'')+'</td><td colspan="2" class="right" style="font-size:10px;color:#15803d;font-weight:800">'+fmt(Math.max(0,(inv.grandTotal||0)-(inv.depositApplied||0)))+'</td></tr>'
       :inv.payment==='credit'?
       // Credit: show ₦0 amount paid
       '<tr style="background:#fff3cd"><td colspan="4" style="text-align:right;font-size:9px;color:#856404;font-weight:700">AMOUNT PAID</td><td colspan="2" class="right" style="font-size:10px;color:#856404;font-weight:800">'+fmt(0)+'</td></tr>'
@@ -8579,7 +8579,7 @@ function showDepositTopupDialog(cust,depBal,invoiceTotal,shortfall,creditLimit,c
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1rem';
   var bankOpts=(DB.banks||[]).map(function(b){return '<option value="'+b.id+'">'+(b.name||b.bankName||'')+(b.acct||b.acctName?' - '+(b.acct||b.acctName):'')+'</option>';}).join('');
   var posOpts=(DB.posTerminals||[]).map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');
-  var creditOpt=creditLimit>0&&availableCredit>=shortfall?'<option value="credit">Add to credit balance</option>':'';
+  var creditOpt=creditLimit>0&&availableCredit>0?'<option value="credit">Add to credit balance (₦'+Math.round(availableCredit).toLocaleString()+' available)</option>':'';
   var modeOpts='<option value="cash">Cash</option><option value="pos">POS</option><option value="transfer">Bank Transfer</option>'+creditOpt;
   overlay.innerHTML=
     '<div style="background:var(--white);border-radius:14px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.3)">'+
@@ -9059,8 +9059,12 @@ function submitInvoice(){
           if(_localDepTopup){
             var tu=_localDepTopup;
             if(tu.mode==='credit'){
+              // Shortfall goes on credit — customer pays later
+              // The sale items will have payment='deposit' with depTopupMode='credit'
+              // The outstanding balance shows in customer profile creditBalance
               regC.creditBalance=(regC.creditBalance||0)+_shortfall;
               regC._updatedAt=Date.now();
+              _savedTopupMode='credit';
               creditAmount=0;grandTotal=0;cashReceived=0;
             } else if(tu.mode==='split'){
               // Split topup — two cashflow entries
@@ -9366,7 +9370,7 @@ function buildThermalHTML(inv){
 
   var payLabel=inv.payment==='credit'?'CREDIT':inv.payment==='part'?'PART PAYMENT':
     inv.payment==='deposit'?(inv.depTopupMode?
-      'DEPOSIT '+fmt(inv.depositApplied||0)+' + '+(inv.depTopupMode==='split'?'SPLIT':inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'TRANSFER':'CASH')+' '+fmt((inv.grandTotal||0)-(inv.depositApplied||0)):
+      'DEPOSIT '+fmt(inv.depositApplied||0)+' + '+(inv.depTopupMode==='split'?'SPLIT':inv.depTopupMode==='credit'?'CREDIT':inv.depTopupMode==='pos'?'POS':inv.depTopupMode==='transfer'?'TRANSFER':'CASH')+' '+fmt((inv.grandTotal||0)-(inv.depositApplied||0)):
       'DEPOSIT'):
     inv.payMode==='pos'?'POS':inv.payMode==='transfer'?'TRANSFER':'CASH';
 
