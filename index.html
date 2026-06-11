@@ -8784,7 +8784,7 @@ function confirmDepositTopup(){
 }
 
 
-function submitInvoice(){
+async function submitInvoice(){
   if(!invoiceItems.length){alert('Add at least one item to the invoice.');return;}
   // Capture depTopup choice (set by confirmDepositTopup) then immediately clear global
   var _localDepTopup=window._depTopup||null;
@@ -8986,14 +8986,36 @@ function submitInvoice(){
     invoiceItems.forEach(function(l){partialItems.push({lineId:l.lineId,name:l.name,itemId:l.itemId,ordered:l.qty,supplied:0,pending:l.qty,price:l.price,cost:l.cost});});
   }
 
-  // If partial, ask user
+  // If partial, ask user with 3 options
   if(hasPartial&&!pendingSupply){
-    var msg='WARNING: Some items have insufficient stock:\n\n';
-    partialItems.forEach(function(p){
-      if(p.pending>0)msg+=p.name+': ordered '+p.ordered+', available '+p.supplied+', short '+p.pending+'\n';
+    var _supplyChoice = await new Promise(function(resolve){
+      var msg='<b>⚠️ Insufficient stock for some items:</b><br><br>';
+      partialItems.forEach(function(p){
+        if(p.pending>0) msg+='<b>'+p.name+'</b>: ordered '+p.ordered+', available <span style="color:#27ae60">'+p.supplied+'</span>, short <span style="color:#e74c3c">'+p.pending+'</span><br>';
+      });
+      msg+='<br>How would you like to proceed?';
+      // Build modal
+      var overlay=document.createElement('div');
+      overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center';
+      overlay.innerHTML='<div style="background:var(--card-bg,#fff);border-radius:14px;padding:28px 24px;max-width:460px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18)">'
+        +'<div style="font-size:15px;margin-bottom:20px;line-height:1.6">'+msg+'</div>'
+        +'<div style="display:flex;flex-direction:column;gap:10px">'
+        +'<button id="_ps_partial" style="padding:11px 16px;border-radius:8px;border:none;background:#27ae60;color:#fff;font-size:14px;cursor:pointer;text-align:left">✅ <b>Supply available qty now</b> — supply '+partialItems.filter(function(p){return p.supplied>0;}).map(function(p){return p.name+' ('+p.supplied+')';}).join(', ')+', mark rest as pending</button>'
+        +'<button id="_ps_none" style="padding:11px 16px;border-radius:8px;border:none;background:#e67e22;color:#fff;font-size:14px;cursor:pointer;text-align:left">⏳ <b>Supply nothing yet</b> — save invoice but hold all goods until full stock is available</button>'
+        +'<button id="_ps_cancel" style="padding:11px 16px;border-radius:8px;border:none;background:#eee;color:#333;font-size:14px;cursor:pointer">✗ Cancel — go back and adjust</button>'
+        +'</div></div>';
+      document.body.appendChild(overlay);
+      overlay.querySelector('#_ps_partial').onclick=function(){document.body.removeChild(overlay);resolve('partial');};
+      overlay.querySelector('#_ps_none').onclick=function(){document.body.removeChild(overlay);resolve('none');};
+      overlay.querySelector('#_ps_cancel').onclick=function(){document.body.removeChild(overlay);resolve('cancel');};
     });
-    msg+='\nChoose:\n- OK = Supply what is available now, mark rest as Pending\n- Cancel = Do not save yet';
-    if(!confirm(msg))return;
+    if(_supplyChoice==='cancel')return;
+    if(_supplyChoice==='none'){
+      // User chose to supply nothing — treat entire invoice as pending supply
+      pendingSupply=true;
+      partialItems.forEach(function(p){p.supplied=0;p.pending=p.ordered;});
+    }
+    // 'partial' — proceed with original partialItems (supply available, mark rest pending)
   }
 
   // Distribute discount proportionally across items
