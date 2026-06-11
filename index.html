@@ -1639,6 +1639,8 @@ function applySnapshot(snapshot) {
   migrateAdminCredentials();
   // Stamp _updatedAt on all customers that don't have it yet
   migrateCustomerTimestamps();
+  // Stamp _updatedAt on cancelled/converted proformas so they don't get restored by sync
+  migrateProformaTimestamps();
   // Auto-archive old sales on every load to keep Firestore under limit
   setTimeout(function(){ archiveOldSales(false); }, 3000);
   // Remove duplicate overpayment creditPayments entries (they double-deduct in statement)
@@ -6001,7 +6003,7 @@ function printStockCountSheet(){
   var w=window.open('','_blank');w.document.write(html);w.document.close();setTimeout(function(){w.print();},400);
 }
 function startCount(){countSession=DB.inventory.map(function(i){return{id:i.id,name:i.name,systemQty:i.qty,countedQty:null};});countStarted=true;renderApp();}
-function saveCount(){if(!countSession.every(function(c){return c.countedQty!==null&&!isNaN(c.countedQty);})){alert('Enter qty for all items.');return;}var date=new Date().toLocaleDateString();var details=[];countSession.forEach(function(c){var item=DB.inventory.find(function(i){return i.id===c.id;});if(!item)return;var diff=parseInt(c.countedQty)-c.systemQty;details.push({id:c.id,name:item.name,systemQty:c.systemQty,countedQty:parseInt(c.countedQty),diff:diff});if(diff!==0){DB.adjLog.push({id:uid(),itemId:c.id,itemName:item.name,type:'count',reason:'Stock count',before:c.systemQty,change:diff,after:parseInt(c.countedQty),date:date,by:DB.currentUser.name});item.qty=parseInt(c.countedQty);}});DB.stockCounts.push({id:uid(),date:date,items:countSession.length,variances:details.filter(function(d){return d.diff!==0;}).length,by:DB.currentUser.name,details:details});countSession=[];countStarted=false;saveData(); fbSetCollection('inventory',DB.inventory,null,null); fbSetCollection('adjLog',DB.adjLog,null,null);renderApp();}
+function saveCount(){if(!countSession.every(function(c){return c.countedQty!==null&&!isNaN(c.countedQty);})){alert('Enter qty for all items.');return;}var date=new Date().toLocaleDateString();var details=[];countSession.forEach(function(c){var item=DB.inventory.find(function(i){return i.id===c.id;});if(!item)return;var diff=parseInt(c.countedQty)-c.systemQty;details.push({id:c.id,name:item.name,systemQty:c.systemQty,countedQty:parseInt(c.countedQty),diff:diff});if(diff!==0){DB.adjLog.push({id:uid(),itemId:c.id,itemName:item.name,type:'count',reason:'Stock count',before:c.systemQty,change:diff,after:parseInt(c.countedQty),date:date,by:DB.currentUser.name});item.qty=parseInt(c.countedQty);}});DB.stockCounts.push({id:uid(),date:date,items:countSession.length,variances:details.filter(function(d){return d.diff!==0;}).length,by:DB.currentUser.name,details:details});var _variances=details.filter(function(d){return d.diff!==0;});countSession=[];countStarted=false;saveData(); fbSetCollection('inventory',DB.inventory,null,null); fbSetCollection('adjLog',DB.adjLog,null,null); if(_variances.length>0)logActivity('Stock count',_variances.length+' variance(s) — '+_variances.map(function(d){return d.name+': '+d.systemQty+' → '+d.countedQty;}).join(', '),'count');renderApp();}
 function cancelCount(){countSession=[];countStarted=false;renderApp();}
 function saveCatCount(cat){
   var catItems=DB.inventory.filter(function(i){return (i.cat||'Uncategorised')===cat;});
@@ -6099,7 +6101,7 @@ function selectAdjItem(id){
   if(dd)dd.style.display='none';
 }
 
-function applyAdjustment(){var itemId=document.getElementById('adj-item').value,type=document.getElementById('adj-type').value,qty=parseInt(document.getElementById('adj-qty').value)||0,reason=document.getElementById('adj-reason').value.trim(),item=DB.inventory.find(function(i){return i.id==itemId;});if(!item){alert('Select item.');return;}if(qty<=0){alert('Enter qty.');return;}if(!reason){alert('Enter reason.');return;}var change=type==='add'?qty:-qty,newQty=Math.max(0,item.qty+change);DB.adjLog.push({id:uid(),itemId:item.id,itemName:item.name,type:type,reason:reason,before:item.qty,change:change,after:newQty,date:new Date().toLocaleDateString(),by:DB.currentUser.name});item.qty=newQty;['adj-qty','adj-reason'].forEach(function(id){document.getElementById(id).value='';}); var ais=document.getElementById('adj-item-search');if(ais)ais.value=''; var aih=document.getElementById('adj-item');if(aih)aih.value=''; var aid=document.getElementById('adj-item-display');if(aid)aid.innerHTML=''; saveData(); fbSetCollection('inventory',DB.inventory,null,null); fbSetCollection('adjLog',DB.adjLog,null,null); showToast('Stock adjusted — saved.','success'); renderApp();}
+function applyAdjustment(){var itemId=document.getElementById('adj-item').value,type=document.getElementById('adj-type').value,qty=parseInt(document.getElementById('adj-qty').value)||0,reason=document.getElementById('adj-reason').value.trim(),item=DB.inventory.find(function(i){return i.id==itemId;});if(!item){alert('Select item.');return;}if(qty<=0){alert('Enter qty.');return;}if(!reason){alert('Enter reason.');return;}var change=type==='add'?qty:-qty,newQty=Math.max(0,item.qty+change);DB.adjLog.push({id:uid(),itemId:item.id,itemName:item.name,type:type,reason:reason,before:item.qty,change:change,after:newQty,date:new Date().toLocaleDateString(),by:DB.currentUser.name});item.qty=newQty;['adj-qty','adj-reason'].forEach(function(id){document.getElementById(id).value='';}); var ais=document.getElementById('adj-item-search');if(ais)ais.value=''; var aih=document.getElementById('adj-item');if(aih)aih.value=''; var aid=document.getElementById('adj-item-display');if(aid)aid.innerHTML=''; saveData(); fbSetCollection('inventory',DB.inventory,null,null); fbSetCollection('adjLog',DB.adjLog,null,null); logActivity('Stock adjusted',item.name+' | '+item.qty+change+' → '+newQty+' ('+reason+')',type); showToast('Stock adjusted — saved.','success'); renderApp();}
 function saveEdit(id){
   var item=DB.inventory.find(function(i){return i.id==id;});if(!item)return;
   var name=document.getElementById('pe-name-'+id).value.trim(),cost=parseFloat(document.getElementById('pe-cost-'+id).value)||0,sell=parseFloat(document.getElementById('pe-sell-'+id).value)||0,minQty=parseInt(document.getElementById('pe-min-'+id).value)||1,cat=document.getElementById('pe-cat-'+id).value.trim(),supId=document.getElementById('pe-sup-'+id).value;
@@ -9758,6 +9760,9 @@ function markAsSupplied(invoiceRef){
     s.supplyDate=supplyDate;
   });
   saveData();
+  fbSetCollection('sales',DB.sales,null,null);
+  fbSetCollection('inventory',DB.inventory,null,null);
+  logActivity('Goods supplied','Invoice #'+items[0].invoiceNum+' marked as supplied on '+supplyDate,'Supply');
   renderApp();
   alert('✅ Goods marked as supplied on '+supplyDate+'. Stock has been deducted from inventory.');
   });
@@ -17628,12 +17633,25 @@ function convertProforma(prfNum){
 function cancelProforma(prfNum){
   if(!confirm('Cancel proforma '+prfNum+'? This cannot be undone.'))return;
   var p=(DB.proformas||[]).find(function(x){return x.prfNum==prfNum;});
-  if(p){p.status='cancelled';saveData();renderPanel();showToast('Proforma '+prfNum+' cancelled.');}
+  if(p){
+    p.status='cancelled';
+    p._updatedAt=Date.now();
+    saveData();
+    fbSetCollection('proformas',DB.proformas,null,null);
+    renderPanel();
+    showToast('Proforma '+prfNum+' cancelled.');
+  }
 }
 
 function markProformaConverted(prfNum,invNum){
   var p=(DB.proformas||[]).find(function(x){return x.prfNum==prfNum;});
-  if(p){p.status='converted';p.convertedInvNum=invNum;saveData();}
+  if(p){
+    p.status='converted';
+    p.convertedInvNum=invNum;
+    p._updatedAt=Date.now();
+    saveData();
+    fbSetCollection('proformas',DB.proformas,null,null);
+  }
 }
 /* ══════════════════════════════════════════════════════════════ */
 
@@ -17989,6 +18007,22 @@ function buildProductReport(){
   return searchHtml+report;
 }
 /* ══════════════════════════════════════════════════════════════ */
+
+function migrateProformaTimestamps(){
+  if(!DB.proformas||!DB.proformas.length)return;
+  var now=Date.now();
+  var changed=0;
+  DB.proformas.forEach(function(p){
+    if(!p._updatedAt&&(p.status==='cancelled'||p.status==='converted')){
+      p._updatedAt=now;changed++;
+    }
+  });
+  if(changed>0){
+    fbSetCollection('proformas',DB.proformas,function(){
+      console.log('Migration: stamped _updatedAt on '+changed+' proformas');
+    },null);
+  }
+}
 
 function migrateCustomerTimestamps(){
   // One-time migration: stamp _updatedAt on all existing customers
