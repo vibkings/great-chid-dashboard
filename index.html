@@ -815,50 +815,36 @@ function applyCollection(colName, payload) {
   };
   if (map[colName] && Array.isArray(data)) {
     var col = map[colName];
-    // These collections use ID-based merge — local entries must never be overwritten by stale remote
-    // Collections that use ID-based merge (never overwrite local entries)
-    var mergeCols = ['activityLog','inventory','warehouse','transferLog','adjLog',
-                     'stockCounts','recycleBin','drafts','pendingDeliveries',
-                     'supplierDeposits','tillSessions','commissionLedger','proformas','demoSales','salesArchive'];
     // Users: never overwrite local — local credentials always win
-    var localWinCols = ['users'];
-    // Customers/suppliers: timestamp-based merge — most recently updated wins
-    var tsWinCols = ['customers','suppliers'];
-    if(localWinCols.indexOf(col) >= 0) {
+    if(col === 'users') {
       if(!DB[col]||DB[col].length===0){ DB[col]=data; }
       else {
         var _uIds={}; DB[col].forEach(function(r){if(r.id)_uIds[String(r.id)]=true;});
         data.forEach(function(r){if(r.id&&!_uIds[String(r.id)])DB[col].push(r);});
       }
-    } else if(tsWinCols.indexOf(col) >= 0) {
+    } else {
+      // ALL other collections: universal timestamp-based merge
+      // Remote record wins if it has a newer _updatedAt; local wins if same or newer
+      // New records (not in local) are always added regardless
       if(!DB[col]||DB[col].length===0){ DB[col]=data; }
       else {
         var _tsMap={};
-        DB[col].forEach(function(r,i){if(r.id)_tsMap[String(r.id)]={idx:i,ts:r._updatedAt||0};});
+        DB[col].forEach(function(r,i){if(r&&r.id)_tsMap[String(r.id)]={idx:i,ts:r._updatedAt||0};});
         data.forEach(function(r){
-          if(!r.id)return;
+          if(!r||!r.id)return;
           var key=String(r.id);
           if(_tsMap[key]!==undefined){
-            // Keep whichever was updated more recently
-            var localTs=_tsMap[key].ts||0;
-            var remoteTs=r._updatedAt||0;
-            if(remoteTs>localTs) DB[col][_tsMap[key].idx]=r; // remote is newer
-            // else keep local
+            if((r._updatedAt||0)>(_tsMap[key].ts||0)) DB[col][_tsMap[key].idx]=r;
+            // else keep local (same or newer)
           } else {
-            DB[col].push(r); // new remote record
+            DB[col].push(r); // new record
           }
         });
+        if(col==='activityLog'){
+          DB[col].sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+          if(DB[col].length>500)DB[col]=DB[col].slice(0,500);
+        }
       }
-    } else if(mergeCols.indexOf(col) >= 0 && DB[col] && DB[col].length > 0) {
-      var existingIds = {};
-      DB[col].forEach(function(r){ if(r.id) existingIds[String(r.id)] = true; });
-      data.forEach(function(r){ if(r.id && !existingIds[String(r.id)]) DB[col].push(r); });
-      if(col === 'activityLog'){
-        DB[col].sort(function(a,b){return (b.ts||0)-(a.ts||0);});
-        if(DB[col].length > 500) DB[col] = DB[col].slice(0,500);
-      }
-    } else {
-      DB[col] = data;
     }
   }
   else if (colName === 'settings' && data && typeof data === 'object') DB.settings = data;
@@ -995,6 +981,32 @@ function markDirty(collections) {
   fbDirtyCollections.add('meta');
 }
 
+
+// ── Universal timestamp-based collection merge ─────────────────
+function mergeCollectionByTimestamp(col, remoteData, stats){
+  var remote = remoteData || [];
+  if (!DB[col]) DB[col] = [];
+  var localMap = {};
+  DB[col].forEach(function(rec,idx){if(rec&&rec.id)localMap[String(rec.id)]={idx:idx,ts:rec._updatedAt||0};});
+  remote.forEach(function(rec){
+    if(!rec||!rec.id)return;
+    var key=String(rec.id);
+    if(localMap[key]!==undefined){
+      if((rec._updatedAt||0)>(localMap[key].ts||0)){
+        DB[col][localMap[key].idx]=rec;
+        if(stats)stats.added++;
+      } else { if(stats)stats.skipped++; }
+    } else {
+      DB[col].push(rec);
+      if(stats)stats.added++;
+    }
+  });
+  if(col==='activityLog'){
+    DB[col].sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+    if(DB[col].length>500)DB[col]=DB[col].slice(0,500);
+  }
+}
+
 function startFirebaseListener() {
   if (fbPollTimer) clearInterval(fbPollTimer);
   updateSyncStatus('connecting');
@@ -1007,55 +1019,30 @@ function startFirebaseListener() {
     fbLastSavedAt = new Date().toISOString();
 
     if (remoteDB) {
-      // ── Standard array collections: add remote records missing locally ──
+      // ── Universal timestamp merge for all array collections ──
       var stdMergeCols = [
         'sales','purchases','cashflow','creditPayments','deposits',
         'salesReturns','adjLog','commissionLedger','proformas',
         'supplierPayments','tillSessions','supplierDeposits',
         'demoSales','activityLog','recycleBin','drafts',
-        'transferLog','stockCounts','warehouse'
+        'transferLog','stockCounts','warehouse','salesArchive','pendingDeliveries'
       ];
-      stdMergeCols.forEach(function(col) {
-        var remote = remoteDB[col] || [];
-        if (!DB[col]) DB[col] = [];
-        var localIds = {};
-        DB[col].forEach(function(rec) { if (rec.id) localIds[rec.id] = true; });
-        remote.forEach(function(rec) {
-          if (rec.id && !localIds[rec.id]) DB[col].push(rec);
-        });
+      stdMergeCols.forEach(function(col){
+        mergeCollectionByTimestamp(col, remoteDB[col], null);
       });
 
       // ── Object/entity collections: merge remote into local ──────────────────────
-      // Customers/suppliers: timestamp-based merge — most recently updated record wins
-      var tsWinCols2 = ['customers','suppliers'];
-      tsWinCols2.forEach(function(col) {
-        var remote = remoteDB[col] || [];
-        if (!DB[col]) DB[col] = [];
-        var localMap = {};
-        DB[col].forEach(function(rec, idx) { if (rec.id) localMap[String(rec.id)] = {idx:idx,ts:rec._updatedAt||0}; });
-        remote.forEach(function(rec) {
-          if (!rec.id) return;
-          var key = String(rec.id);
-          if (localMap[key] !== undefined) {
-            var localTs = localMap[key].ts||0;
-            var remoteTs = rec._updatedAt||0;
-            if(remoteTs > localTs) DB[col][localMap[key].idx] = rec; // remote newer
-            // else keep local (local has more recent creditBalance update)
-          } else {
-            DB[col].push(rec);
-          }
-        });
+      // ── Universal timestamp merge for entity collections ──
+      ['customers','suppliers','inventory','banks','posTerminals','categories','expenseCats'].forEach(function(col){
+        mergeCollectionByTimestamp(col, remoteDB[col], null);
       });
-      var objCols = ['inventory','users','banks','posTerminals','categories','expenseCats'];
-      objCols.forEach(function(col) {
-        var remote = remoteDB[col] || [];
-        if (!DB[col]) DB[col] = [];
-        var localMap = {};
-        DB[col].forEach(function(rec) { if (rec.id) localMap[rec.id] = true; });
-        remote.forEach(function(rec) {
-          if (rec.id && !localMap[rec.id]) DB[col].push(rec);
-        });
-      });
+      // Users: only add new, never replace
+      var _uRem3=remoteDB['users']||[];
+      if(!DB.users||!DB.users.length){ DB.users=_uRem3; }
+      else {
+        var _uM3={}; DB.users.forEach(function(r){if(r.id)_uM3[String(r.id)]=true;});
+        _uRem3.forEach(function(r){if(r.id&&!_uM3[String(r.id)])DB.users.push(r);});
+      }
 
       // ── pendingDeliveries: merge with status promotion ──────────────
       // Keep whichever status is more advanced (complete > partial > pending)
@@ -1228,50 +1215,26 @@ function mergeFbSync() {
 
     var mergeStats = { added: 0, skipped: 0 };
 
-    // These are the array collections we merge by ID
-    var mergeCols = [
+    // ── Universal timestamp merge for ALL collections ──────────
+    var allCols = [
       'sales','purchases','cashflow','creditPayments','deposits',
       'salesReturns','adjLog','commissionLedger','proformas',
       'supplierPayments','tillSessions','supplierDeposits',
       'demoSales','activityLog','recycleBin','drafts',
-      'pendingDeliveries','transferLog','stockCounts','warehouse'
+      'pendingDeliveries','transferLog','stockCounts','warehouse','salesArchive',
+      'customers','inventory','suppliers','banks','posTerminals','categories','expenseCats'
     ];
-
-    mergeCols.forEach(function(col) {
-      var remote = remoteDB[col] || [];
-      var local = DB[col] || [];
-      // Build a set of existing local IDs for fast lookup
-      var localIds = {};
-      local.forEach(function(rec) { if (rec.id) localIds[rec.id] = true; });
-      // Add remote records that don't exist locally
-      remote.forEach(function(rec) {
-        if (rec.id && !localIds[rec.id]) {
-          DB[col].push(rec);
-          mergeStats.added++;
-        } else {
-          mergeStats.skipped++;
-        }
-      });
+    allCols.forEach(function(col){
+      if(col==='users')return; // users: local always wins
+      mergeCollectionByTimestamp(col, remoteDB[col], mergeStats);
     });
-
-    // For object collections (customers, inventory, suppliers etc.)
-    // merge by updating records where remote is newer (has more data)
-    var objCols = ['customers','inventory','suppliers','users','banks','posTerminals','categories','expenseCats'];
-    objCols.forEach(function(col) {
-      var remote = remoteDB[col] || [];
-      var local = DB[col] || [];
-      var localMap = {};
-      local.forEach(function(rec, idx) { if (rec.id) localMap[rec.id] = idx; });
-      remote.forEach(function(rec) {
-        if (!rec.id) return;
-        if (localMap[rec.id] === undefined) {
-          // Entirely new record — add it
-          DB[col].push(rec);
-          mergeStats.added++;
-        }
-        // If already exists locally — keep local version (it's more up to date)
-      });
-    });
+    // Users: only add new, never replace existing
+    var _uRem=remoteDB['users']||[];
+    if(!DB.users||!DB.users.length){ DB.users=_uRem; }
+    else {
+      var _uIds2={}; DB.users.forEach(function(r){if(r.id)_uIds2[String(r.id)]=true;});
+      _uRem.forEach(function(r){if(r.id&&!_uIds2[String(r.id)])DB.users.push(r);});
+    }
 
     // Use whichever invoiceCounter is higher
     if (remoteDB.invoiceCounter > (DB.invoiceCounter || 0)) {
@@ -1477,7 +1440,26 @@ function showFirebaseDiag() {
 }
 
 // ---- saveData: writes to Firestore REST API + localStorage ----
+function stampCollectionTimestamps(){
+  // Stamp _updatedAt=now on any record missing it across all collections
+  // Ensures timestamp-based merge protects ALL data from reverting
+  var now=Date.now();
+  var cols=['sales','purchases','cashflow','inventory','customers','suppliers',
+            'adjLog','creditPayments','deposits','salesReturns','supplierPayments',
+            'supplierDeposits','transferLog','warehouse','activityLog',
+            'tillSessions','stockCounts','proformas','recycleBin','pendingDeliveries',
+            'commissionLedger','demoSales','drafts','users','banks','posTerminals',
+            'categories','expenseCats','salesArchive'];
+  cols.forEach(function(col){
+    if(!DB[col]||!DB[col].length)return;
+    DB[col].forEach(function(rec){
+      if(rec&&typeof rec==='object'&&!rec._updatedAt)rec._updatedAt=now;
+    });
+  });
+}
+
 function saveData() {
+  stampCollectionTimestamps();
   var snapshot = buildSnapshot();
   DB._savedAt = snapshot._savedAt;
   fbLastSavedAt = snapshot._savedAt;
