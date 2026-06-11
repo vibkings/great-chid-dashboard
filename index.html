@@ -8860,7 +8860,10 @@ function submitInvoice(){
     }
   }
 
-  var pendingSupply=document.getElementById('s-pending-supply')&&document.getElementById('s-pending-supply').checked;
+  // Restore pendingSupply from saved state if returning from deposit topup dialog
+  var pendingSupply=window._savedPendingSupply!==undefined?window._savedPendingSupply:
+    (document.getElementById('s-pending-supply')&&document.getElementById('s-pending-supply').checked);
+  window._savedPendingSupply=undefined; // clear after use
 
   var invoiceDiscAmt=invDiscType==='pct'?(subtotalAll*invDiscVal/100):invDiscType==='flat'?Math.min(invDiscVal,subtotalAll):0;
   var finalGrandTotal=subtotalAll-invoiceDiscAmt;
@@ -8878,10 +8881,10 @@ function submitInvoice(){
       }
       if(depBal2<finalGrandTotal){
         if(_localDepTopup){
-          // User chose topup — proceed with deposit + topup
           console.log('[Deposit] Using topup: '+JSON.stringify(_localDepTopup));
         } else {
-          // Show topup dialog
+          // Save pendingSupply state before showing dialog (re-render may reset checkbox)
+          window._savedPendingSupply=pendingSupply;
           showDepositTopupDialog(_rc2,depBal2,finalGrandTotal,finalGrandTotal-depBal2,_rc2.creditLimit||0,_rc2.creditBalance||0);
           return;
         }
