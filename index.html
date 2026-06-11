@@ -8460,11 +8460,11 @@ function addInvoiceItem(){
   var price=parseFloat(document.getElementById('inv-price').value)||0;
   var item=DB.inventory.find(function(i){return i.id==itemId;});
   if(!item){alert('Select an item.');return;}
-  // Partial supply warning - don't block, just inform
+  // Partial supply — just show a toast warning, the 3-option dialog fires at submission
   if(qty>item.qty&&item.qty>=0){
     var avail=item.qty;
     var short=qty-avail;
-    if(!confirm('⚠️ Partial supply alert!\n\nOrdered: '+qty+'\nIn stock: '+avail+'\nShort: '+short+'\n\n'+avail+' will be supplied now.\n'+short+' will be marked as PENDING supply.\n\nContinue?'))return;
+    showToast('⚠️ Stock alert: '+item.name+' — ordered '+qty+', only '+avail+' in stock. You will choose supply options when saving the invoice.','warning',5000);
   }
   // Enforce cost price exists
   if(!item.cost||item.cost<=0){
