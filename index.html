@@ -7923,6 +7923,14 @@ function buildInvoiceHTML(inv){
     '<div style="color:#c0392b;font-style:italic;margin-top:2px">...thanks for your patronage</div>'+
     '</div>'+
     '<div class="ft">Thank you for patronizing <b>Great Chid Electro (Nig.)</b> &nbsp;|&nbsp; Come again!</div>'+
+    '<div style="display:flex;justify-content:space-between;margin-top:14px;padding:0 4px">'+
+      '<div style="width:44%;text-align:center">'+
+        '<div style="border-top:1.5px solid #333;padding-top:4px;font-size:9px;font-weight:700;letter-spacing:.3px">Customer Signature</div>'+
+      '</div>'+
+      '<div style="width:44%;text-align:center">'+
+        '<div style="border-top:1.5px solid #333;padding-top:4px;font-size:9px;font-weight:700;letter-spacing:.3px">Authorized Signature</div>'+
+      '</div>'+
+    '</div>'+
     '<div style="display:flex;align-items:flex-end;gap:10px;margin-top:8px">'+
       '<div style="flex:1;border:2px '+(inv.pendingSupply?'dashed #d97706':'solid #16a34a')+';border-radius:5px;padding:7px 10px;background:'+(inv.pendingSupply?'#fffbeb':'#f0fdf4')+';text-align:center">'+
         '<div style="font-size:11px;font-weight:900;color:'+(inv.pendingSupply?'#b45309':'#15803d')+';letter-spacing:.5px">'+
@@ -8497,6 +8505,11 @@ function addInvoiceItem(){
   renderInvoiceItems();
 }
 
+function setItemSupplyChoice(lineId, choice){
+  var item = invoiceItems.find(function(l){ return l.lineId === lineId; });
+  if(item) { item.supplyChoice = choice; renderInvoiceItems(); }
+}
+
 function removeInvoiceItem(lineId){
   invoiceItems=invoiceItems.filter(function(l){return l.lineId!==lineId;});
   renderInvoiceItems();
@@ -8512,12 +8525,25 @@ function renderInvoiceItems(){
     var subtotal=l.price*l.qty;
     var invItem=DB.inventory.find(function(inv){return inv.id==l.itemId;});
     var stockQty=invItem?invItem.qty:0;
-    var willSupply=Math.min(l.qty,Math.max(0,stockQty));
-    var willPend=l.qty-willSupply;
-    var supplyCell=willPend>0
-      ?'<span style="color:#16a34a;font-weight:700">'+willSupply+'</span>'
-      +'<br><span style="font-size:10px;color:#dc2626">⏳ '+willPend+' pending</span>'
-      :'<span style="color:#16a34a;font-weight:700">'+willSupply+'</span><br><span style="font-size:10px;color:#16a34a">✅ Full</span>';
+    var availQty=Math.min(l.qty,Math.max(0,stockQty));
+    var shortQty=l.qty-availQty;
+    var isShort=shortQty>0;
+    // Per-item supply choice — stored on invoiceItems array
+    if(isShort&&l.supplyChoice===undefined) l.supplyChoice='now'; // default: supply available now
+    var supplyCell;
+    if(!isShort){
+      supplyCell='<span style="color:#16a34a;font-weight:700">'+availQty+'</span><br><span style="font-size:10px;color:#16a34a">✅ Full</span>';
+    } else {
+      // Short — show toggle: supply now vs hold
+      var choiceNow=l.supplyChoice!=='hold';
+      supplyCell='<div style="font-size:11px;line-height:1.4">'+
+        '<div style="color:#16a34a;font-weight:700">Stock: '+availQty+' / '+l.qty+'</div>'+
+        '<div style="display:flex;gap:4px;margin-top:3px">'+
+          '<button onclick="setItemSupplyChoice('+l.lineId+',\'now\')" style="padding:2px 6px;font-size:10px;border-radius:4px;border:1px solid;cursor:pointer;background:'+( choiceNow?'#16a34a':'#f1f5f9')+';color:'+( choiceNow?'#fff':'#64748b')+'">✅ Supply '+availQty+'</button>'+
+          '<button onclick="setItemSupplyChoice('+l.lineId+',\'hold\')" style="padding:2px 6px;font-size:10px;border-radius:4px;border:1px solid;cursor:pointer;background:'+(! choiceNow?'#d97706':'#f1f5f9')+';color:'+(! choiceNow?'#fff':'#64748b')+'">⏳ Hold all</button>'+
+        '</div>'+
+      '</div>';
+    }
     return '<tr>'+
       '<td>'+(i+1)+'</td>'+
       '<td><b>'+esc(l.name)+'</b></td>'+
@@ -8534,7 +8560,7 @@ function renderInvoiceItems(){
       '<th style="width:32px">#</th>'+
       '<th>Item</th>'+
       '<th style="text-align:center;width:60px">Ordered</th>'+
-      '<th style="text-align:center;width:80px">Supply / Pending</th>'+
+      '<th style="text-align:center;width:100px">Supply</th>'+
       '<th style="text-align:right;width:100px">Unit price</th>'+
       '<th style="text-align:right;width:110px">Subtotal</th>'+
       '<th style="text-align:right;width:90px">Profit</th>'+
@@ -8784,7 +8810,7 @@ function confirmDepositTopup(){
 }
 
 
-async function submitInvoice(){
+function submitInvoice(){
   if(!invoiceItems.length){alert('Add at least one item to the invoice.');return;}
   // Capture depTopup choice (set by confirmDepositTopup) then immediately clear global
   var _localDepTopup=window._depTopup||null;
@@ -8968,54 +8994,21 @@ async function submitInvoice(){
   var invoiceId=uid();
   var grandTotal=finalGrandTotal,grandProfit=0;
 
-  // ── Partial supply check ──
-  // For each item, check how many can be supplied now vs pending
+  // ── Partial supply check — uses per-item supplyChoice set in invoice table ──
   var partialItems=[]; // {lineId, name, itemId, ordered, supplied, pending, price, cost}
-  var hasPartial=false;
   if(!pendingSupply){
     invoiceItems.forEach(function(l){
       var invItem=DB.inventory.find(function(i){return i.id==l.itemId;});
       if(!invItem&&l.name)invItem=DB.inventory.find(function(i){return i.name===l.name;});
       var available=invItem?Math.max(0,invItem.qty):0;
-      var supplied=Math.min(l.qty,available);
+      var isShort=l.qty>available;
+      var holdAll=isShort&&l.supplyChoice==='hold';
+      var supplied=holdAll?0:Math.min(l.qty,available);
       var pending=l.qty-supplied;
       partialItems.push({lineId:l.lineId,name:l.name,itemId:l.itemId,ordered:l.qty,supplied:supplied,pending:pending,price:l.price,cost:l.cost});
-      if(pending>0)hasPartial=true;
     });
   } else {
     invoiceItems.forEach(function(l){partialItems.push({lineId:l.lineId,name:l.name,itemId:l.itemId,ordered:l.qty,supplied:0,pending:l.qty,price:l.price,cost:l.cost});});
-  }
-
-  // If partial, ask user with 3 options
-  if(hasPartial&&!pendingSupply){
-    var _supplyChoice = await new Promise(function(resolve){
-      var msg='<b>⚠️ Insufficient stock for some items:</b><br><br>';
-      partialItems.forEach(function(p){
-        if(p.pending>0) msg+='<b>'+p.name+'</b>: ordered '+p.ordered+', available <span style="color:#27ae60">'+p.supplied+'</span>, short <span style="color:#e74c3c">'+p.pending+'</span><br>';
-      });
-      msg+='<br>How would you like to proceed?';
-      // Build modal
-      var overlay=document.createElement('div');
-      overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center';
-      overlay.innerHTML='<div style="background:var(--card-bg,#fff);border-radius:14px;padding:28px 24px;max-width:460px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18)">'
-        +'<div style="font-size:15px;margin-bottom:20px;line-height:1.6">'+msg+'</div>'
-        +'<div style="display:flex;flex-direction:column;gap:10px">'
-        +'<button id="_ps_partial" style="padding:11px 16px;border-radius:8px;border:none;background:#27ae60;color:#fff;font-size:14px;cursor:pointer;text-align:left">✅ <b>Supply available qty now</b> — supply '+partialItems.filter(function(p){return p.supplied>0;}).map(function(p){return p.name+' ('+p.supplied+')';}).join(', ')+', mark rest as pending</button>'
-        +'<button id="_ps_none" style="padding:11px 16px;border-radius:8px;border:none;background:#e67e22;color:#fff;font-size:14px;cursor:pointer;text-align:left">⏳ <b>Supply nothing yet</b> — save invoice but hold all goods until full stock is available</button>'
-        +'<button id="_ps_cancel" style="padding:11px 16px;border-radius:8px;border:none;background:#eee;color:#333;font-size:14px;cursor:pointer">✗ Cancel — go back and adjust</button>'
-        +'</div></div>';
-      document.body.appendChild(overlay);
-      overlay.querySelector('#_ps_partial').onclick=function(){document.body.removeChild(overlay);resolve('partial');};
-      overlay.querySelector('#_ps_none').onclick=function(){document.body.removeChild(overlay);resolve('none');};
-      overlay.querySelector('#_ps_cancel').onclick=function(){document.body.removeChild(overlay);resolve('cancel');};
-    });
-    if(_supplyChoice==='cancel')return;
-    if(_supplyChoice==='none'){
-      // User chose to supply nothing — treat entire invoice as pending supply
-      pendingSupply=true;
-      partialItems.forEach(function(p){p.supplied=0;p.pending=p.ordered;});
-    }
-    // 'partial' — proceed with original partialItems (supply available, mark rest pending)
   }
 
   // Distribute discount proportionally across items
