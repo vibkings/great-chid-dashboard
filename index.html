@@ -1785,6 +1785,48 @@ function getArchiveCutoffDate() {
   return d;
 }
 
+function rebuildCategoriesFromInventory(){
+  if(!DB.inventory||!DB.inventory.length){
+    showToast('No inventory items found.','error');
+    return;
+  }
+  if(!DB.categories) DB.categories=[];
+
+  // Collect all unique category names from inventory and warehouse
+  var catSet={};
+  DB.categories.forEach(function(c){ if(c&&c.trim()) catSet[c.trim().toLowerCase()]=c.trim(); });
+
+  var added=[];
+  var allItems=(DB.inventory||[]).concat(DB.warehouse||[]);
+  allItems.forEach(function(item){
+    var cat=(item.cat||'').trim();
+    if(!cat) return;
+    var key=cat.toLowerCase();
+    if(!catSet[key]){
+      catSet[key]=cat;
+      DB.categories.push(cat);
+      added.push(cat);
+    }
+  });
+
+  if(added.length===0){
+    showToast('All categories already present — nothing to add.','info');
+    return;
+  }
+
+  // Sort categories alphabetically
+  DB.categories.sort(function(a,b){return a.toLowerCase().localeCompare(b.toLowerCase());});
+
+  saveData();
+  fbSetCollection('categories', DB.categories, function(){
+    showToast('✅ Rebuilt! Added '+added.length+' missing categories. Total: '+DB.categories.length,'success');
+    renderPanel();
+  }, function(){
+    showToast('✅ Rebuilt locally! Added '+added.length+' categories. Syncing...','success');
+    renderPanel();
+  });
+}
+
 function manualArchiveSales(){
   var n = archiveOldSales(true);
   if(n > 0){
@@ -3594,6 +3636,10 @@ function buildSettings(){
     '<div class="tbl-wrap"><table><thead><tr><th>Terminal name</th><th>Terminal ID</th><th></th></tr></thead><tbody>'+posRows+'</tbody></table></div>'+
     (isAdmin()?'<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title" style="color:var(--danger)">⚠ Danger zone</p><p style="font-size:13px;color:#666;margin-bottom:1rem">Permanently delete all business data. This cannot be undone. Export a backup first.</p><button class="btn danger" style="font-size:13px;padding:8px 14px" onclick="clearAllData()">🗑 Clear all data</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0"><p class="sec-title">🔧 Data Fixes</p>'+
+    '<p style="font-size:13px;color:#666;margin-bottom:6px">Rebuild missing categories from inventory items. Scans all inventory and adds any category not already in the list.</p>'+
+    '<p style="font-size:12px;color:var(--text3);margin-bottom:10px">Current: <b>'+((DB.categories||[]).length)+' categories</b></p>'+
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#16a34a;color:#fff;border-color:#16a34a" onclick="rebuildCategoriesFromInventory()">🔄 Rebuild Categories from Inventory</button>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
     '<p style="font-size:13px;color:#666;margin-bottom:6px">Move sales records older than 30 days to archive. They remain visible in sales history but are stored separately to keep Firestore under its 1MB limit.</p>'+
     '<p style="font-size:12px;color:var(--text3);margin-bottom:10px">Current: <b>'+((DB.sales||[]).length)+' active sales</b> · <b>'+((DB.salesArchive||[]).length)+' archived</b></p>'+
     '<button class="btn" style="font-size:13px;padding:8px 14px;background:#0d6efd;color:#fff;border-color:#0d6efd" onclick="manualArchiveSales()">📦 Archive Sales Older Than 30 Days</button>'+
