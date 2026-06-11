@@ -7882,7 +7882,7 @@ function buildInvoiceHTML(inv){
             '</div>'+
             '<div style="padding:4px 8px;background:'+(partBalance>0?'#fff0f0':'#f0fdf4')+'">' +
               '<div class="pay-label" style="color:'+(partBalance>0?'#c0392b':'#15803d')+'">'+(partBalance>0?'Balance due (customer owes)':'Overpaid (store credit)')+'</div>'+
-              '<div class="pay-val" style="color:'+(partBalance>0?'#c0392b':'#15803d')+';font-size:12px">'+(partBalance>0?fmt(partBalance):fmt(partOverpay))+'</div>'+
+              '<div class="pay-val" style="color:'+(partBalance>0?'#c0392b':'#15803d')+';font-size:12px">'+(partBalance>0?fmt((inv.outstandingBal||0)>partBalance?(inv.outstandingBal||0):partBalance):fmt(partOverpay))+'</div>'+
             '</div>'+
           '</div>'+
           // If overpayment was applied to outstanding balance, show new outstanding
