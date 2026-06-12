@@ -467,10 +467,10 @@ body.theme-bento .btn.danger{background:#fff;color:#dc2626;border:1px solid #fec
 body.theme-bento .btn.danger:hover{background:#fef2f2}
 body.theme-bento .btn.info{background:#fff;color:#2563EB;border:1px solid #BFDBFE;box-shadow:none}
 body.theme-bento .btn.info:hover{background:#eef2ff}
-body.theme-bento .card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+body.theme-bento .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
 body.theme-bento .card:hover{box-shadow:var(--shadow-md)}
-body.theme-bento .section-box{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-body.theme-bento .profit-box{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+body.theme-bento .section-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+body.theme-bento .profit-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
 body.theme-bento .mc{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.07)}
 body.theme-bento .mc:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
 body.theme-bento .mc::before{background:#2563EB}
@@ -501,7 +501,7 @@ body.theme-bento .auth-input:focus{border-color:#2563EB;box-shadow:0 0 0 3px rgb
 body.theme-bento .auth-btn{background:linear-gradient(135deg,#2563EB,#1D4ED8);box-shadow:0 4px 12px rgba(37,99,235,.3)}
 body.theme-bento .auth-btn:hover{background:linear-gradient(135deg,#1D4ED8,#1E40AF)}
 body.theme-bento .auth-hint{background:#f8fafc;box-shadow:none;border:1px solid #e2e8f0}
-body.theme-bento.dark-mode{--bg:#0f1117;--surface:#1e2130;--surface2:#252837;--surface3:#2a2d3a;--border:#2a2d3a;--border2:#333649;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--primary:#818cf8;--primary-dark:#6366F1;--primary-bg:rgba(99,102,241,.15)}
+body.theme-bento.dark-mode{--bg:#0f1117;--surface:#1e2130;--surface2:#252837;--surface3:#2a2d3a;--border:#2a2d3a;--border2:#333649;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--primary:#3b82f6;--primary-dark:#2563EB;--primary-bg:rgba(37,99,235,.15);--white:#1e2130;--card-bg:#1e2130;--success:#22c55e;--warning:#fbbf24;--danger:#f87171;--info:#38bdf8}
 body.theme-bento.dark-mode .sidebar{background:#1e2130;border-color:#2a2d3a}
 body.theme-bento.dark-mode .topbar{background:#1e2130;border-color:#2a2d3a;color:var(--text)}
 body.theme-bento.dark-mode .topbar *{color:var(--text)}
@@ -560,6 +560,7 @@ body.theme-bento.dark-mode [style*="background:#e0f2fe"]{background:#0f1e2a !imp
 
 /* White card backgrounds in inline styles */
 body.theme-bento.dark-mode [style*="background:#fff;"]{background:#1e2130 !important}
+body.theme-bento.dark-mode .alert{background:#1e2130 !important;border-color:#2a2d3a !important}
 body.theme-bento.dark-mode [style*="background:#fff""]{background:#1e2130 !important}
 body.theme-bento.dark-mode [style*="background:white"]{background:#1e2130 !important}
 body.theme-bento.dark-mode [style*="background:#ffffff"]{background:#1e2130 !important}
@@ -582,6 +583,12 @@ body.theme-bento.dark-mode [style*="border:1px solid #d1d5db"]{border-color:#2a2
 
 /* Pending row highlights */
 body.theme-bento.dark-mode tr[style*="background:#fffbeb"] td{background:#2a2010 !important}
+body.theme-bento.dark-mode tr[style*="background:#fffbeb"]{background:#2a2010 !important}
+body.theme-bento.dark-mode tr[style*="background:#f0fdf4"]{background:#0f2a1a !important}
+body.theme-bento.dark-mode tr[style*="background:#fff8f0"]{background:#2a1a0a !important}
+body.theme-bento.dark-mode [style*="border:2px solid #f59e0b"]{border-color:#a06800 !important}
+body.theme-bento.dark-mode [style*="border:1px solid #fde68a"]{border-color:#4a3800 !important}
+body.theme-bento.dark-mode [style*="border:2px solid #fde68a"]{border-color:#4a3800 !important}
 
 /* Buttons with white background */
 body.theme-bento.dark-mode button[style*="background:#fff"],
