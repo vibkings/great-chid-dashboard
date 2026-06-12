@@ -9145,7 +9145,7 @@ function submitInvoice(){
       _updatedAt:Date.now()
     };
     // Only add optional fields if they have meaningful values (reduces index count)
-    if(discAmt&&Math.round(itemDisc*100)/100>0)_saleRow.discAmt=Math.round(itemDisc*100)/100;
+    if(invoiceDiscAmt&&Math.round(itemDisc*100)/100>0)_saleRow.discAmt=Math.round(itemDisc*100)/100;
     if(bankId)_saleRow.bankId=bankId;
     if(posId)_saleRow.posId=posId;
     if(dueDate)_saleRow.dueDate=dueDate;
