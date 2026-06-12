@@ -1682,6 +1682,8 @@ function applySnapshot(snapshot) {
   DB.deposits = snapshot.deposits || [];
   DB.commissionLedger = snapshot.commissionLedger || [];
   DB.proformas = snapshot.proformas || [];
+  DB.borrows = snapshot.borrows || DB.borrows || [];
+  if(snapshot.invoiceSignatures) DB.invoiceSignatures = Object.assign(DB.invoiceSignatures||{}, snapshot.invoiceSignatures);
   DB.suppliers = snapshot.suppliers || [];
   DB.customers = snapshot.customers || [];
   DB.creditCustomers = snapshot.creditCustomers || [];
@@ -2050,6 +2052,8 @@ function buildSnapshot() {
     demoInvoiceCounter: DB.demoInvoiceCounter || 1,
     commissionLedger: DB.commissionLedger || [],
     proformas: DB.proformas || [],
+    borrows: DB.borrows || [],
+    invoiceSignatures: DB.invoiceSignatures || {},
     _savedAt: now,
   };
 }
