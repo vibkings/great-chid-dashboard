@@ -113,9 +113,9 @@ body.dark-mode{
   --accent-glow:rgba(139,111,71,.2);
   --amber-bg:#2d1f00;
 }
-body.dark-mode .topbar{background:var(--surface);border-color:var(--border);box-shadow:0 5px 16px rgba(0,0,0,.4);}
-body.dark-mode .card{background:var(--surface);border-color:var(--border);}
-body.dark-mode input,body.dark-mode select,body.dark-mode textarea{background:var(--surface2);color:var(--text);border-color:var(--border);}
+body.dark-mode:not(.theme-darkpro) .topbar{background:var(--surface);border-color:var(--border);box-shadow:0 5px 16px rgba(0,0,0,.4);}
+body.dark-mode:not(.theme-darkpro) .card{background:var(--surface);border-color:var(--border);}
+body.dark-mode:not(.theme-darkpro) input,body.dark-mode:not(.theme-darkpro) select,body.dark-mode:not(.theme-darkpro) textarea{background:var(--surface2);color:var(--text);border-color:var(--border);}
 body.dark-mode table thead tr{background:var(--surface3);}
 body.dark-mode .tbl-wrap table tr:nth-child(even) td{background:var(--surface2);}
 body.dark-mode tr:hover td{background:rgba(99,102,241,0.18)!important;color:var(--text)!important}
@@ -4372,23 +4372,45 @@ function switchTheme(){
   document.body.classList.remove('theme-neuro','theme-bento','theme-darkpro');
   document.body.classList.add('theme-'+next);
   localStorage.setItem('gce_theme',next);
+  // Dark Pro is always dark — remove dark-mode class (conflicts with its own styling)
+  // When leaving Dark Pro, restore dark-mode if it was previously set
+  if(next==='darkpro'){
+    document.body.classList.remove('dark-mode');
+  } else if(localStorage.getItem('darkMode')==='1'){
+    document.body.classList.add('dark-mode');
+  }
   var btn=document.getElementById('theme-switch-btn');
   if(btn){
     var nextNext=THEMES[(THEMES.indexOf(next)+1)%THEMES.length];
     btn.title='Switch to '+THEME_LABELS[nextNext];
     btn.textContent=THEME_ICONS[next];
   }
+  // Hide dark mode toggle when on Dark Pro (not needed)
+  var dmBtn=document.getElementById('dark-mode-btn');
+  if(dmBtn)dmBtn.style.display=next==='darkpro'?'none':'';
   showToast('Theme: '+THEME_LABELS[next],'info',2000);
 }
 function initTheme(){
   var t=getCurrentTheme();
   document.body.classList.remove('theme-neuro','theme-bento','theme-darkpro');
   document.body.classList.add('theme-'+t);
+  // Dark Pro is always dark — don't apply dark-mode class on top of it
+  if(t==='darkpro'){
+    document.body.classList.remove('dark-mode');
+  }
 }
 function applyDarkMode(){
   initTheme();
   gDriveHandleRedirect(); // Handle Google auth redirect if returning from OAuth
-  if(localStorage.getItem('darkMode')==='1'){
+  var t=getCurrentTheme();
+  if(t==='darkpro'){
+    document.body.classList.remove('dark-mode');
+    // Hide dark mode btn after render
+    setTimeout(function(){
+      var dmBtn=document.getElementById('dark-mode-btn');
+      if(dmBtn)dmBtn.style.display='none';
+    },100);
+  } else if(localStorage.getItem('darkMode')==='1'){
     document.body.classList.add('dark-mode');
   }
 }
