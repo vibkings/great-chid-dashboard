@@ -9098,6 +9098,14 @@ function submitInvoice(){
     invoiceItems.forEach(function(l){partialItems.push({lineId:l.lineId,name:l.name,itemId:l.itemId,ordered:l.qty,supplied:0,pending:l.qty,price:l.price,cost:l.cost});});
   }
 
+  // Read change/tendered values BEFORE the forEach loop (needed inside loop)
+  var changeAmtEl=document.getElementById('s-change-amt');
+  var tenderedEl=document.getElementById('s-change-tendered');
+  var changeDispEl=document.getElementById('s-change-disp-val');
+  var changeGiven=changeAmtEl?parseFloat(changeAmtEl.value)||0:0;
+  var amtTendered=tenderedEl?parseFloat(tenderedEl.value)||0:0;
+  var changeDisposition=changeDispEl?changeDispEl.value:'cash';
+
   // Distribute discount proportionally across items
   invoiceItems.forEach(function(l){
     var pi=partialItems.find(function(p){return p.lineId===l.lineId;})||{supplied:pendingSupply?0:l.qty,pending:pendingSupply?l.qty:0,ordered:l.qty};
@@ -9157,13 +9165,6 @@ function submitInvoice(){
   // Check if staff entered an "amount received" (for cash/transfer/pos with outstanding balance)
   var amtReceivedEl=document.getElementById('s-amt-received');
   var amtReceived=amtReceivedEl?parseFloat(amtReceivedEl.value)||0:0;
-  // Check change given back (auto-calculated from tendered amount)
-  var changeAmtEl=document.getElementById('s-change-amt');
-  var tenderedEl=document.getElementById('s-change-tendered');
-  var changeDispEl=document.getElementById('s-change-disp-val');
-  var changeGiven=changeAmtEl?parseFloat(changeAmtEl.value)||0:0;
-  var amtTendered=tenderedEl?parseFloat(tenderedEl.value)||0:0;
-  var changeDisposition=changeDispEl?changeDispEl.value:'cash'; // 'cash' or 'credit'
   // If tendered, actual received = tendered amount
   if(amtTendered>0&&payment!=='part'&&payment!=='credit'&&payment!=='deposit'&&payment!=='split'){
     cashReceived=amtTendered;
