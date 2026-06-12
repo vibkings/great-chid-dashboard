@@ -7986,7 +7986,7 @@ function buildInvoiceHTML(inv){
     '<div style="color:#c0392b;font-style:italic;margin-top:2px">...thanks for your patronage</div>'+
     '</div>'+
     '<div class="ft">Thank you for patronizing <b>Great Chid Electro (Nig.)</b> &nbsp;|&nbsp; Come again!</div>'+
-        (function(){ var _custSig=(DB.invoiceSignatures&&DB.invoiceSignatures[inv.invoiceNum])||null; return '<div style="display:flex;justify-content:space-between;margin-top:14px;padding:0 4px">'  +'<div style="width:44%;text-align:center">'  +(_custSig    ? '<img src="'+_custSig+'" style="max-height:48px;max-width:100%;display:block;margin:0 auto 2px">'    : '<div style="height:48px"></div>')  +'<div style="border-top:1.5px solid #333;padding-top:4px;font-size:9px;font-weight:700;letter-spacing:.3px">Customer Signature</div>'  +'</div>'  +'<div style="width:44%;text-align:center">'  +'<div style="height:48px"></div>'  +'<div style="border-top:1.5px solid #333;padding-top:4px;font-size:9px;font-weight:700;letter-spacing:.3px">Authorized Signature</div>'  +'</div>'  +'</div>'; })()+
+        (function(){ var _custSig=(DB.invoiceSignatures&&DB.invoiceSignatures[inv.invoiceNum])||null; var _seller=inv.seller||(DB.currentUser?DB.currentUser.name:null); var _sellerUser=_seller?DB.users.find(function(u){return u.name===_seller;}):null; var _authSig=(_sellerUser&&_sellerUser.signature)||null; if(!_authSig&&(_seller==='Admin'||(_sellerUser&&(_sellerUser.role==='admin'||_sellerUser.isAdmin)))){_authSig=ADMIN_AUTH_SIGNATURE;} return '<div style="display:flex;justify-content:space-between;margin-top:14px;padding:0 4px">'+'<div style="width:44%;text-align:center">'+(_custSig?'<img src="'+_custSig+'" style="max-height:48px;max-width:100%;display:block;margin:0 auto 2px">':'<div style="height:48px"></div>')+'<div style="border-top:1.5px solid #333;padding-top:4px;font-size:9px;font-weight:700;letter-spacing:.3px">Customer Signature</div>'+'</div>'+'<div style="width:44%;text-align:center">'+(_authSig?'<img src="'+_authSig+'" style="max-height:48px;max-width:100%;display:block;margin:0 auto 2px">':'<div style="height:48px"></div>')+'<div style="border-top:1.5px solid #333;padding-top:4px;font-size:9px;font-weight:700;letter-spacing:.3px">Authorized Signature</div>'+'</div>'+'</div>'; })()+
 
     '<div style="display:flex;align-items:flex-end;gap:10px;margin-top:8px">'+
       '<div style="flex:1;border:2px '+(inv.pendingSupply?'dashed #d97706':'solid #16a34a')+';border-radius:5px;padding:7px 10px;background:'+(inv.pendingSupply?'#fffbeb':'#f0fdf4')+';text-align:center">'+
@@ -9377,6 +9377,9 @@ function submitInvoice(){
 }
 
 // ══ DIGITAL SIGNATURE SYSTEM ══════════════════════════════════════════════
+// ── Admin authorized signature (embedded) ──────────────────────────────────
+var ADMIN_AUTH_SIGNATURE = 'data:image/png;base64,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';
+
 var _sigPad = null;
 var _sigInvNum = null;
 var _sigOnDone = null;
@@ -16855,12 +16858,39 @@ function buildUsers(){
         '<div style="font-size:12px;color:var(--text3);font-style:italic">Administrators have full access to all features.</div>')+
     '</div>';
   }).join('');
+  var _uSigHtml=u.signature
+    ?'<div style="margin-bottom:10px"><img src="'+u.signature+'" style="max-height:60px;border:1px solid var(--border);border-radius:6px;padding:4px;background:#fff"><br><button onclick="removeMySignature()" style="font-size:11px;color:#e74c3c;background:none;border:none;cursor:pointer;text-decoration:underline;margin-top:4px">Remove signature</button></div>'
+    :'<div style="font-size:11px;color:var(--text3);margin-bottom:8px">No signature set. Draw below or upload an image.</div>';
+  var _adminSigNote=u.role==='admin'?'<div style="font-size:11px;color:#6366F1;margin-bottom:8px">Admin signature is pre-loaded. Drawing below will override it on your invoices.</div>':'';
   var profileSection='<div class="card"><p style="font-size:14px;font-weight:700;margin-bottom:1rem">&#128100; My profile</p>'+
     '<div class="fg c2"><div class="form-group"><label>Full name</label><input type="text" id="up-name" value="'+esc(u.name)+'"></div>'+
     '<div class="form-group"><label>Username</label><input type="text" id="up-user" value="'+u.username+'"></div></div>'+
     '<div class="fg c2"><div class="form-group"><label>New password <span style="font-size:10px;color:var(--text3)">(leave blank to keep)</span></label><input type="password" id="up-pass" placeholder="New password"></div>'+
     '<div class="form-group"><label>Confirm password</label><input type="password" id="up-pass2" placeholder="Confirm new password"></div></div>'+
-    '<button class="btn primary" onclick="saveProfile()">&#10003; Save changes</button></div>';
+    '<button class="btn primary" onclick="saveProfile()">&#10003; Save changes</button>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:1.2rem 0">'+
+    '<p style="font-size:13px;font-weight:700;margin-bottom:8px">&#9998; My Authorized Signature</p>'+
+    '<p style="font-size:11px;color:var(--text3);margin-bottom:10px">This signature appears on invoices you create.</p>'+
+    _adminSigNote+
+    _uSigHtml+
+    '<div style="border:2px solid #6366F1;border-radius:10px;overflow:hidden;background:#f8fafc;touch-action:none;margin-bottom:10px">'+
+      '<canvas id="_usig_canvas" style="width:100%;display:block;touch-action:none;height:100px"></canvas>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<button onclick="clearUserSigPad()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);font-size:12px;cursor:pointer">Clear</button>'+
+      '<button onclick="saveUserSignature()" style="padding:8px 14px;border-radius:8px;border:none;background:#6366F1;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save Signature</button>'+
+      '<label style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);font-size:12px;cursor:pointer">&#128444; Upload Image<input type="file" accept="image/*" onchange="uploadUserSignature(this)" style="display:none"></label>'+
+    '</div>'+
+    '</div>';
+  setTimeout(function(){
+    var c=document.getElementById('_usig_canvas');
+    if(!c)return;
+    var w=c.offsetWidth||400;
+    c.width=w*window.devicePixelRatio;
+    c.height=100*window.devicePixelRatio;
+    c.getContext('2d').scale(window.devicePixelRatio,window.devicePixelRatio);
+    window._userSigPad=new SignaturePad(c,{minWidth:1.5,maxWidth:3,penColor:'#1a1a2e',backgroundColor:'rgba(248,250,252,0)'});
+  },120);
   var addUserSection=isAdmin()?'<div class="card"><p style="font-size:14px;font-weight:700;margin-bottom:1rem">&#10133; Add new user</p>'+
     '<div class="fg c2"><div class="form-group"><label>Full name</label><input type="text" id="nu-name" placeholder="e.g. John Doe"></div>'+
     '<div class="form-group"><label>Username</label><input type="text" id="nu-user" placeholder="e.g. john"></div></div>'+
@@ -16869,6 +16899,49 @@ function buildUsers(){
     '<button class="btn primary" onclick="addUser()">+ Add user</button></div>':'';
   return profileSection+addUserSection+'<p class="sec-title">All users ('+DB.users.length+')</p>'+userCards;
 }
+function clearUserSigPad() {
+  if(window._userSigPad) window._userSigPad.clear();
+}
+
+function saveUserSignature() {
+  if(!window._userSigPad || window._userSigPad.isEmpty()) {
+    showToast('Please draw your signature first.', 'error'); return;
+  }
+  var sig = window._userSigPad.toDataURL('image/png');
+  DB.currentUser.signature = sig;
+  var u = DB.users.find(function(u){ return u.id === DB.currentUser.id; });
+  if(u){ u.signature = sig; u._updatedAt = Date.now(); }
+  saveData();
+  showToast('✅ Signature saved! It will appear on your invoices.', 'success');
+  renderApp();
+}
+
+function uploadUserSignature(input) {
+  var file = input.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var sig = e.target.result;
+    DB.currentUser.signature = sig;
+    var u = DB.users.find(function(u){ return u.id === DB.currentUser.id; });
+    if(u){ u.signature = sig; u._updatedAt = Date.now(); }
+    saveData();
+    showToast('✅ Signature image uploaded!', 'success');
+    renderApp();
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeMySignature() {
+  if(!confirm('Remove your signature?')) return;
+  DB.currentUser.signature = null;
+  var u = DB.users.find(function(u){ return u.id === DB.currentUser.id; });
+  if(u){ delete u.signature; u._updatedAt = Date.now(); }
+  saveData();
+  showToast('Signature removed.', 'info');
+  renderApp();
+}
+
 function saveProfile(){
   var u=DB.currentUser;
   var name=document.getElementById('up-name').value.trim(),uname=document.getElementById('up-user').value.trim(),pass=document.getElementById('up-pass').value,pass2=document.getElementById('up-pass2').value;
