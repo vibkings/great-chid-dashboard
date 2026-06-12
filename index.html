@@ -15280,6 +15280,11 @@ function buildSupplierProfile(){
   var totalPaid=payments.reduce(function(a,p){return a+p.amount;},0);
   var purchases=(DB.purchases||[]).filter(function(p){return String(p.supId)===String(sup.id);});
   var lastPurchDate=purchases.length?purchases.slice().sort(function(a,b){return (b.id||0)-(a.id||0);})[0].date:'—';
+  // Always calculate totalPurchased live from DB.purchases (never trust stale sup.totalPurchased)
+  var liveTotalPurchased=purchases.reduce(function(a,p){return a+(p.grandTotal||0);},0);
+  // Also recalculate owedToSupplier live = totalPurchased - totalPaid - depositsApplied - cashPaid
+  var liveCashPaid=purchases.reduce(function(a,p){return a+(p.cashPaid||p.amountPaid||0);},0);
+  var liveOwed=Math.max(0,liveTotalPurchased-liveCashPaid-totalPaid);
 
   // Initials avatar
   var initials=sup.name.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase();
@@ -15366,15 +15371,15 @@ function buildSupplierProfile(){
 
     // KPI cards — matching customer profile layout
     '<div class="metrics" style="margin-bottom:1rem">'+
-      mc('Total purchased',fmt(sup.totalPurchased||0),'Lifetime','')+
-      mc('Total paid',fmt(totalPaid),'Payments made','green')+
-      mc('Amount owed',fmt(sup.owedToSupplier||0),'Still to pay',sup.owedToSupplier>0?'red':'')+
+      mc('Total purchased',fmt(liveTotalPurchased),'Lifetime','')+
+      mc('Total paid',fmt(totalPaid+liveCashPaid),'Payments made','green')+
+      mc('Amount owed',fmt(liveOwed),'Still to pay',liveOwed>0?'red':'')+
       mc('Deposit balance',fmt(depBal),'Available',depBal>0?'green':'')+
     '</div>'+
     '<div class="metrics" style="grid-template-columns:repeat(3,1fr);margin-bottom:1.5rem">'+
       mc('Total deposited',fmt(totalDeposited),'All time deposits','')+
       mc('Orders',purchases.length+'','Purchase invoices','')+
-      mc('Net payable',fmt(Math.max(0,(sup.owedToSupplier||0)-depBal)),'After deposit offset',sup.owedToSupplier>depBal?'red':'')+
+      mc('Net payable',fmt(Math.max(0,liveOwed-depBal)),'After deposit offset',liveOwed>depBal?'red':'')+
     '</div>'+
 
     // Deposit ledger
