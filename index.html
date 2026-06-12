@@ -520,6 +520,19 @@ body.theme-bento.dark-mode tr.inv-group-row td b{color:#fbbf24 !important}
 body.theme-bento.dark-mode .pd-inv-card{background:var(--surface) !important;border-color:rgba(245,158,11,0.3) !important}
 body.theme-bento.dark-mode .pd-inv-header{background:rgba(210,153,34,0.1) !important}
 body.theme-bento.dark-mode .pd-inv-num{color:#fbbf24 !important}
+
+/* Till / Cash in Hand cells */
+.till-cell{border-radius:8px;padding:10px;text-align:center}
+.till-label{font-size:11px;color:var(--text3);margin-bottom:4px}
+.till-value{font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word}
+.till-green{background:var(--success-bg);border:1px solid #86efac}
+.till-blue{background:var(--primary-bg);border:1px solid #93c5fd}
+.till-amber{background:var(--warning-bg);border:1px dashed #fcd34d}
+.till-amber-text{color:#92400e}
+body.theme-bento.dark-mode .till-green{background:rgba(63,185,80,0.1) !important;border-color:rgba(63,185,80,0.25) !important}
+body.theme-bento.dark-mode .till-blue{background:rgba(37,99,235,0.1) !important;border-color:rgba(37,99,235,0.25) !important}
+body.theme-bento.dark-mode .till-amber{background:rgba(210,153,34,0.1) !important;border-color:rgba(210,153,34,0.3) !important}
+body.theme-bento.dark-mode .till-amber-text{color:#fbbf24 !important}
 body.theme-bento .auth-screen{background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f0f9ff 100%)}
 body.theme-bento .auth-card{background:#fff;box-shadow:0 20px 40px rgba(0,0,0,.1);border:1px solid #e2e8f0;border-radius:20px}
 body.theme-bento .auth-logo{background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;box-shadow:0 4px 12px rgba(37,99,235,.3)}
@@ -3360,30 +3373,30 @@ function buildClosingReport(){
       return '<div class="card" style="margin-bottom:1rem;border-left:4px solid #15803d">'+
         '<div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:10px">💰 Till / Cash in Hand</div>'+
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:10px">'+
-          '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center">'+
-            '<div style="font-size:11px;color:#666;margin-bottom:4px">Opening float</div>'+
-            '<div style="font-size:clamp(13px,1.5vw,15px);font-weight:700;word-break:break-all;color:#15803d">'+(openFloat>0?fmt(openFloat):'Not set')+'</div>'+
+          '<div class="till-cell till-green">'+
+            '<div class="till-label">Opening float</div>'+
+            '<div class="till-value" style="color:#15803d">'+(openFloat>0?fmt(openFloat):'Not set')+'</div>'+
           '</div>'+
-          '<div style="background:var(--success-bg);border:1px solid #86efac;border-radius:8px;padding:10px;text-align:center">'+
-            '<div style="font-size:11px;color:#666;margin-bottom:4px">Cash sales today</div>'+
-            '<div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#15803d">'+fmt(cash)+'</div>'+
+          '<div class="till-cell till-green">'+
+            '<div class="till-label">Cash sales today</div>'+
+            '<div class="till-value" style="color:#15803d">'+fmt(cash)+'</div>'+
           '</div>'+
           '</div>'+
           (totalCashOut>0?'<div style="background:var(--danger-bg);border:1px solid #fca5a5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:11px;color:#666;margin-bottom:4px">Cash out (expenses'+(cashRetToday>0?' + returns':'')+(cashChangeToday>0?' + change':'')+')</div><div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#dc2626">-'+fmt(totalCashOut)+'</div>'+(cashRetToday>0||cashChangeToday>0?'<div style="font-size:9px;color:#dc2626;margin-top:2px">Exp: '+fmt(cashExpToday)+(cashRetToday>0?' · Returns: '+fmt(cashRetToday):'')+(cashChangeToday>0?' · Change: '+fmt(cashChangeToday):'')+'</div>':'')+'</div>':'')+
-          '<div style="background:var(--primary-bg);border:1px solid #93c5fd;border-radius:8px;padding:10px;text-align:center">'+
-            '<div style="font-size:11px;color:#666;margin-bottom:4px">Expected in till</div>'+
-            '<div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:#1d4ed8">'+fmt(expectedCash)+'</div>'+
-            '<div style="font-size:9px;color:#6b7280;margin-top:2px">'+(totalCashOut>0?'Float + Sales - Cash out':'Float + Cash sales')+'</div>'+
+          '<div class="till-cell till-blue">'+
+            '<div class="till-label">Expected in till</div>'+
+            '<div class="till-value" style="color:var(--primary)">'+fmt(expectedCash)+'</div>'+
+            '<div style="font-size:9px;color:var(--text3);margin-top:2px">'+(totalCashOut>0?'Float + Sales - Cash out':'Float + Cash sales')+'</div>'+
           '</div>'+
           (closingCount!==null?
             '<div style="background:'+(variance===0?'#f0fdf4':variance>0?'#eff6ff':'#fff5f5')+';border:1px solid '+(variance===0?'#86efac':variance>0?'#93c5fd':'#fca5a5')+';border-radius:8px;padding:10px;text-align:center">'+
-              '<div style="font-size:11px;color:#666;margin-bottom:4px">Actual count</div>'+
+              '<div class="till-label">Actual count</div>'+
               '<div style="font-size:clamp(12px,1.5vw,15px);font-weight:700;word-break:break-all;overflow-wrap:break-word;color:'+(variance===0?'#15803d':variance>0?'#1d4ed8':'#c0392b')+'">'+fmt(closingCount)+'</div>'+
               '<div style="font-size:10px;color:'+(variance===0?'#15803d':variance>0?'#1d4ed8':'#c0392b')+';margin-top:2px">'+(variance===0?'\u2713 Balanced':variance>0?'+'+fmt(variance)+' over':fmt(Math.abs(variance))+' short')+'</div>'+
               (isAdmin()?'<button onclick="recordClosingCount(true)" style="margin-top:8px;padding:4px 12px;background:none;border:1px solid #93c5fd;border-radius:6px;font-size:11px;color:#1d4ed8;cursor:pointer">&#9998; Edit count</button>':'')+
             '</div>':
-            '<div style="background:var(--warning-bg);border:1px dashed #fcd34d;border-radius:8px;padding:10px;text-align:center;cursor:pointer" onclick="recordClosingCount(false)">'+
-              '<div style="font-size:11px;color:#92400e;margin-bottom:4px">Closing cash count</div>'+
+            '<div class="till-cell till-amber" style="cursor:pointer" onclick="recordClosingCount(false)">'+
+              '<div class="till-label till-amber-text">Closing cash count</div>'+
               '<div style="font-size:13px;font-weight:600;color:#92400e">Click to count</div>'+
             '</div>')+
         '</div>'+
