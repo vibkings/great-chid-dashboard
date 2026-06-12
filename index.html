@@ -3706,6 +3706,9 @@ function buildSettings(){
     '<p style="font-size:12px;color:#666;margin-bottom:10px">If the invoice number is stuck or showing a duplicate error, click this to reset the counter to the correct next available number.</p>'+
     '<button class="btn" style="font-size:13px;padding:8px 14px;background:#0d6efd;color:#fff;border-color:#0d6efd;margin-top:4px" onclick="fixInvoiceCounter()">🔢 Fix Invoice Counter</button>'+
     '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
+    '<button class="btn" style="font-size:13px;padding:8px 14px;background:#0d6efd;color:#fff;border-color:#0d6efd;margin-bottom:8px" onclick="trimSalesRows()">🔧 Fix Firestore Sales Index Error</button>'+
+    '<p style="font-size:11px;color:#666;margin-bottom:12px">Run this once to strip empty/null fields from all sales rows. Fixes the "too many index entries" Firestore sync error.</p>'+
+    '<hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">'+
     '<p style="font-size:13px;color:#666;margin-bottom:4px"><b>Delete Cashflow Entry by Amount</b></p>'+
     '<p style="font-size:12px;color:#666;margin-bottom:10px">Remove a specific cashflow entry from the Till and Daily Closing by entering its exact amount. Use this to delete erroneous entries. All matching entries with that exact amount will be shown before deletion.</p>'+
     '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">'+
@@ -3762,6 +3765,32 @@ function fixPurchaseSwap(invoiceNum, correctCashPaid) {
   saveData();
   renderApp();
   showToast('✅ Purchase #'+invoiceNum+' corrected. Cash: '+fmt(newCash)+', Credit: '+fmt(newCredit), 'success');
+}
+
+// Trim bloated sales rows — removes null/empty optional fields to fix Firestore index limit
+function trimSalesRows() {
+  if(!isAdmin()){showToast('Admin only.','error');return;}
+  var REQUIRED = ['id','invoiceId','invoiceNum','name','qty','itemId','salePrice','cost','total','profit','payment','payMode','custId','custName','date','month','seller','depositApplied','pendingSupply','suppliedQty','pendingQty','supplyStatus','supplyDate','_updatedAt'];
+  var trimmed = 0;
+  DB.sales.forEach(function(s){
+    var before = Object.keys(s).length;
+    Object.keys(s).forEach(function(k){
+      if(REQUIRED.indexOf(k)===-1){
+        var v = s[k];
+        // Remove if null, undefined, empty string, or zero for optional fields
+        if(v===null||v===undefined||v===''||(v===0&&['discAmt','changeGiven','amtTendered','partPayment','invoiceDiscAmt'].indexOf(k)>-1)){
+          delete s[k];
+        }
+      }
+    });
+    if(Object.keys(s).length < before) trimmed++;
+  });
+  if(trimmed>0){
+    saveData();
+    showToast('✅ Trimmed '+trimmed+' sales rows. Firestore sync errors should stop.','success');
+  } else {
+    showToast('ℹ️ Sales rows already clean.','info');
+  }
 }
 
 function doDeleteCashflowEntry() {
@@ -9089,29 +9118,40 @@ function submitInvoice(){
         console.warn('[Invoice] Could not find inventory item to deduct: '+l.name+' (id:'+l.itemId+')');
       }
     }
-    DB.sales.push({
+    // Keep sales rows lean to avoid Firestore "too many index entries" (20 field limit)
+    // Only store non-null/non-zero fields to minimize index count per row
+    var _saleRow={
       id:uid(),invoiceId:invoiceId,invoiceNum:invNum,
       name:l.name,qty:l.qty,itemId:l.itemId,
-      salePrice:l.price,cost:l.cost,
-      discAmt:Math.round(itemDisc*100)/100,
-      total:itemTotal,profit:itemProfit,
-      payment:payment,payMode:payMode,bankId:bankId,posId:posId,
-      dueDate:dueDate||null,
-      changeGiven:changeGiven>0?changeGiven:null,
-      amtTendered:amtTendered>0?amtTendered:null,
-      changeDisposition:changeGiven>0?changeDisposition:null,
-      splitPayment:splitPayment||null,
-      custId:custId,custName:custName,printName:printName,custAddr:custAddr,
-      custType:saleCustomerType,date:date,month:month,
-      seller:DB.currentUser.name,partPayment:partPayment,
-      depositApplied:0,  // will be updated below after deposit logic
+      salePrice:l.price,cost:l.cost,total:itemTotal,profit:itemProfit,
+      payment:payment,payMode:payMode,
+      custId:custId,custName:custName,
+      date:date,month:month,
+      seller:DB.currentUser.name,
+      depositApplied:0,
       pendingSupply:pendingSupply||(pi.pending>0),
       suppliedQty:pendingSupply?0:pi.supplied,
       pendingQty:pendingSupply?l.qty:pi.pending,
       supplyStatus:pendingSupply?'pending':(pi.pending===l.qty?'pending':pi.pending>0?'partial':'supplied'),
       supplyDate:(pendingSupply||pi.pending>0)?null:date,
-      prevCreditBalance:payment==='credit'||payment==='part'?_prevCreditBalance:null
-    });
+      _updatedAt:Date.now()
+    };
+    // Only add optional fields if they have meaningful values (reduces index count)
+    if(discAmt&&Math.round(itemDisc*100)/100>0)_saleRow.discAmt=Math.round(itemDisc*100)/100;
+    if(bankId)_saleRow.bankId=bankId;
+    if(posId)_saleRow.posId=posId;
+    if(dueDate)_saleRow.dueDate=dueDate;
+    if(changeGiven>0){_saleRow.changeGiven=changeGiven;_saleRow.changeDisposition=changeDisposition;}
+    if(amtTendered>0)_saleRow.amtTendered=amtTendered;
+    if(splitPayment)_saleRow.splitPayment=splitPayment;
+    if(printName&&printName!==custName)_saleRow.printName=printName;
+    if(custAddr)_saleRow.custAddr=custAddr;
+    if(saleCustomerType&&saleCustomerType!=='regular')_saleRow.custType=saleCustomerType;
+    if(partPayment>0)_saleRow.partPayment=partPayment;
+    if((payment==='credit'||payment==='part')&&_prevCreditBalance!=null)_saleRow.prevCreditBalance=_prevCreditBalance;
+    if(l.invoiceDiscAmt&&l.invoiceDiscAmt>0)_saleRow.invoiceDiscAmt=l.invoiceDiscAmt;
+    if(l.supplyChoice&&l.supplyChoice!=='now')_saleRow.supplyChoice=l.supplyChoice;
+    DB.sales.push(_saleRow);
   });
   var cashReceived = (payment==='cash'||payment==='split'||payment==='deposit') ? grandTotal : (payment==='part' ? partPayment : 0);
   // Check if staff entered an "amount received" (for cash/transfer/pos with outstanding balance)
