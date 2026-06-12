@@ -2633,6 +2633,10 @@ function initAutoBackupAfterLogin() {
     setTimeout(function() {
       tryDailyDriveBackup();
     }, 8000); // wait for Firestore to connect first
+    // Silently reconcile supplier balances on every login
+    setTimeout(function() {
+      fixSupplierDepositOwedSilent();
+    }, 5000);
   }
 }
 
@@ -2653,6 +2657,26 @@ function importBackup(file) {
     } catch(ex) { alert('Failed to read backup. Make sure it is a valid JSON backup.'); }
   };
   reader.readAsText(file);
+}
+
+function fixSupplierDepositOwedSilent(){
+  // Same as fixSupplierDepositOwed but no toast/alert — runs silently on login
+  DB.suppliers.forEach(function(sup){
+    var totalCredit=(DB.purchases||[]).filter(function(p){return String(p.supId)===String(sup.id)&&(p.payType==='credit'||p.payType==='part');}).reduce(function(a,p){
+      var owed=p.payType==='credit'?p.grandTotal:(p.grandTotal-(p.partAmt||0));
+      var dep=p.depApplied||0;
+      return a+Math.max(0,owed-dep);
+    },0);
+    var totalPaid=(DB.supplierPayments||[]).filter(function(p){return String(p.supId)===String(sup.id);}).reduce(function(a,p){return a+(p.amount||0);},0);
+    var openBal=sup.openingBalance||0;
+    var newOwed=Math.max(0,openBal+totalCredit-totalPaid);
+    if(Math.abs(newOwed-(sup.owedToSupplier||0))>1){
+      sup.owedToSupplier=newOwed;
+      sup._updatedAt=Date.now();
+    }
+  });
+  // Save silently without toast
+  fbSyncDirty(null);
 }
 
 function fixSupplierDepositOwed(){
@@ -3713,6 +3737,33 @@ function fixInvoiceCounter(){
 }
 
 // Wrapper called by Settings UI button (avoids innerHTML quote escaping issues)
+// Fix swapped partAmt/creditAmt on a purchase record
+function fixPurchaseSwap(invoiceNum, correctCashPaid) {
+  if(!isAdmin()){showToast('Admin only.','error');return;}
+  var pu = DB.purchases.find(function(p){ return String(p.invoiceNum)===String(invoiceNum); });
+  if(!pu){ showToast('Purchase '+invoiceNum+' not found.','error'); return; }
+  var grandTotal = pu.grandTotal;
+  var newCash = parseFloat(correctCashPaid);
+  if(isNaN(newCash)||newCash<0||newCash>grandTotal){ showToast('Invalid cash paid amount.','error'); return; }
+  var newCredit = grandTotal - newCash;
+  if(!confirm('Fix purchase #'+invoiceNum+'?\n\nGrand Total: '+fmt(grandTotal)+'\nCash Paid: '+fmt(pu.partAmt)+' → '+fmt(newCash)+'\nCredit Owed: '+fmt(pu.creditAmt)+' → '+fmt(newCredit))) return;
+  var oldCredit = pu.creditAmt||0;
+  pu.partAmt = newCash;
+  pu.cashPaid = newCash;
+  pu.creditAmt = newCredit;
+  pu._updatedAt = Date.now();
+  // Fix supplier owed
+  var sup = DB.suppliers.find(function(s){ return String(s.id)===String(pu.supId); });
+  if(sup){
+    var diff = newCredit - oldCredit; // positive = owe more, negative = owe less
+    sup.owedToSupplier = Math.max(0,(sup.owedToSupplier||0)+diff);
+    sup._updatedAt = Date.now();
+  }
+  saveData();
+  renderApp();
+  showToast('✅ Purchase #'+invoiceNum+' corrected. Cash: '+fmt(newCash)+', Credit: '+fmt(newCredit), 'success');
+}
+
 function doDeleteCashflowEntry() {
   var inp = document.getElementById('del-cf-amt');
   if (!inp || !inp.value.trim()) { showToast('Enter an amount first.', 'error'); return; }
@@ -15282,9 +15333,10 @@ function buildSupplierProfile(){
   var lastPurchDate=purchases.length?purchases.slice().sort(function(a,b){return (b.id||0)-(a.id||0);})[0].date:'—';
   // Always calculate totalPurchased live from DB.purchases (never trust stale sup.totalPurchased)
   var liveTotalPurchased=purchases.reduce(function(a,p){return a+(p.grandTotal||0);},0);
-  // Also recalculate owedToSupplier live = totalPurchased - totalPaid - depositsApplied - cashPaid
+  // Recalculate owedToSupplier live = totalPurchased - cashPaid on purchases - supplier payments - deposits applied to purchases
   var liveCashPaid=purchases.reduce(function(a,p){return a+(p.cashPaid||p.amountPaid||0);},0);
-  var liveOwed=Math.max(0,liveTotalPurchased-liveCashPaid-totalPaid);
+  var liveDepApplied=purchases.reduce(function(a,p){return a+(p.depApplied||0);},0);
+  var liveOwed=Math.max(0,liveTotalPurchased-liveCashPaid-totalPaid-liveDepApplied);
 
   // Initials avatar
   var initials=sup.name.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase();
@@ -15372,7 +15424,7 @@ function buildSupplierProfile(){
     // KPI cards — matching customer profile layout
     '<div class="metrics" style="margin-bottom:1rem">'+
       mc('Total purchased',fmt(liveTotalPurchased),'Lifetime','')+
-      mc('Total paid',fmt(totalPaid+liveCashPaid),'Payments made','green')+
+      mc('Total paid',fmt(totalPaid+liveCashPaid+liveDepApplied),'Payments + deposits applied','green')+
       mc('Amount owed',fmt(liveOwed),'Still to pay',liveOwed>0?'red':'')+
       mc('Deposit balance',fmt(depBal),'Available',depBal>0?'green':'')+
     '</div>'+
