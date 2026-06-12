@@ -2636,6 +2636,7 @@ function initAutoBackupAfterLogin() {
     // Silently reconcile supplier balances on every login
     setTimeout(function() {
       fixSupplierDepositOwedSilent();
+      cleanWriteOffCashflow();
     }, 5000);
   }
 }
@@ -15612,6 +15613,18 @@ function deleteSupplierDeposit(depId){
   });
 }
 
+// Remove any wrongly-saved write-off cashflow entries (one-time cleanup, runs on load)
+function cleanWriteOffCashflow() {
+  var before = DB.cashflow.length;
+  DB.cashflow = DB.cashflow.filter(function(c){
+    return !(c.cat==='Write-off' && c.payMode==='adjustment' && (c.desc||'').indexOf('write-off')>-1);
+  });
+  if(DB.cashflow.length < before) {
+    saveData();
+    console.log('[Cleanup] Removed '+(before-DB.cashflow.length)+' write-off cashflow entries from expenses.');
+  }
+}
+
 function writeOffSupplierBalance(supId) {
   if(!isAdmin()){showToast('Admin only.','error');return;}
   var sup = DB.suppliers.find(function(s){return String(s.id)===String(supId);});
@@ -15637,13 +15650,9 @@ function writeOffSupplierBalance(supId) {
       date:date, month:month, by:DB.currentUser?DB.currentUser.name:'Admin',
       _updatedAt:Date.now()
     });
-    // Record in cashflow as an adjustment (not a real cash outflow)
-    DB.cashflow.push({
-      id:uid(), desc:'Supplier balance write-off — '+sup.name,
-      amount:owed, type:'out', cat:'Write-off',
-      payMode:'adjustment', date:date, month:month,
-      _updatedAt:Date.now()
-    });
+    // Write-off is NOT a cash movement — no cashflow entry needed.
+    // It's recorded in supplierPayments only (for the supplier ledger).
+    // We do NOT push to cashflow to avoid polluting expenses/till reports.
     sup.owedToSupplier = 0;
     sup._updatedAt = Date.now();
     saveData();
