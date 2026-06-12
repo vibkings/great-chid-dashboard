@@ -605,7 +605,7 @@ var GCE_COLLECTIONS = [
   'supplierPayments','tillSessions','activityLog','settings','supplierDeposits','demoSales',
   'creditCustomers','users','banks','posTerminals','categories',
   'expenseCats','transferLog','warehouse','recycleBin','drafts',
-  'pendingDeliveries','salesArchive','meta' // meta = invoiceCounter, invoiceYear, etc.
+  'pendingDeliveries','salesArchive','borrows','meta' // meta = invoiceCounter, invoiceYear, etc.
 ];
 
 var STORAGE_KEY      = 'gce_business_data';
@@ -1026,7 +1026,7 @@ function startFirebaseListener() {
         'salesReturns','adjLog','commissionLedger','proformas',
         'supplierPayments','tillSessions','supplierDeposits',
         'demoSales','activityLog','recycleBin','drafts',
-        'transferLog','stockCounts','warehouse','salesArchive','pendingDeliveries'
+        'transferLog','stockCounts','warehouse','salesArchive','pendingDeliveries','borrows'
       ];
       stdMergeCols.forEach(function(col){
         mergeCollectionByTimestamp(col, remoteDB[col], null);
@@ -19033,6 +19033,8 @@ function saveBorrow() {
   item._updatedAt = Date.now();
 
   saveData();
+  fbSetCollection('borrows', DB.borrows, null, null);
+  fbSetCollection('inventory', DB.inventory, null, null);
   closeBorrowModal();
   logActivity('Borrow recorded', source+' — '+item.name+' x'+qty+(customer?' for '+customer:''), DB.currentUser?DB.currentUser.name:'Admin');
   showToast('✅ Borrowed '+qty+'x '+item.name+' from '+source+'. Added to inventory.','success');
@@ -19098,6 +19100,8 @@ function processReturn(borrowId) {
   b.returnHistory.push({ qty:qty, date:new Date().toLocaleDateString(), note:note, by:DB.currentUser?DB.currentUser.name:'Admin' });
 
   saveData();
+  fbSetCollection('borrows', DB.borrows, null, null);
+  fbSetCollection('inventory', DB.inventory, null, null);
   document.getElementById('_borrow_return_overlay').remove();
   logActivity('Borrow returned', b.itemName+' x'+qty+' returned to '+b.source, DB.currentUser?DB.currentUser.name:'Admin');
   showToast('✅ Returned '+qty+'x '+b.itemName+' to '+b.source+'. Inventory updated.','success');
@@ -19204,6 +19208,9 @@ function processBorrowPayment(borrowId) {
   b._updatedAt = Date.now();
 
   saveData();
+  fbSetCollection('borrows', DB.borrows, null, null);
+  fbSetCollection('purchases', DB.purchases, null, null);
+  fbSetCollection('cashflow', DB.cashflow, null, null);
   document.getElementById('_borrow_pay_overlay').remove();
   logActivity('Borrow paid', b.itemName+' x'+b.qty+' — '+fmt(amt)+' paid to '+b.source, DB.currentUser?DB.currentUser.name:'Admin');
   showToast('✅ Payment of '+fmt(amt)+' recorded. Borrow closed.','success');
