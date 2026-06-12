@@ -15408,6 +15408,7 @@ function buildSupplierProfile(){
         '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
           '<button onclick="addSupplierDeposit('+sup.id+')" style="padding:7px 14px;background:#15803d;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">💰 Add deposit</button>'+
           (sup.owedToSupplier>0?'<button onclick="paySupplier('+sup.id+')" style="padding:7px 14px;background:#c0392b;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">💳 Pay supplier</button>':'')+
+          (sup.owedToSupplier>0&&sup.owedToSupplier<=5000?'<button onclick="writeOffSupplierBalance('+sup.id+')" style="padding:7px 14px;background:#64748b;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">✏️ Write off</button>':'')+
         '</div>'+
       '</div>'+
       // Info row
@@ -15556,6 +15557,47 @@ function deleteSupplierDeposit(depId){
     DB.supplierDeposits=(DB.supplierDeposits||[]).filter(function(d){return d.id!==depId;});
     saveData();
     renderPanel();
+  });
+}
+
+function writeOffSupplierBalance(supId) {
+  if(!isAdmin()){showToast('Admin only.','error');return;}
+  var sup = DB.suppliers.find(function(s){return String(s.id)===String(supId);});
+  if(!sup){showToast('Supplier not found.','error');return;}
+  var owed = sup.owedToSupplier||0;
+  if(owed<=0){showToast('No balance to write off.','info');return;}
+  if(owed>5000){showToast('Write off is only for small balances (₦5,000 or less). Use Pay Supplier for larger amounts.','error');return;}
+  showConfirm({
+    type:'warning',
+    title:'Write off ₦'+owed.toLocaleString()+'?',
+    msg:'This will clear the ₦'+owed.toLocaleString()+' balance owed to <b>'+esc(sup.name)+'</b> and record it as a write-off adjustment.<br><br>Use this for minor rounding differences or small amounts waived by the supplier.',
+    detail:'This cannot be undone',
+    confirmLabel:'✏️ Write Off',
+    cancelLabel:'Cancel'
+  }, function(){
+    var date = new Date().toLocaleDateString();
+    var month = (function(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}());
+    // Record as a supplier payment with note "write-off"
+    DB.supplierPayments.push({
+      id:uid(), supId:supId, supName:sup.name,
+      amount:owed, mode:'write-off',
+      note:'Balance write-off (₦'+owed.toLocaleString()+')',
+      date:date, month:month, by:DB.currentUser?DB.currentUser.name:'Admin',
+      _updatedAt:Date.now()
+    });
+    // Record in cashflow as an adjustment (not a real cash outflow)
+    DB.cashflow.push({
+      id:uid(), desc:'Supplier balance write-off — '+sup.name,
+      amount:owed, type:'out', cat:'Write-off',
+      payMode:'adjustment', date:date, month:month,
+      _updatedAt:Date.now()
+    });
+    sup.owedToSupplier = 0;
+    sup._updatedAt = Date.now();
+    saveData();
+    showToast('✅ ₦'+owed.toLocaleString()+' written off for '+sup.name,'success');
+    logActivity('Supplier balance write-off', sup.name+' — ₦'+owed.toLocaleString(), DB.currentUser?DB.currentUser.name:'Admin');
+    renderApp();
   });
 }
 
