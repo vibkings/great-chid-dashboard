@@ -436,8 +436,10 @@ input.inline-edit{border:none;border-radius:6px;padding:4px 7px;font-size:12px;w
 /* ===== RECYCLE BIN ===== */
 .bin-badge{position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;min-width:16px;text-align:center;display:none}
 .bin-nav-wrap{position:relative;display:inline-block}
-.bin-table-row{background:#fff5f5!important}
-.bin-table-row:hover td{background:#fee2e2!important}
+.bin-table-row td{background:var(--danger-bg)!important}
+.bin-table-row:hover td{background:rgba(220,38,38,0.12)!important}
+body.theme-bento.dark-mode .bin-table-row td{background:rgba(248,81,73,0.08)!important}
+body.theme-bento.dark-mode .bin-table-row:hover td{background:rgba(248,81,73,0.14)!important}
 .bin-empty{text-align:center;padding:3rem 2rem;color:var(--text3);font-size:13px}
 .bin-countdown{font-size:10.5px;color:var(--danger);font-weight:600}
 
@@ -9624,7 +9626,7 @@ function showSignatureModal(invNum, onDone) {
       '</div>' +
       '<div id="_sig_tab_draw">' +
         '<div style="font-size:11px;color:#888;margin-bottom:6px">Sign with finger (touchscreen) or mouse below:</div>' +
-        '<div style="border:2px solid #6366F1;border-radius:10px;overflow:hidden;background:#f8fafc;touch-action:none">' +
+        '<div style="border:2px solid var(--primary);border-radius:10px;overflow:hidden;background:var(--surface2);touch-action:none">' +
           '<canvas id="_sig_canvas" style="width:100%;display:block;touch-action:none"></canvas>' +
         '</div>' +
         '<div style="display:flex;gap:8px;margin-top:12px">' +
@@ -9661,7 +9663,8 @@ function showSignatureModal(invNum, onDone) {
     canvas.height = 160 * window.devicePixelRatio;
     canvas.style.height = '160px';
     canvas.getContext('2d').scale(window.devicePixelRatio, window.devicePixelRatio);
-    _sigPad = new SignaturePad(canvas, { minWidth:1.5, maxWidth:3, penColor:'#1a1a2e', backgroundColor:'rgba(248,250,252,0)' });
+    var _isDark=document.body.classList.contains('dark-mode')||document.body.classList.contains('theme-darkpro');
+    _sigPad = new SignaturePad(canvas, { minWidth:1.5, maxWidth:3, penColor:_isDark?'#e2e8f0':'#1a1a2e', backgroundColor:'rgba(0,0,0,0)' });
     if (existing && existing.startsWith('data:image')) _sigPad.fromDataURL(existing);
   }, 80);
 }
@@ -17100,12 +17103,12 @@ function buildUsers(){
     '<p style="font-size:11px;color:var(--text3);margin-bottom:10px">This signature appears on invoices you create.</p>'+
     _adminSigNote+
     _uSigHtml+
-    '<div style="border:2px solid #6366F1;border-radius:10px;overflow:hidden;background:#f8fafc;touch-action:none;margin-bottom:10px">'+
+    '<div style="border:2px solid var(--primary);border-radius:10px;overflow:hidden;background:var(--surface2);touch-action:none;margin-bottom:10px">'+
       '<canvas id="_usig_canvas" style="width:100%;display:block;touch-action:none;height:100px"></canvas>'+
     '</div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
       '<button onclick="clearUserSigPad()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);font-size:12px;cursor:pointer">Clear</button>'+
-      '<button onclick="saveUserSignature()" style="padding:8px 14px;border-radius:8px;border:none;background:#6366F1;color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save Signature</button>'+
+      '<button onclick="saveUserSignature()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer">Save Signature</button>'+
       '<label style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);font-size:12px;cursor:pointer">&#128444; Upload Image<input type="file" accept="image/*" onchange="uploadUserSignature(this)" style="display:none"></label>'+
     '</div>'+
     '</div>';
