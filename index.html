@@ -8731,7 +8731,7 @@ function removeInvoiceItem(lineId){
 function renderInvoiceItems(){
   var el=document.getElementById('inv-items-table');if(!el)return;
   if(!invoiceItems.length){
-    el.innerHTML='<div style="text-align:center;padding:1.5rem;color:#888;font-size:13px;border:1px dashed #ced4da;border-radius:8px;background:#f8f9fa">No items added yet. Select an item above and click + Add.</div>';
+    el.innerHTML='<div style="text-align:center;padding:1.5rem;color:var(--text3);font-size:13px;border:1px dashed var(--border);border-radius:8px;background:var(--surface2)">No items added yet. Select an item above and click + Add.</div>';
     updateInvoiceTotals();return;
   }
   var rows=invoiceItems.map(function(l,i){
