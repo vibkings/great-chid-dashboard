@@ -533,6 +533,11 @@ body.theme-bento.dark-mode .till-green{background:rgba(63,185,80,0.1) !important
 body.theme-bento.dark-mode .till-blue{background:rgba(37,99,235,0.1) !important;border-color:rgba(37,99,235,0.25) !important}
 body.theme-bento.dark-mode .till-amber{background:rgba(210,153,34,0.1) !important;border-color:rgba(210,153,34,0.3) !important}
 body.theme-bento.dark-mode .till-amber-text{color:#fbbf24 !important}
+
+/* Stronger danger/warning bg in dark mode for stock alert panels */
+body.theme-bento.dark-mode [style*="background:var(--danger-bg)"]{background:rgba(248,81,73,0.12) !important}
+body.theme-bento.dark-mode [style*="background:var(--warning-bg)"]{background:rgba(210,153,34,0.12) !important}
+body.theme-bento.dark-mode [style*="background:var(--success-bg)"]{background:rgba(22,163,74,0.12) !important}
 body.theme-bento .auth-screen{background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f0f9ff 100%)}
 body.theme-bento .auth-card{background:#fff;box-shadow:0 20px 40px rgba(0,0,0,.1);border:1px solid #e2e8f0;border-radius:20px}
 body.theme-bento .auth-logo{background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;box-shadow:0 4px 12px rgba(37,99,235,.3)}
@@ -6165,9 +6170,9 @@ function buildInventory(){
   });
   function alertGroupByCat(title,byCat,totalCount,type,icon){
     if(!totalCount)return '';
-    var color=type==='danger'?'#58151c':'var(--warning-text)';
+    var color=type==='danger'?'var(--danger)':'var(--warning-text)';
     var bg=type==='danger'?'var(--danger-bg)':'var(--warning-bg)';
-    var border=type==='danger'?'#f1aeb5':'#ffe69c';
+    var border=type==='danger'?'rgba(248,81,73,0.3)':'rgba(245,158,11,0.3)';
     var cats=Object.keys(byCat).sort();
     var catHtml=cats.map(function(cat){
       var items=byCat[cat];
@@ -6192,9 +6197,9 @@ function buildInventory(){
   }
   function alertGroup(title,items,type,icon){
     if(!items.length)return '';
-    var color=type==='danger'?'#58151c':'var(--warning-text)';
+    var color=type==='danger'?'var(--danger)':'var(--warning-text)';
     var bg=type==='danger'?'var(--danger-bg)':'var(--warning-bg)';
-    var border=type==='danger'?'#f1aeb5':'#ffe69c';
+    var border=type==='danger'?'rgba(248,81,73,0.3)':'rgba(245,158,11,0.3)';
     var listHtml=items.map(function(n){return '<div style="padding:4px 0;border-bottom:1px solid '+border+';font-size:12px">'+n+'</div>';}).join('');
     return '<div style="background:'+bg+';border:1px solid '+border+';border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden">'+
       '<div onclick="var p=this.nextElementSibling;p.style.display=p.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'.inv-chev\').style.transform=p.style.display===\'none\'?\'rotate(0deg)\':\'rotate(180deg)\';" style="display:flex;justify-content:space-between;align-items:center;padding:.55rem 1rem;cursor:pointer;user-select:none">'+
