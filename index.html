@@ -496,6 +496,22 @@ body.theme-bento .reminder-banner{background:#fef2f2;box-shadow:none;border:1px 
 body.theme-bento.dark-mode .reminder-banner{background:rgba(248,81,73,0.1) !important;border:1px solid rgba(248,81,73,0.25) !important;border-left:3px solid #f85149 !important;color:#fca5a5 !important}
 .inv-rules-banner{background:var(--amber-bg);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;color:var(--amber);margin-bottom:1rem}
 body.theme-bento.dark-mode .inv-rules-banner{background:rgba(210,153,34,0.1) !important;border:1px solid rgba(210,153,34,0.25) !important;color:#fbbf24 !important}
+
+/* Goods not yet supplied banner */
+.supply-warning-banner{background:var(--warning-bg);border:1px solid #ffe69c}
+.supply-warning-label{color:#664d03}
+body.theme-bento.dark-mode .supply-warning-banner{background:rgba(210,153,34,0.1) !important;border:1px solid rgba(210,153,34,0.3) !important}
+body.theme-bento.dark-mode .supply-warning-label{color:#fbbf24 !important}
+
+/* Pending supply card */
+.pending-supply-card{background:var(--white);border:2px solid #f59e0b}
+body.theme-bento.dark-mode .pending-supply-card{background:var(--surface) !important;border-color:rgba(245,158,11,0.4) !important}
+
+/* Invoice group rows in pending supply table */
+tr.inv-group-row td{background:#fffbeb}
+body.theme-bento.dark-mode tr.inv-group-row td{background:rgba(210,153,34,0.08) !important;color:#fbbf24 !important}
+body.theme-bento.dark-mode tr.inv-group-row td a,
+body.theme-bento.dark-mode tr.inv-group-row td b{color:#fbbf24 !important}
 body.theme-bento .auth-screen{background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f0f9ff 100%)}
 body.theme-bento .auth-card{background:#fff;box-shadow:0 20px 40px rgba(0,0,0,.1);border:1px solid #e2e8f0;border-radius:20px}
 body.theme-bento .auth-logo{background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;box-shadow:0 4px 12px rgba(37,99,235,.3)}
@@ -10805,7 +10821,7 @@ function buildSales(){
         '<td><button class="btn sm" onclick="supplyAllNow(\''+g.invoiceNum+'\')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">&#128230; Supply all</button></td>'+
       '</tr>'+iRows;
     }).join('');
-    pendingSupplySection='<div style="background:var(--white);border:2px solid #f59e0b;border-radius:10px;padding:14px;margin-bottom:1.5rem">'+
+    pendingSupplySection='<div class="pending-supply-card" style="border-radius:10px;padding:14px;margin-bottom:1.5rem">'+
       '<div style="font-size:14px;font-weight:700;color:#92400e;margin-bottom:10px">&#9200; Pending Supply ('+pendingInvoices.length+' invoice'+(pendingInvoices.length>1?'s':'')+')</div>'+
       '<div class="tbl-wrap"><table><thead><tr><th>Item</th><th style="text-align:center">Ordered</th><th style="text-align:center">Supplied</th><th style="text-align:center">Pending</th><th>Progress</th><th></th></tr></thead><tbody>'+pRows+'</tbody></table></div></div>';
   }
@@ -10968,7 +10984,7 @@ function buildSales(){
       (g.items[0]&&g.items[0].supplyDate&&g.items[0].supplyDate!==g.date?
         '<div style="margin-top:3px"><span style="background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;border-radius:10px;font-size:10px;font-weight:700;padding:2px 7px">✅ Supplied: '+g.items[0].supplyDate+'</span></div>':'');
     var pt=g.payment==='credit'?'<span class="badge owing">Credit</span>':g.payment==='part'?'<span class="badge low">Part pay</span>':g.payment==='deposit'?'<span class="badge info">Deposit</span>':g.payment==='split'?'<span class="badge" style="background:#6f42c1;color:#fff">Split</span>':g.payMode==='pos'?'<span class="badge" style="background:#0891b2;color:#fff">POS</span>':g.payMode==='transfer'?'<span class="badge" style="background:#0d6efd;color:#fff">Transfer</span>':'<span class="badge ok">Cash</span>';
-    return '<tr'+(isPending?' style="background:#fffbeb"':'')+
+    return '<tr'+(isPending?' class="inv-group-row"':'')+
       ' data-inv="'+(g.invoiceNum||'').toLowerCase()+'"'+
       ' data-cust="'+(g.custName||'').toLowerCase()+'"'+
       ' data-items="'+g.items.map(function(s){return s.name;}).join(' ').toLowerCase()+'"'+
@@ -11094,9 +11110,9 @@ function buildSales(){
       '<button class="btn" onclick="saveDraft()" style="color:var(--primary);border-color:#b6d4fe;font-size:13px;padding:10px 16px">&#128221; Save as draft</button>'+
       '<button class="btn" onclick="invoiceItems=[];renderInvoiceItems()" style="color:var(--danger);border-color:#fca5a5">&#10005; Clear</button>'+
     '</div>'+
-    '<div style="background:var(--warning-bg);border:1px solid #ffe69c;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:1.25rem;display:flex;align-items:flex-start;gap:10px">'+
+    '<div class="supply-warning-banner" style="border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:1.25rem;display:flex;align-items:flex-start;gap:10px">'+
       '<input type="checkbox" id="s-pending-supply" style="width:16px;height:16px;margin-top:2px;cursor:pointer;flex-shrink:0">'+
-      '<label for="s-pending-supply" style="font-size:13px;color:#664d03;cursor:pointer;line-height:1.4">'+
+      '<label for="s-pending-supply" class="supply-warning-label" style="font-size:13px;cursor:pointer;line-height:1.4">'+
         '<b>Goods not yet supplied</b> — Payment received but stock will NOT be deducted until goods are marked as supplied.'+
       '</label>'+
     '</div>'+
