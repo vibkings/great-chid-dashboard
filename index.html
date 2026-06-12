@@ -5120,7 +5120,7 @@ function saveNewWarehouseGoods(){
   if(dupInv){alert('"'+name+'" already exists in Shop Inventory. Use "Add Existing Stock" to add it to the warehouse instead.');return;}
   var newId=uid();
   DB.warehouse.push({id:newId,name:name,cat:cat||'',qty:qty,minQty:minQty,cost:cost,supplierId:supId,warehouseOnly:true});
-  DB.inventory.push({id:newId,name:name,qty:0,cost:cost,sell:sell,minQty:minQty,supId:supId,cat:cat||''});
+  DB.inventory.push({id:newId,name:name,qty:0,cost:cost,sell:sell,minQty:minQty,supId:supId,cat:cat||'',_updatedAt:Date.now()});
   DB.transferLog.push({id:uid(),date:new Date().toLocaleDateString(),direction:'to_warehouse',itemId:newId,itemName:name,itemCat:cat||'',qty:qty,waybill:'NEW-GOODS',note:note||'New goods added to warehouse',by:DB.currentUser.name});
   logActivity('stock','✅ New goods added: '+name+' (Wh. Qty: '+qty+', Shop Qty: 0)',{itemId:newId,qty:qty,note:note});
   saveData();
@@ -5136,7 +5136,7 @@ function editWhMinQty(itemId){
   if(val===null)return;
   var num=parseInt(val);
   if(isNaN(num)||num<0){alert('Please enter a valid number (0 or more).');return;}
-  item.minQty=num;
+  item.minQty=num;item._updatedAt=Date.now();
   saveData();
   renderApp();
 }
@@ -5393,7 +5393,7 @@ function addItem(){
   if(cost<=0){alert('\u274c Cost price is required.');return;}
   if(sell<=0){alert('\u274c Selling price is required.');return;}
   if(sell<cost){alert('\u274c Selling price ('+fmt(sell)+') cannot be less than cost price ('+fmt(cost)+').');return;}
-  DB.inventory.push({id:uid(),name:name,qty:qty,cost:cost,sell:sell,minQty:minQty,supId:supId,cat:cat});
+  DB.inventory.push({id:uid(),name:name,qty:qty,cost:cost,sell:sell,minQty:minQty,supId:supId,cat:cat,_updatedAt:Date.now()});
   ['f-name','f-qty','f-cost','f-sell','f-minqty'].forEach(function(id){document.getElementById(id).value='';});renderApp();
 }
 
@@ -5508,7 +5508,7 @@ function toggleInvDetails(dropId){
 }
 function openEditModal(id){if(!isAdmin()&&!canDo('invedit')){alert('You do not have permission to edit inventory items.');return;}var i=DB.inventory.find(function(x){return x.id==id;});if(!i)return;var so=DB.suppliers.map(function(s){return "<option value=\""+s.id+"\">"+(s.id==i.supId?" selected":"")+esc(s.name)+"<\/option>";}).join("");var catOpts=getCatOpts(i.cat||"");var m=document.getElementById("inv-edit-modal");if(!m){m=document.createElement("div");m.id="inv-edit-modal";document.body.appendChild(m);}m.innerHTML="<div style=\"position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem\" onclick=\"if(event.target===this)closeEditModal()\"><div style=\"background:var(--white);border-radius:var(--radius-lg);padding:1.5rem;width:100%;max-width:560px;box-shadow:var(--shadow-lg)\"><div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem\"><div style=\"font-size:15px;font-weight:700\">&#9998; Edit Item<\/div><button onclick=\"closeEditModal()\" style=\"background:none;border:none;font-size:20px;cursor:pointer\">&times;<\/button><\/div><div class=\"fg c2\" style=\"margin-bottom:.75rem\"><div class=\"form-group\"><label>Item Name<\/label><input type=\"text\" id=\"em-name\" value=\""+esc(i.name)+"\"><\/div><div class=\"form-group\"><label>Category<\/label><select id=\"em-cat\" onchange=\"handleCatChange(this.value,&apos;em-cat-new&apos;)\">"+catOpts+"<\/select><input type=\"text\" id=\"em-cat-new\" placeholder=\"New category\" style=\"display:none;margin-top:4px\"><\/div><\/div><div class=\"fg c2\" style=\"margin-bottom:.75rem\"><div class=\"form-group\"><label>Supplier<\/label><select id=\"em-sup\"><option value=\"\">None<\/option>"+so+"<\/select><\/div><div class=\"form-group\"><label>Min Qty<\/label><input type=\"number\" id=\"em-min\" value=\""+i.minQty+"\" min=\"0\"><\/div><\/div><div class=\"fg c2\" style=\"margin-bottom:1.25rem\"><div class=\"form-group\"><label>Cost (&#x20A6;)<\/label><input type=\"number\" id=\"em-cost\" value=\""+i.cost+"\" min=\"0\"><\/div><div class=\"form-group\"><label>Sell (&#x20A6;)<\/label><input type=\"number\" id=\"em-sell\" value=\""+i.sell+"\" min=\"0\"><\/div><\/div><div style=\"display:flex;gap:8px;justify-content:flex-end\"><button class=\"btn\" onclick=\"closeEditModal()\">Cancel<\/button><button class=\"btn primary\" onclick=\"saveEditModal("+id+")\">&#10003; Save Changes<\/button><\/div><\/div><\/div>";m.style.display="block";}
 function closeEditModal(){var m=document.getElementById("inv-edit-modal");if(m)m.style.display="none";}
-function saveEditModal(id){if(!isAdmin()&&!canDo('invedit')){alert('You do not have permission to edit inventory items. Contact your admin.');return;}var item=DB.inventory.find(function(i){return i.id==id;});if(!item)return;var name=document.getElementById("em-name").value.trim();var catSel=document.getElementById("em-cat").value;var catNew=document.getElementById("em-cat-new").value.trim();var cat=catSel==="__new__"?catNew:catSel;var supId=document.getElementById("em-sup").value;var minQty=parseInt(document.getElementById("em-min").value)||1;var cost=parseFloat(document.getElementById("em-cost").value)||0;var sell=parseFloat(document.getElementById("em-sell").value)||0;if(!name){alert("Item name is required.");return;}if(cost<=0){alert("Cost price is required.");return;}if(sell<=0){alert("Selling price is required.");return;}if(sell<cost){alert("Selling price cannot be less than cost price.");return;}if(catSel==="__new__"&&!catNew){alert("Enter a new category name.");return;}if(catSel==="__new__"&&catNew&&!DB.categories.includes(catNew)){DB.categories.push(catNew);}item.name=name;item.cat=cat;item.supId=supId;item.minQty=minQty;item.cost=cost;item.sell=sell;saveData();closeEditModal();renderApp();}
+function saveEditModal(id){if(!isAdmin()&&!canDo('invedit')){alert('You do not have permission to edit inventory items. Contact your admin.');return;}var item=DB.inventory.find(function(i){return i.id==id;});if(!item)return;var name=document.getElementById("em-name").value.trim();var catSel=document.getElementById("em-cat").value;var catNew=document.getElementById("em-cat-new").value.trim();var cat=catSel==="__new__"?catNew:catSel;var supId=document.getElementById("em-sup").value;var minQty=parseInt(document.getElementById("em-min").value)||1;var cost=parseFloat(document.getElementById("em-cost").value)||0;var sell=parseFloat(document.getElementById("em-sell").value)||0;if(!name){alert("Item name is required.");return;}if(cost<=0){alert("Cost price is required.");return;}if(sell<=0){alert("Selling price is required.");return;}if(sell<cost){alert("Selling price cannot be less than cost price.");return;}if(catSel==="__new__"&&!catNew){alert("Enter a new category name.");return;}if(catSel==="__new__"&&catNew&&!DB.categories.includes(catNew)){DB.categories.push(catNew);}item.name=name;item.cat=cat;item.supId=supId;item.minQty=minQty;item.cost=cost;item.sell=sell;item._updatedAt=Date.now();saveData();closeEditModal();renderApp();}
 function showImportModal(){
   var old=document.getElementById('import-modal');if(old)old.remove();
   document.body.style.overflow='hidden';
@@ -6371,7 +6371,7 @@ function saveEdit(id){
   if(cost<=0){alert('❌ Cost price is required.\n\nSet the cost price before saving. This protects against selling below cost.');return;}
   if(sell<=0){alert('❌ Selling price is required.');return;}
   if(sell<cost){alert('❌ Selling price ('+fmt(sell)+') cannot be less than cost price ('+fmt(cost)+').\n\nThe system does not allow selling below cost. Please correct the price.');return;}
-  item.name=name;item.cost=cost;item.sell=sell;item.minQty=minQty;item.cat=cat;item.supId=supId;renderApp();
+  item.name=name;item.cost=cost;item.sell=sell;item.minQty=minQty;item.cat=cat;item.supId=supId;item._updatedAt=Date.now();saveData();renderApp();
 }
 function viewStockCount(id){
   var sc=DB.stockCounts.find(function(c){return c.id==id;});
@@ -12537,7 +12537,7 @@ function submitPurchase(){
     } else {
       var byName=DB.inventory.find(function(i){return i.name.toLowerCase()===l.name.toLowerCase();});
       if(byName){byName.qty+=qtyToAdd;byName.cost=l.cost;if(byName.sell<l.cost)belowCostWarnings.push(byName.name+': sell price '+fmt(byName.sell)+' is now below new cost '+fmt(l.cost));}
-      else{var newId=uid();DB.inventory.push({id:newId,name:l.name,qty:qtyToAdd,cost:l.cost,sell:l.sell||l.cost,minQty:5,supId:supId,cat:l.cat||''});l.itemId=newId;}
+      else{var newId=uid();DB.inventory.push({id:newId,name:l.name,qty:qtyToAdd,cost:l.cost,sell:l.sell||l.cost,minQty:5,supId:supId,cat:l.cat||'',_updatedAt:Date.now()});l.itemId=newId;}
     }
   });
 
@@ -13979,7 +13979,7 @@ function deleteExpense(id){
     saveData();renderApp();
   });
 }
-function addExpenseCat(){var inp=document.getElementById('ex-cat-new');if(!inp)return;var v=inp.value.trim();if(!v)return;if(DB.expenseCats.indexOf(v)>-1){alert('Category already exists.');return;}DB.expenseCats.push(v);inp.value='';saveData();renderApp();}
+function addExpenseCat(){var inp=document.getElementById('ex-cat-new');if(!inp)return;var v=inp.value.trim();if(!v)return;if(DB.expenseCats.indexOf(v)>-1){alert('Category already exists.');return;}DB.expenseCats.push(v);inp.value='';saveData();fbSetCollection('expenseCats',DB.expenseCats,null,null);renderApp();}
 
 // ============================================================
 // FINANCE TAB
@@ -15929,7 +15929,7 @@ function addSupplier(){
   var dup=DB.suppliers.find(function(s){return s.name.toLowerCase()===name.toLowerCase();});
   if(dup){alert('Supplier already exists.');return;}
   var openingBal=parseFloat(document.getElementById('su-opening-bal').value)||0;
-  DB.suppliers.push({id:uid(),name:name,contact:document.getElementById('su-contact').value.trim(),phone:document.getElementById('su-phone').value.trim(),address:document.getElementById('su-addr').value.trim(),totalPurchased:0,owedToSupplier:openingBal,openingBalance:openingBal,purchases:[]});
+  DB.suppliers.push({id:uid(),name:name,contact:document.getElementById('su-contact').value.trim(),phone:document.getElementById('su-phone').value.trim(),address:document.getElementById('su-addr').value.trim(),totalPurchased:0,owedToSupplier:openingBal,openingBalance:openingBal,purchases:[],_updatedAt:Date.now()});
   logActivity('Supplier added',name+(document.getElementById('su-phone').value.trim()?' — '+document.getElementById('su-phone').value.trim():'')+(openingBal>0?' — Opening balance: '+fmt(openingBal):''),'');
   saveData();renderApp();
 }
@@ -17142,7 +17142,7 @@ function addUser(){
   var dup=DB.users.find(function(x){return x.username.toLowerCase()===uname.toLowerCase();});
   if(dup){alert('⛔ Username "'+uname+'" is already taken. Please choose a different username.');return;}
   var perms={};Object.keys(ALL_PERMS).forEach(function(p){perms[p]=false;});
-  DB.users.push({id:uid(),name:name,username:uname,password:pass,role:role,permissions:perms});
+  DB.users.push({id:uid(),name:name,username:uname,password:pass,role:role,permissions:perms,_updatedAt:Date.now()});
   saveData();renderApp();
 }
 function removeUser(id){
