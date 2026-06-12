@@ -3668,8 +3668,8 @@ function payModeLabel(s){
   if(s.payment==='part') return 'Part — '+(s.payMode==='pos'?'POS':s.payMode==='transfer'?'Transfer':'Cash');
   return 'Cash';
 }
-function bankOpts(){return DB.banks.map(function(b){return '<option value="'+b.id+'">'+esc(b.name)+(b.acct?'  -  '+b.acct:'')+'</option>';}).join('');}
-function posOpts(){return DB.posTerminals.map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');}
+function bankOpts(){return DB.banks.filter(function(b){return !b._deleted;}).map(function(b){return '<option value="'+b.id+'">'+esc(b.name)+(b.acct?'  -  '+b.acct:'')+'</option>';}).join('');}
+function posOpts(){return DB.posTerminals.filter(function(p){return !p._deleted;}).map(function(p){return '<option value="'+p.id+'">'+esc(p.name)+(p.tid?' ('+p.tid+')':'')+'</option>';}).join('');}
 
 function togglePaySubFields(val,prefix){
   var bankWrap=document.getElementById(prefix+'-bank-wrap');
@@ -3679,7 +3679,7 @@ function togglePaySubFields(val,prefix){
 }
 
 // SETTINGS
-function addBank(){var name=document.getElementById('sb-name').value.trim(),acct=document.getElementById('sb-acct').value.trim();if(!name){alert('Enter bank name.');return;}DB.banks.push({id:uid(),name:name,acct:acct});document.getElementById('sb-name').value='';document.getElementById('sb-acct').value='';renderApp();}
+function addBank(){var name=document.getElementById('sb-name').value.trim(),acct=document.getElementById('sb-acct').value.trim();if(!name){alert('Enter bank name.');return;}DB.banks.push({id:uid(),name:name,acct:acct,_updatedAt:Date.now()});document.getElementById('sb-name').value='';document.getElementById('sb-acct').value='';saveData();fbSetCollection('banks',DB.banks,null,null);renderApp();showToast('Bank added.','success');}
 function removeBank(id){
   var b=DB.banks.find(function(x){return x.id===id;});
   if(DB.banks.length<=1){alert('Keep at least one bank.');return;}
@@ -3691,11 +3691,14 @@ function removeBank(id){
     confirmLabel:'Remove',
     cancelLabel:'Cancel'
   },function(){
-    DB.banks=DB.banks.filter(function(x){return x.id!==id;});
-    renderApp();
+    var _b=DB.banks.find(function(x){return x.id===id;});
+    if(_b){_b._deleted=true;_b._updatedAt=Date.now();}
+    else{DB.banks=DB.banks.filter(function(x){return x.id!==id;});}
+    saveData();fbSetCollection('banks',DB.banks,null,null);
+    renderApp();showToast('Bank removed.','info');
   });
 }
-function addPos(){var name=document.getElementById('sp-pos-name').value.trim(),tid=document.getElementById('sp-pos-tid').value.trim();if(!name){alert('Enter POS terminal name.');return;}DB.posTerminals.push({id:uid(),name:name,tid:tid});document.getElementById('sp-pos-name').value='';document.getElementById('sp-pos-tid').value='';renderApp();}
+function addPos(){var name=document.getElementById('sp-pos-name').value.trim(),tid=document.getElementById('sp-pos-tid').value.trim();if(!name){alert('Enter POS terminal name.');return;}DB.posTerminals.push({id:uid(),name:name,tid:tid,_updatedAt:Date.now()});document.getElementById('sp-pos-name').value='';document.getElementById('sp-pos-tid').value='';saveData();fbSetCollection('posTerminals',DB.posTerminals,null,null);renderApp();showToast('POS terminal added.','success');}
 function removePos(id){
   var p=DB.posTerminals.find(function(x){return x.id===id;});
   showConfirm({
@@ -3706,15 +3709,18 @@ function removePos(id){
     confirmLabel:'Remove',
     cancelLabel:'Cancel'
   },function(){
-    DB.posTerminals=DB.posTerminals.filter(function(x){return x.id!==id;});
-    renderApp();
+    var _p=DB.posTerminals.find(function(x){return x.id===id;});
+    if(_p){_p._deleted=true;_p._updatedAt=Date.now();}
+    else{DB.posTerminals=DB.posTerminals.filter(function(x){return x.id!==id;});}
+    saveData();fbSetCollection('posTerminals',DB.posTerminals,null,null);
+    renderApp();showToast('POS terminal removed.','info');
   });
 }
 
 function buildSettings(){
   if(!canDo('settings'))return '<div class="empty">Access denied.</div>';
-  var bankRows=DB.banks.length?DB.banks.map(function(b){return '<tr><td>'+esc(b.name)+'</td><td>'+(b.acct||' - ')+'</td><td>'+(isAdmin()?'<button class="btn danger" onclick="removeBank('+b.id+')">Remove</button>':' - ')+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">No banks added.</td></tr>';
-  var posRows=DB.posTerminals.length?DB.posTerminals.map(function(p){return '<tr><td>'+esc(p.name)+'</td><td>'+(p.tid||' - ')+'</td><td>'+(isAdmin()?'<button class="btn danger" onclick="removePos('+p.id+')">Remove</button>':' - ')+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">No POS terminals added.</td></tr>';
+  var bankRows=(DB.banks||[]).filter(function(b){return !b._deleted;}).length?(DB.banks||[]).filter(function(b){return !b._deleted;}).map(function(b){return '<tr><td>'+esc(b.name)+'</td><td>'+(b.acct||' - ')+'</td><td>'+(isAdmin()?'<button class="btn danger" onclick="removeBank('+b.id+')">Remove</button>':' - ')+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">No banks added.</td></tr>';
+  var posRows=(DB.posTerminals||[]).filter(function(p){return !p._deleted;}).length?(DB.posTerminals||[]).filter(function(p){return !p._deleted;}).map(function(p){return '<tr><td>'+esc(p.name)+'</td><td>'+(p.tid||' - ')+'</td><td>'+(isAdmin()?'<button class="btn danger" onclick="removePos('+p.id+')">Remove</button>':' - ')+'</td></tr>';}).join(''):'<tr><td colspan="3" class="empty">No POS terminals added.</td></tr>';
 
   // Data stats
   var savedRaw=null;try{savedRaw=localStorage.getItem(STORAGE_KEY);}catch(e){}
