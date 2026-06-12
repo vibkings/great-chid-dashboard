@@ -511,6 +511,7 @@ body.theme-bento.dark-mode th{background:#252837}
 body.theme-bento.dark-mode .subtab{background:#252837;border-color:#2a2d3a}
 body.theme-bento.dark-mode .subtab.active{background:#6366F1;color:#fff}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -520,7 +521,7 @@ var DB={
   users:[{id:1,name:'Admin',username:'vibkings',password:'vibkings',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
   adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],commissionLedger:[],proformas:[],
-  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],salesArchive:[],
+  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],salesArchive:[],invoiceSignatures:{},
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
   invoiceCounter:1,demoInvoiceCounter:1,
@@ -7928,14 +7929,8 @@ function buildInvoiceHTML(inv){
     '<div style="color:#c0392b;font-style:italic;margin-top:2px">...thanks for your patronage</div>'+
     '</div>'+
     '<div class="ft">Thank you for patronizing <b>Great Chid Electro (Nig.)</b> &nbsp;|&nbsp; Come again!</div>'+
-    '<div style="display:flex;justify-content:space-between;margin-top:14px;padding:0 4px">'+
-      '<div style="width:44%;text-align:center">'+
-        '<div style="border-top:1.5px solid #333;padding-top:4px;font-size:9px;font-weight:700;letter-spacing:.3px">Customer Signature</div>'+
-      '</div>'+
-      '<div style="width:44%;text-align:center">'+
-        '<div style="border-top:1.5px solid #333;padding-top:4px;font-size:9px;font-weight:700;letter-spacing:.3px">Authorized Signature</div>'+
-      '</div>'+
-    '</div>'+
+        (function(){ var _custSig=(DB.invoiceSignatures&&DB.invoiceSignatures[inv.invoiceNum])||null; return '<div style="display:flex;justify-content:space-between;margin-top:14px;padding:0 4px">'  +'<div style="width:44%;text-align:center">'  +(_custSig    ? '<img src="'+_custSig+'" style="max-height:48px;max-width:100%;display:block;margin:0 auto 2px">'    : '<div style="height:48px"></div>')  +'<div style="border-top:1.5px solid #333;padding-top:4px;font-size:9px;font-weight:700;letter-spacing:.3px">Customer Signature</div>'  +'</div>'  +'<div style="width:44%;text-align:center">'  +'<div style="height:48px"></div>'  +'<div style="border-top:1.5px solid #333;padding-top:4px;font-size:9px;font-weight:700;letter-spacing:.3px">Authorized Signature</div>'  +'</div>'  +'</div>'; })()+
+
     '<div style="display:flex;align-items:flex-end;gap:10px;margin-top:8px">'+
       '<div style="flex:1;border:2px '+(inv.pendingSupply?'dashed #d97706':'solid #16a34a')+';border-radius:5px;padding:7px 10px;background:'+(inv.pendingSupply?'#fffbeb':'#f0fdf4')+';text-align:center">'+
         '<div style="font-size:11px;font-weight:900;color:'+(inv.pendingSupply?'#b45309':'#15803d')+';letter-spacing:.5px">'+
@@ -9288,10 +9283,127 @@ function submitInvoice(){
   if(overpayment>0){
     saveMsg+='\n\n⚠️ OVERPAYMENT RECORDED\nCustomer paid '+fmt(partPayment)+' but invoice total was '+fmt(grandTotal)+'.\nExcess of '+fmt(overpayment)+' has been saved as store credit on '+custName+'\'s account.\n(You now owe the customer '+fmt(overpayment)+')';
   }
-  if(confirm(saveMsg+'\n\nPrint invoice now?')){
-    printInvoice(DB._lastInvoice);
+  // Show Sign & Print options
+  var _inv = DB._lastInvoice;
+  var _sigOverlay = document.createElement('div');
+  _sigOverlay.id = '_postinv_overlay';
+  _sigOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99998;display:flex;align-items:center;justify-content:center;padding:16px';
+  _sigOverlay.innerHTML =
+    '<div style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;width:100%;max-width:400px;box-shadow:0 8px 40px rgba(0,0,0,0.25)">' +
+      '<div style="font-size:16px;font-weight:700;margin-bottom:6px">✅ Invoice Saved!</div>' +
+      '<div style="font-size:13px;color:#666;margin-bottom:18px">' + saveMsg.split('\n').join('<br>') + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:10px">' +
+        '<button id="_btn_sign_print" style="padding:12px;border-radius:10px;border:none;background:#6366F1;color:#fff;font-size:14px;font-weight:700;cursor:pointer">✍️ Get Signature & Print</button>' +
+        '<button id="_btn_print" style="padding:12px;border-radius:10px;border:none;background:#27ae60;color:#fff;font-size:14px;font-weight:700;cursor:pointer">🖨️ Print Without Signature</button>' +
+        '<button id="_btn_skip" style="padding:12px;border-radius:10px;border:1px solid #e5e7eb;background:#f8fafc;color:#444;font-size:14px;cursor:pointer">Skip — Close</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(_sigOverlay);
+
+  var _closePostInv = function() {
+    var el = document.getElementById('_postinv_overlay');
+    if (el) document.body.removeChild(el);
     renderApp();
-  } else {renderApp();}
+  };
+  document.getElementById('_btn_sign_print').onclick = function() {
+    document.body.removeChild(_sigOverlay);
+    showSignatureModal(_inv.invoiceNum, function() {
+      printInvoice(_inv);
+      renderApp();
+    });
+  };
+  document.getElementById('_btn_print').onclick = function() {
+    _closePostInv();
+    printInvoice(_inv);
+  };
+  document.getElementById('_btn_skip').onclick = _closePostInv;
+}
+
+// ══ DIGITAL SIGNATURE SYSTEM ══════════════════════════════════════════════
+var _sigPad = null;
+var _sigInvNum = null;
+var _sigOnDone = null;
+
+function showSignatureModal(invNum, onDone) {
+  _sigInvNum = invNum;
+  _sigOnDone = onDone || null;
+  var existing = DB.invoiceSignatures && DB.invoiceSignatures[invNum];
+  var overlay = document.createElement('div');
+  overlay.id = '_sig_overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML =
+    '<div style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;width:100%;max-width:480px;box-shadow:0 8px 40px rgba(0,0,0,0.25)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+        '<div style="font-size:16px;font-weight:700">✍️ Customer Signature</div>' +
+        '<button onclick="closeSignatureModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#666">✕</button>' +
+      '</div>' +
+      '<div style="font-size:12px;color:#666;margin-bottom:10px">Invoice #' + invNum + ' — Sign in the box below</div>' +
+      '<div style="border:2px solid #6366F1;border-radius:10px;overflow:hidden;background:#f8fafc;touch-action:none">' +
+        '<canvas id="_sig_canvas" style="width:100%;display:block;touch-action:none"></canvas>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">' +
+        '<button onclick="clearSignaturePad()" style="flex:1;padding:10px;border-radius:8px;border:1px solid #e5e7eb;background:#f1f5f9;font-size:13px;cursor:pointer">🗑️ Clear</button>' +
+        '<button onclick="saveSignature()" style="flex:2;padding:10px;border-radius:8px;border:none;background:#6366F1;color:#fff;font-size:13px;font-weight:700;cursor:pointer">✅ Save Signature</button>' +
+      '</div>' +
+      (existing ? '<div style="margin-top:10px;text-align:center"><button onclick="doRemoveSig()" style="font-size:11px;color:#e74c3c;background:none;border:none;cursor:pointer;text-decoration:underline">Remove existing signature</button></div>' : '') +
+    '</div>';
+  document.body.appendChild(overlay);
+
+  // Init signature pad — set canvas size after DOM renders
+  setTimeout(function() {
+    var canvas = document.getElementById('_sig_canvas');
+    if (!canvas) return;
+    var w = canvas.offsetWidth || 440;
+    canvas.width = w * window.devicePixelRatio;
+    canvas.height = 160 * window.devicePixelRatio;
+    canvas.style.height = '160px';
+    var ctx = canvas.getContext('2d');
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    _sigPad = new SignaturePad(canvas, {
+      minWidth: 1.5,
+      maxWidth: 3,
+      penColor: '#1a1a2e',
+      backgroundColor: 'rgba(248,250,252,0)'
+    });
+    // Load existing signature if any
+    if (existing) {
+      _sigPad.fromDataURL(existing);
+    }
+  }, 80);
+}
+
+function clearSignaturePad() {
+  if (_sigPad) _sigPad.clear();
+}
+
+function closeSignatureModal() {
+  var el = document.getElementById('_sig_overlay');
+  if (el) document.body.removeChild(el);
+  _sigPad = null;
+}
+
+function doRemoveSig() { removeSignature(_sigInvNum); }
+function removeSignature(invNum) {
+  if (!confirm('Remove the signature for Invoice #' + invNum + '?')) return;
+  if (DB.invoiceSignatures) delete DB.invoiceSignatures[invNum];
+  saveData();
+  closeSignatureModal();
+  showToast('Signature removed.', 'info');
+  renderApp();
+}
+
+function saveSignature() {
+  if (!_sigPad || _sigPad.isEmpty()) {
+    showToast('Please sign before saving.', 'error');
+    return;
+  }
+  if (!DB.invoiceSignatures) DB.invoiceSignatures = {};
+  // Save as compact PNG data URL
+  DB.invoiceSignatures[_sigInvNum] = _sigPad.toDataURL('image/png');
+  saveData();
+  showToast('✅ Signature saved for Invoice #' + _sigInvNum, 'success');
+  closeSignatureModal();
+  if (_sigOnDone) _sigOnDone();
 }
 
 function printInvoice(inv){
@@ -10559,6 +10671,7 @@ function buildSales(){
       '<td><div style="display:flex;gap:4px;flex-wrap:wrap">'+
         '<button class="btn sm" onclick="viewInvoiceDetail(\''+k+'\')" style="color:var(--primary);border-color:#b6d4fe;font-size:11px">View</button>'+
         '<button class="btn sm" onclick="reprintInvoice(\''+k+'\')" style="color:#1a237e;border-color:#93c5fd;font-size:11px">Print</button>'+
+        '<button class="btn sm" onclick="showSignatureModal(\''+k+'\')" style="color:#6366F1;border-color:#a5b4fc;font-size:11px" title="Get customer signature">✍️</button>'+
         (isPending?'<button class="btn sm" onclick="markAsSupplied(\''+(g.items[0].invoiceId||g.items[0].invoiceNum||g.items[0].id)+'\')" style="background:#16a34a;color:#fff;border-color:#16a34a;font-size:11px">✓ Mark supplied</button>':'')+
         (!isPending?'<button class="btn sm" onclick="showReturnModal(\''+(g.items[0].invoiceNum||g.items[0].invoiceId||g.items[0].id)+'\')" style="color:#dc3545;border-color:#f5c2c7;font-size:11px">&#8617; Return</button>':'')+
         (isAdmin()?'<button class="btn danger sm" onclick="voidInvoice(\''+k+'\')" style="font-size:11px">🗑️ Void</button>':'')+
