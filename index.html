@@ -9323,6 +9323,7 @@ function submitInvoice(){
 var _sigPad = null;
 var _sigInvNum = null;
 var _sigOnDone = null;
+var _sigStream = null;
 
 function showSignatureModal(invNum, onDone) {
   _sigInvNum = invNum;
@@ -9332,51 +9333,141 @@ function showSignatureModal(invNum, onDone) {
   overlay.id = '_sig_overlay';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.innerHTML =
-    '<div style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;width:100%;max-width:480px;box-shadow:0 8px 40px rgba(0,0,0,0.25)">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
-        '<div style="font-size:16px;font-weight:700">✍️ Customer Signature</div>' +
-        '<button onclick="closeSignatureModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#666">✕</button>' +
+    '<div style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;width:100%;max-width:500px;box-shadow:0 8px 40px rgba(0,0,0,0.25)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+        '<div style="font-size:16px;font-weight:700">Customer Verification</div>' +
+        '<button onclick="closeSignatureModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#666">X</button>' +
       '</div>' +
-      '<div style="font-size:12px;color:#666;margin-bottom:10px">Invoice #' + invNum + ' — Sign in the box below</div>' +
-      '<div style="border:2px solid #6366F1;border-radius:10px;overflow:hidden;background:#f8fafc;touch-action:none">' +
-        '<canvas id="_sig_canvas" style="width:100%;display:block;touch-action:none"></canvas>' +
+      '<div style="font-size:12px;color:#888;margin-bottom:14px">Invoice #' + invNum + '</div>' +
+      '<div style="display:flex;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:16px">' +
+        '<button id="_tab_draw" onclick="sigSwitchTab(\'draw\')" style="flex:1;padding:10px;border:none;background:#6366F1;color:#fff;font-size:13px;font-weight:700;cursor:pointer">Draw Signature</button>' +
+        '<button id="_tab_cam" onclick="sigSwitchTab(\'cam\')" style="flex:1;padding:10px;border:none;background:#f1f5f9;color:#64748b;font-size:13px;font-weight:600;cursor:pointer">Camera / Thumbprint</button>' +
       '</div>' +
-      '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">' +
-        '<button onclick="clearSignaturePad()" style="flex:1;padding:10px;border-radius:8px;border:1px solid #e5e7eb;background:#f1f5f9;font-size:13px;cursor:pointer">🗑️ Clear</button>' +
-        '<button onclick="saveSignature()" style="flex:2;padding:10px;border-radius:8px;border:none;background:#6366F1;color:#fff;font-size:13px;font-weight:700;cursor:pointer">✅ Save Signature</button>' +
+      '<div id="_sig_tab_draw">' +
+        '<div style="font-size:11px;color:#888;margin-bottom:6px">Sign with finger (touchscreen) or mouse below:</div>' +
+        '<div style="border:2px solid #6366F1;border-radius:10px;overflow:hidden;background:#f8fafc;touch-action:none">' +
+          '<canvas id="_sig_canvas" style="width:100%;display:block;touch-action:none"></canvas>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:12px">' +
+          '<button onclick="clearSignaturePad()" style="flex:1;padding:10px;border-radius:8px;border:1px solid #e5e7eb;background:#f1f5f9;font-size:13px;cursor:pointer">Clear</button>' +
+          '<button onclick="saveSignature()" style="flex:2;padding:10px;border-radius:8px;border:none;background:#6366F1;color:#fff;font-size:13px;font-weight:700;cursor:pointer">Save Signature</button>' +
+        '</div>' +
       '</div>' +
-      (existing ? '<div style="margin-top:10px;text-align:center"><button onclick="doRemoveSig()" style="font-size:11px;color:#e74c3c;background:none;border:none;cursor:pointer;text-decoration:underline">Remove existing signature</button></div>' : '') +
+      '<div id="_sig_tab_cam" style="display:none">' +
+        '<div style="font-size:11px;color:#888;margin-bottom:8px">Place customer thumb on white paper then click Start Camera, position and click Capture, then Save.</div>' +
+        '<div style="position:relative;border-radius:10px;overflow:hidden;background:#111;min-height:180px;display:flex;align-items:center;justify-content:center">' +
+          '<video id="_sig_video" autoplay playsinline style="width:100%;max-height:240px;display:none;border-radius:10px"></video>' +
+          '<canvas id="_sig_photo_canvas" style="display:none"></canvas>' +
+          '<div id="_sig_cam_placeholder" style="color:#aaa;font-size:13px;text-align:center;padding:30px">Camera preview will appear here</div>' +
+        '</div>' +
+        '<div id="_sig_photo_preview" style="display:none;margin-top:8px;text-align:center">' +
+          '<img id="_sig_photo_img" style="max-width:100%;border-radius:8px;border:2px solid #27ae60">' +
+          '<div style="font-size:11px;color:#27ae60;margin-top:4px">Photo captured - Save or Retake</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">' +
+          '<button id="_btn_cam_start" onclick="sigStartCamera()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#0d6efd;color:#fff;font-size:13px;cursor:pointer">Start Camera</button>' +
+          '<button id="_btn_cam_capture" onclick="sigCapturePhoto()" style="flex:1;padding:10px;border-radius:8px;border:none;background:#27ae60;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:none">Capture</button>' +
+          '<button id="_btn_cam_retake" onclick="sigRetakePhoto()" style="flex:1;padding:10px;border-radius:8px;border:1px solid #e5e7eb;background:#f1f5f9;font-size:13px;cursor:pointer;display:none">Retake</button>' +
+          '<button id="_btn_cam_save" onclick="saveCameraPhoto()" style="flex:2;padding:10px;border-radius:8px;border:none;background:#6366F1;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:none">Save Photo</button>' +
+        '</div>' +
+      '</div>' +
+      (existing ? '<div style="margin-top:12px;text-align:center"><button onclick="doRemoveSig()" style="font-size:11px;color:#e74c3c;background:none;border:none;cursor:pointer;text-decoration:underline">Remove existing signature/photo</button></div>' : '') +
     '</div>';
   document.body.appendChild(overlay);
-
-  // Init signature pad — set canvas size after DOM renders
   setTimeout(function() {
     var canvas = document.getElementById('_sig_canvas');
     if (!canvas) return;
-    var w = canvas.offsetWidth || 440;
+    var w = canvas.offsetWidth || 450;
     canvas.width = w * window.devicePixelRatio;
     canvas.height = 160 * window.devicePixelRatio;
     canvas.style.height = '160px';
-    var ctx = canvas.getContext('2d');
-    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-    _sigPad = new SignaturePad(canvas, {
-      minWidth: 1.5,
-      maxWidth: 3,
-      penColor: '#1a1a2e',
-      backgroundColor: 'rgba(248,250,252,0)'
-    });
-    // Load existing signature if any
-    if (existing) {
-      _sigPad.fromDataURL(existing);
-    }
+    canvas.getContext('2d').scale(window.devicePixelRatio, window.devicePixelRatio);
+    _sigPad = new SignaturePad(canvas, { minWidth:1.5, maxWidth:3, penColor:'#1a1a2e', backgroundColor:'rgba(248,250,252,0)' });
+    if (existing && existing.startsWith('data:image')) _sigPad.fromDataURL(existing);
   }, 80);
 }
 
-function clearSignaturePad() {
-  if (_sigPad) _sigPad.clear();
+function sigSwitchTab(tab) {
+  var isDraw = tab === 'draw';
+  document.getElementById('_sig_tab_draw').style.display = isDraw ? '' : 'none';
+  document.getElementById('_sig_tab_cam').style.display = isDraw ? 'none' : '';
+  document.getElementById('_tab_draw').style.cssText = 'flex:1;padding:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:' + (isDraw ? '#6366F1' : '#f1f5f9') + ';color:' + (isDraw ? '#fff' : '#64748b');
+  document.getElementById('_tab_cam').style.cssText = 'flex:1;padding:10px;border:none;font-size:13px;font-weight:600;cursor:pointer;background:' + (!isDraw ? '#6366F1' : '#f1f5f9') + ';color:' + (!isDraw ? '#fff' : '#64748b');
+  if (isDraw) sigStopCamera();
 }
 
+function sigStartCamera() {
+  var video = document.getElementById('_sig_video');
+  var ph = document.getElementById('_sig_cam_placeholder');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Camera not supported on this browser.', 'error'); return;
+  }
+  var tryCamera = function(constraints) {
+    navigator.mediaDevices.getUserMedia(constraints)
+      .then(function(stream) {
+        _sigStream = stream;
+        video.srcObject = stream;
+        video.style.display = 'block';
+        if (ph) ph.style.display = 'none';
+        document.getElementById('_btn_cam_start').style.display = 'none';
+        document.getElementById('_btn_cam_capture').style.display = '';
+      })
+      .catch(function() {
+        if (constraints.video && constraints.video.facingMode) {
+          tryCamera({ video: true, audio: false });
+        } else {
+          showToast('Camera access denied. Allow camera in browser settings.', 'error');
+        }
+      });
+  };
+  tryCamera({ video: { facingMode: 'environment' }, audio: false });
+}
+
+function sigCapturePhoto() {
+  var video = document.getElementById('_sig_video');
+  var canvas = document.getElementById('_sig_photo_canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+  document.getElementById('_sig_photo_img').src = dataUrl;
+  document.getElementById('_sig_photo_preview').style.display = '';
+  video.style.display = 'none';
+  document.getElementById('_btn_cam_capture').style.display = 'none';
+  document.getElementById('_btn_cam_retake').style.display = '';
+  document.getElementById('_btn_cam_save').style.display = '';
+  sigStopCamera();
+}
+
+function sigRetakePhoto() {
+  document.getElementById('_sig_photo_preview').style.display = 'none';
+  document.getElementById('_btn_cam_retake').style.display = 'none';
+  document.getElementById('_btn_cam_save').style.display = 'none';
+  document.getElementById('_btn_cam_start').style.display = '';
+  sigStartCamera();
+}
+
+function sigStopCamera() {
+  if (_sigStream) { _sigStream.getTracks().forEach(function(t){ t.stop(); }); _sigStream = null; }
+  var video = document.getElementById('_sig_video');
+  if (video) video.srcObject = null;
+}
+
+function saveCameraPhoto() {
+  var img = document.getElementById('_sig_photo_img');
+  if (!img || !img.src || img.src === window.location.href) { showToast('No photo captured yet.', 'error'); return; }
+  if (!DB.invoiceSignatures) DB.invoiceSignatures = {};
+  DB.invoiceSignatures[_sigInvNum] = img.src;
+  saveData();
+  showToast('Photo saved for Invoice #' + _sigInvNum, 'success');
+  closeSignatureModal();
+  if (_sigOnDone) _sigOnDone();
+}
+
+function clearSignaturePad() { if (_sigPad) _sigPad.clear(); }
+
 function closeSignatureModal() {
+  sigStopCamera();
   var el = document.getElementById('_sig_overlay');
   if (el) document.body.removeChild(el);
   _sigPad = null;
@@ -9384,7 +9475,7 @@ function closeSignatureModal() {
 
 function doRemoveSig() { removeSignature(_sigInvNum); }
 function removeSignature(invNum) {
-  if (!confirm('Remove the signature for Invoice #' + invNum + '?')) return;
+  if (!confirm('Remove signature/photo for Invoice #' + invNum + '?')) return;
   if (DB.invoiceSignatures) delete DB.invoiceSignatures[invNum];
   saveData();
   closeSignatureModal();
@@ -9393,18 +9484,16 @@ function removeSignature(invNum) {
 }
 
 function saveSignature() {
-  if (!_sigPad || _sigPad.isEmpty()) {
-    showToast('Please sign before saving.', 'error');
-    return;
-  }
+  if (!_sigPad || _sigPad.isEmpty()) { showToast('Please sign in the box first.', 'error'); return; }
   if (!DB.invoiceSignatures) DB.invoiceSignatures = {};
-  // Save as compact PNG data URL
   DB.invoiceSignatures[_sigInvNum] = _sigPad.toDataURL('image/png');
   saveData();
-  showToast('✅ Signature saved for Invoice #' + _sigInvNum, 'success');
+  showToast('Signature saved for Invoice #' + _sigInvNum, 'success');
   closeSignatureModal();
   if (_sigOnDone) _sigOnDone();
 }
+
+
 
 function printInvoice(inv){
   if(!inv)inv=DB._lastInvoice;
