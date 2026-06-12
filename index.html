@@ -512,6 +512,14 @@ tr.inv-group-row td{background:#fffbeb}
 body.theme-bento.dark-mode tr.inv-group-row td{background:rgba(210,153,34,0.08) !important;color:#fbbf24 !important}
 body.theme-bento.dark-mode tr.inv-group-row td a,
 body.theme-bento.dark-mode tr.inv-group-row td b{color:#fbbf24 !important}
+
+/* Pending delivery cards */
+.pd-inv-card{background:var(--white);border:1px solid #fcd34d;border-radius:10px;margin-bottom:12px;overflow:hidden}
+.pd-inv-header{background:var(--warning-bg);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.pd-inv-num{font-weight:700;color:#92400e}
+body.theme-bento.dark-mode .pd-inv-card{background:var(--surface) !important;border-color:rgba(245,158,11,0.3) !important}
+body.theme-bento.dark-mode .pd-inv-header{background:rgba(210,153,34,0.1) !important}
+body.theme-bento.dark-mode .pd-inv-num{color:#fbbf24 !important}
 body.theme-bento .auth-screen{background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 50%,#f0f9ff 100%)}
 body.theme-bento .auth-card{background:#fff;box-shadow:0 20px 40px rgba(0,0,0,.1);border:1px solid #e2e8f0;border-radius:20px}
 body.theme-bento .auth-logo{background:linear-gradient(135deg,#2563EB,#1D4ED8);color:#fff;box-shadow:0 4px 12px rgba(37,99,235,.3)}
@@ -13560,24 +13568,24 @@ function buildPurchases(){
               '<div style="font-size:10px;color:#9ca3af;margin-top:2px">'+iPct+'%</div>'+
             '</div>'+
             '<button onclick="receiveDelivery(\''+d.id+'\')" style="padding:5px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">✓ Receive</button>'+
-            '<button onclick="cancelPendingItem(\''+d.id+'\')" style="padding:5px 8px;background:#fff;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap" title="Mark as cancelled — no stock change">✕ Cancel</button>'+
+            '<button onclick="cancelPendingItem(\''+d.id+'\')" style="padding:5px 8px;background:var(--surface2);color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap" title="Mark as cancelled — no stock change">✕ Cancel</button>'+
           '</div>';
         }).join('');
-        return '<div style="background:var(--white);border:1px solid #fcd34d;border-radius:10px;margin-bottom:12px;overflow:hidden">'+
-          '<div style="background:var(--warning-bg);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+        return '<div class="pd-inv-card">'+
+          '<div class="pd-inv-header">'+
             '<div>'+
-              '<span style="font-weight:700;color:#92400e">Invoice #'+g.invoiceNum+'</span>'+
+              '<span class="pd-inv-num">Invoice #'+g.invoiceNum+'</span>'+
               '<span style="color:#6b7280;font-size:12px;margin-left:10px">'+esc(g.supName)+'</span>'+
               '<span style="color:#9ca3af;font-size:11px;margin-left:10px">'+g.dateOrdered+'</span>'+
             '</div>'+
             '<div style="display:flex;align-items:center;gap:10px">'+
               '<div style="font-size:12px;color:#6b7280">'+totalReceived+'/'+totalOrdered+' received</div>'+
-              '<div style="background:#e5e7eb;border-radius:6px;height:8px;width:80px;overflow:hidden">'+
+              '<div style="background:var(--border);border-radius:6px;height:8px;width:80px;overflow:hidden">'+
                 '<div style="width:'+pct+'%;height:100%;background:'+(pct>=100?'#10b981':'#f59e0b')+';border-radius:6px"></div>'+
               '</div>'+
               '<span style="font-size:12px;font-weight:700;color:#92400e">'+pct+'%</span>'+
-              '<button onclick="receiveAllDeliveries(\''+g.invoiceNum+'\')" style="padding:5px 12px;background:var(--white);color:#16a34a;border:1px solid #16a34a;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">□ Receive all</button>'+
-              '<button onclick="cancelAllPending(\''+g.invoiceNum+'\')" style="padding:5px 10px;background:var(--white);color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer" title="Cancel all — no stock change">✕ Cancel all</button>'+
+              '<button onclick="receiveAllDeliveries(\''+g.invoiceNum+'\')" style="padding:5px 12px;background:var(--surface2);color:#16a34a;border:1px solid #16a34a;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">□ Receive all</button>'+
+              '<button onclick="cancelAllPending(\''+g.invoiceNum+'\')" style="padding:5px 10px;background:var(--surface2);color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer" title="Cancel all — no stock change">✕ Cancel all</button>'+
             '</div>'+
           '</div>'+
           '<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 120px 110px;gap:8px;padding:6px 12px;background:var(--surface2);font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">'+
