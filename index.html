@@ -521,7 +521,7 @@ var DB={
   users:[{id:1,name:'Admin',username:'vibkings',password:'vibkings',role:'admin',permissions:{inventory:true,stockmgmt:true,invedit:true,invdelete:true,warehouse:true,sales:true,purchases:true,finance:true,expenses:true,suppliers:true,customers:true,creditcust:true,reports:true,users:true,settings:true}}],
   inventory:[],sales:[],purchases:[],cashflow:[],suppliers:[],customers:[],creditCustomers:[],
   adjLog:[],stockCounts:[],salesReturns:[],transferLog:[],currentUser:null,pendingDeliveries:[],creditPayments:[],deposits:[],commissionLedger:[],proformas:[],
-  warehouse:[],recycleBin:[],activityLog:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],salesArchive:[],invoiceSignatures:{},
+  warehouse:[],recycleBin:[],activityLog:[],borrows:[],supplierPayments:[],tillSessions:[],supplierDeposits:[],demoSales:[],purchaseQuotations:[],salesArchive:[],invoiceSignatures:{},
   categories:['Electrical Materials','Fancy Wall Brackets','Chandeliers','Home Furniture','Cables & Wires','Switches & Sockets','Lighting','Other'],
   expenseCats:['Transport','Salary','Rent','Utilities','Maintenance','Advertising','Office supplies','Other'],
   invoiceCounter:1,demoInvoiceCounter:1,
@@ -811,7 +811,7 @@ function applyCollection(colName, payload) {
     creditCustomers:'creditCustomers', users:'users', banks:'banks',
     posTerminals:'posTerminals', categories:'categories',
     expenseCats:'expenseCats', transferLog:'transferLog',
-    warehouse:'warehouse', recycleBin:'recycleBin',
+    warehouse:'warehouse', recycleBin:'recycleBin', borrows:'borrows',
     drafts:'drafts', pendingDeliveries:'pendingDeliveries'
   };
   if (map[colName] && Array.isArray(data)) {
@@ -1222,7 +1222,7 @@ function mergeFbSync() {
       'salesReturns','adjLog','commissionLedger','proformas',
       'supplierPayments','tillSessions','supplierDeposits',
       'demoSales','activityLog','recycleBin','drafts',
-      'pendingDeliveries','transferLog','stockCounts','warehouse','salesArchive',
+      'pendingDeliveries','transferLog','stockCounts','warehouse','salesArchive','borrows',
       'customers','inventory','suppliers','banks','posTerminals','categories','expenseCats'
     ];
     allCols.forEach(function(col){
@@ -4027,6 +4027,7 @@ var TABS=[
   {id:'inventory',label:'Inventory',perm:'inventory'},
   {id:'stockmgmt',label:'Stock Mgmt',perm:'stockmgmt'},
   {id:'warehouse',label:'Warehouse',perm:'warehouse'},
+  {id:'borrows',label:'Borrows',perm:'inventory'},
   {id:'sales',label:'Sales',perm:'sales'},
   {id:'purchases',label:'Purchases',perm:'purchases'},
   {id:'proformas',label:'Proforma Invoices',perm:'sales'},
@@ -4420,7 +4421,7 @@ function renderApp(){
   var navHtml='';
   var sections=[
     {label:'Overview',tabs:['overview']},
-    {label:'Operations',tabs:['inventory','stockmgmt','warehouse','sales','purchases','proformas']},
+    {label:'Operations',tabs:['inventory','stockmgmt','warehouse','borrows','sales','purchases','proformas']},
     {label:'Demo',tabs:['demosales']},
     {label:'Finance',tabs:['expenses','finance','creditcust','reports','closing','supplieroverview','customeroverview','inventoryval','pandl','returnstrack','productreport','monthlysummary']},
     {label:'Management',tabs:['suppliers','customers','settings','users','activitylog','recyclebin']},
@@ -5156,7 +5157,7 @@ function filterWhTable(){
 function renderPanel(){
   var scrollY=window.scrollY||window.pageYOffset;
   var p=document.getElementById('panel-root');if(!p)return;
-  var map={overview:buildOverview,inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,sales:buildSales,demosales:buildDemoSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas,productreport:buildProductReport,monthlysummary:(typeof buildMonthlyReport==='function'?buildMonthlyReport:function(){return '<div class="empty">Monthly Summary loading...</div>';})};
+  var map={overview:buildOverview,inventory:buildInventory,stockmgmt:buildStockMgmt,warehouse:buildWarehouse,borrows:buildBorrows,sales:buildSales,demosales:buildDemoSales,purchases:buildPurchases,expenses:buildExpenses,finance:buildFinance,suppliers:buildSuppliers,suppayments:buildSupplierPayments,customers:buildCustomers,creditcust:buildCreditCust,reports:buildReports,closing:buildClosingReport,activitylog:buildActivityLog,recyclebin:buildRecycleBin,settings:buildSettings,users:buildUsers,supplieroverview:buildSupplierOverview,customeroverview:buildCustomerOverview,inventoryval:buildInventoryVal,pandl:buildPandL,returnstrack:buildReturnsTracker,proformas:buildProformas,productreport:buildProductReport,monthlysummary:(typeof buildMonthlyReport==='function'?buildMonthlyReport:function(){return '<div class="empty">Monthly Summary loading...</div>';})};
   var content='';
   try{
     content=(map[activeTab]||function(){return '';})();
@@ -18768,6 +18769,360 @@ function repairOpeningBalanceClearances(){
   }
 }
 /* ── End repair ─────────────────────────────────────────────── */
+
+
+// ══ BORROWS MODULE ══════════════════════════════════════════════════════════
+// Track items borrowed from external shops to complete customer orders.
+// Borrowed items → added to inventory. Returned → deducted. Paid → purchase record.
+
+function buildBorrows() {
+  var borrows = DB.borrows || [];
+  var pending = borrows.filter(function(b){ return b.status === 'pending'; });
+  var returned = borrows.filter(function(b){ return b.status === 'returned'; });
+  var paid = borrows.filter(function(b){ return b.status === 'paid'; });
+
+  var totalBorrowed = pending.length;
+  var totalQtyPending = pending.reduce(function(a,b){ return a + (b.qtyRemaining||b.qty||0); }, 0);
+  var totalValue = pending.reduce(function(a,b){ return a + ((b.qtyRemaining||b.qty||0)*(b.unitCost||0)); }, 0);
+
+  function borrowRow(b, showActions) {
+    var daysAgo = Math.floor((Date.now() - new Date(b.borrowedAt||b.date).getTime()) / 86400000);
+    var overdue = b.status==='pending' && daysAgo > 14;
+    var statusBadge = b.status==='pending'
+      ? '<span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:'+(overdue?'#fee2e2':'#fef3c7')+';color:'+(overdue?'#c0392b':'#92400e')+'">'+(overdue?'⚠️ OVERDUE':'⏳ PENDING')+'</span>'
+      : b.status==='returned'
+        ? '<span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:#d1fae5;color:#065f46">✅ RETURNED</span>'
+        : '<span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:#e0e7ff;color:#3730a3">💳 PAID</span>';
+    var actions = showActions ? (
+      '<button onclick="showReturnBorrowModal(\''+b.id+'\')" style="padding:4px 10px;border-radius:6px;border:none;background:#16a34a;color:#fff;font-size:11px;cursor:pointer;margin-right:4px">↩ Return</button>'+
+      '<button onclick="showPayBorrowModal(\''+b.id+'\')" style="padding:4px 10px;border-radius:6px;border:none;background:#6366F1;color:#fff;font-size:11px;cursor:pointer">💳 Pay</button>'
+    ) : '';
+    return '<tr>'+
+      '<td style="font-size:12px">'+esc(b.source)+'</td>'+
+      '<td style="font-size:12px"><b>'+esc(b.itemName)+'</b></td>'+
+      '<td style="text-align:center;font-size:12px">'+b.qty+'</td>'+
+      '<td style="text-align:center;font-size:12px;color:'+(b.qtyRemaining>0?'#c0392b':'#16a34a')+';font-weight:700">'+(b.qtyRemaining||0)+'</td>'+
+      '<td style="font-size:12px">'+esc(b.customer||'—')+'</td>'+
+      '<td style="font-size:12px">'+esc(b.date)+'</td>'+
+      '<td>'+statusBadge+'</td>'+
+      '<td>'+actions+'</td>'+
+    '</tr>';
+  }
+
+  var pendingRows = pending.length
+    ? pending.map(function(b){ return borrowRow(b, true); }).join('')
+    : '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:20px">No pending borrows</td></tr>';
+
+  var historyRows = returned.concat(paid).length
+    ? returned.concat(paid).sort(function(a,b){ return (b.borrowedAt||0)-(a.borrowedAt||0); }).map(function(b){ return borrowRow(b, false); }).join('')
+    : '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:16px">No history yet</td></tr>';
+
+  // Inventory items for dropdown
+  var invOpts = DB.inventory.map(function(i){
+    return '<option value="'+i.id+'">'+esc(i.name)+' (stock: '+i.qty+')</option>';
+  }).join('');
+
+  return '<div class="section">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">'+
+      '<h2 style="font-size:18px;font-weight:700;margin:0">📦 Borrows</h2>'+
+      '<button onclick="showRecordBorrowModal()" style="padding:9px 18px;border-radius:8px;border:none;background:#6366F1;color:#fff;font-size:13px;font-weight:700;cursor:pointer">+ Record Borrow</button>'+
+    '</div>'+
+
+    // KPI cards
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">'+
+      '<div class="card" style="padding:14px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Pending Returns</div><div style="font-size:24px;font-weight:800;color:'+(totalBorrowed>0?'#c0392b':'#16a34a')+'">'+totalBorrowed+'</div><div style="font-size:11px;color:var(--text3)">Active borrows</div></div>'+
+      '<div class="card" style="padding:14px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Units to Return</div><div style="font-size:24px;font-weight:800;color:'+(totalQtyPending>0?'#e67e22':'#16a34a')+'">'+totalQtyPending+'</div><div style="font-size:11px;color:var(--text3)">Qty still owed</div></div>'+
+      '<div class="card" style="padding:14px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Estimated Value</div><div style="font-size:22px;font-weight:800;color:#1a1a2e">'+fmt(totalValue)+'</div><div style="font-size:11px;color:var(--text3)">Pending borrows</div></div>'+
+    '</div>'+
+
+    // Pending borrows table
+    '<div class="card" style="margin-bottom:16px">'+
+      '<div style="font-size:13px;font-weight:700;margin-bottom:12px">⏳ Pending Returns</div>'+
+      '<div class="tbl-wrap"><table>'+
+        '<thead><tr>'+
+          '<th>Source Shop</th><th>Item</th><th style="text-align:center">Borrowed Qty</th><th style="text-align:center">Still Owed</th><th>For Customer</th><th>Date</th><th>Status</th><th>Actions</th>'+
+        '</tr></thead>'+
+        '<tbody>'+pendingRows+'</tbody>'+
+      '</table></div>'+
+    '</div>'+
+
+    // History
+    '<div class="card">'+
+      '<div style="font-size:13px;font-weight:700;margin-bottom:12px">📋 History (Returned & Paid)</div>'+
+      '<div class="tbl-wrap"><table>'+
+        '<thead><tr>'+
+          '<th>Source Shop</th><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:center">Remaining</th><th>For Customer</th><th>Date</th><th>Status</th><th></th>'+
+        '</tr></thead>'+
+        '<tbody>'+historyRows+'</tbody>'+
+      '</table></div>'+
+    '</div>'+
+  '</div>';
+}
+
+// ── Record Borrow Modal ──────────────────────────────────────────────────────
+function showRecordBorrowModal() {
+  var invOpts = '<option value="">— Select item —</option>' +
+    DB.inventory.map(function(i){
+      return '<option value="'+i.id+'">'+esc(i.name)+' (in stock: '+i.qty+')</option>';
+    }).join('');
+  var custOpts = '<option value="">— Optional: link to customer —</option>' +
+    DB.customers.map(function(c){
+      return '<option value="'+esc(c.name)+'">'+esc(c.name)+'</option>';
+    }).join('');
+
+  var overlay = document.createElement('div');
+  overlay.id = '_borrow_overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML =
+    '<div style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;width:100%;max-width:480px;box-shadow:0 8px 40px rgba(0,0,0,0.2)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+        '<div style="font-size:16px;font-weight:700">📦 Record Borrow</div>'+
+        '<button onclick="closeBorrowModal()" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>'+
+      '</div>'+
+      '<div class="form-group"><label>Source Shop (who you borrowed from)</label><input type="text" id="_b_source" placeholder="e.g. Alaba Shop, ABC Stores" style="width:100%"></div>'+
+      '<div class="form-group"><label>Item Borrowed</label><select id="_b_item" onchange="onBorrowItemChange()" style="width:100%">'+invOpts+'</select></div>'+
+      '<div style="display:flex;gap:12px">'+
+        '<div class="form-group" style="flex:1"><label>Qty Borrowed</label><input type="number" id="_b_qty" min="1" placeholder="0" style="width:100%"></div>'+
+        '<div class="form-group" style="flex:1"><label>Unit Cost (₦)</label><input type="number" id="_b_cost" min="0" placeholder="Cost price" style="width:100%"></div>'+
+      '</div>'+
+      '<div class="form-group"><label>For Customer (optional)</label><select id="_b_cust" style="width:100%">'+custOpts+'</select></div>'+
+      '<div class="form-group"><label>Note (optional)</label><input type="text" id="_b_note" placeholder="e.g. To complete order for invoice #..." style="width:100%"></div>'+
+      '<div id="_b_stock_note" style="font-size:11px;color:#6366F1;margin-bottom:10px;display:none"></div>'+
+      '<button onclick="saveBorrow()" style="width:100%;padding:12px;border-radius:10px;border:none;background:#6366F1;color:#fff;font-size:14px;font-weight:700;cursor:pointer">✅ Record & Add to Inventory</button>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function onBorrowItemChange() {
+  var sel = document.getElementById('_b_item');
+  var note = document.getElementById('_b_stock_note');
+  var costInput = document.getElementById('_b_cost');
+  if(!sel || !sel.value) return;
+  var item = DB.inventory.find(function(i){ return String(i.id)===String(sel.value); });
+  if(item) {
+    note.style.display = '';
+    note.textContent = 'Current stock: '+item.qty+' units. Borrowed qty will be added to this.';
+    if(item.cost && !costInput.value) costInput.value = item.cost;
+  }
+}
+
+function saveBorrow() {
+  var source = document.getElementById('_b_source').value.trim();
+  var itemId = document.getElementById('_b_item').value;
+  var qty = parseInt(document.getElementById('_b_qty').value)||0;
+  var cost = parseFloat(document.getElementById('_b_cost').value)||0;
+  var customer = document.getElementById('_b_cust').value;
+  var note = document.getElementById('_b_note').value.trim();
+
+  if(!source){ showToast('Enter the source shop name.','error'); return; }
+  if(!itemId){ showToast('Select an item.','error'); return; }
+  if(qty<=0){ showToast('Enter a valid quantity.','error'); return; }
+
+  var item = DB.inventory.find(function(i){ return String(i.id)===String(itemId); });
+  if(!item){ showToast('Item not found.','error'); return; }
+
+  var borrow = {
+    id: uid(),
+    source: source,
+    itemId: itemId,
+    itemName: item.name,
+    qty: qty,
+    qtyRemaining: qty,
+    unitCost: cost,
+    customer: customer||'',
+    note: note,
+    date: new Date().toLocaleDateString(),
+    borrowedAt: Date.now(),
+    status: 'pending',
+    _updatedAt: Date.now()
+  };
+
+  if(!DB.borrows) DB.borrows = [];
+  DB.borrows.push(borrow);
+
+  // Add to inventory
+  item.qty = (item.qty||0) + qty;
+  item._updatedAt = Date.now();
+
+  saveData();
+  closeBorrowModal();
+  logActivity('Borrow recorded', source+' — '+item.name+' x'+qty+(customer?' for '+customer:''), DB.currentUser?DB.currentUser.name:'Admin');
+  showToast('✅ Borrowed '+qty+'x '+item.name+' from '+source+'. Added to inventory.','success');
+  renderApp();
+}
+
+function closeBorrowModal() {
+  var el = document.getElementById('_borrow_overlay');
+  if(el) document.body.removeChild(el);
+}
+
+// ── Return Borrow Modal ──────────────────────────────────────────────────────
+function showReturnBorrowModal(borrowId) {
+  var b = (DB.borrows||[]).find(function(x){ return x.id===borrowId; });
+  if(!b){ showToast('Borrow record not found.','error'); return; }
+
+  var overlay = document.createElement('div');
+  overlay.id = '_borrow_return_overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML =
+    '<div style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;width:100%;max-width:420px;box-shadow:0 8px 40px rgba(0,0,0,0.2)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+        '<div style="font-size:16px;font-weight:700">↩ Return Borrowed Items</div>'+
+        '<button onclick="document.getElementById(\'_borrow_return_overlay\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>'+
+      '</div>'+
+      '<div style="background:var(--surface2,#f8fafc);border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px">'+
+        '<b>'+esc(b.itemName)+'</b><br>'+
+        'Borrowed from: <b>'+esc(b.source)+'</b><br>'+
+        'Still owed: <b style="color:#c0392b">'+b.qtyRemaining+' units</b>'+
+      '</div>'+
+      '<div class="form-group"><label>Qty Returning Now</label><input type="number" id="_br_qty" min="1" max="'+b.qtyRemaining+'" value="'+b.qtyRemaining+'" style="width:100%"></div>'+
+      '<div class="form-group"><label>Note (optional)</label><input type="text" id="_br_note" placeholder="e.g. Returned to shop on delivery" style="width:100%"></div>'+
+      '<button onclick="processReturn(\''+borrowId+'\')" style="width:100%;padding:12px;border-radius:10px;border:none;background:#16a34a;color:#fff;font-size:14px;font-weight:700;cursor:pointer">✅ Confirm Return & Deduct from Inventory</button>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function processReturn(borrowId) {
+  var b = (DB.borrows||[]).find(function(x){ return x.id===borrowId; });
+  if(!b) return;
+  var qty = parseInt(document.getElementById('_br_qty').value)||0;
+  var note = document.getElementById('_br_note').value.trim();
+
+  if(qty<=0||qty>b.qtyRemaining){ showToast('Invalid return quantity.','error'); return; }
+
+  var item = DB.inventory.find(function(i){ return String(i.id)===String(b.itemId); });
+  if(!item){ showToast('Item not found in inventory.','error'); return; }
+  if(item.qty < qty){
+    if(!confirm('Warning: current stock ('+item.qty+') is less than return qty ('+qty+'). Inventory will go to '+(item.qty-qty)+'. Continue?')) return;
+  }
+
+  // Deduct from inventory
+  item.qty = Math.max(0, (item.qty||0) - qty);
+  item._updatedAt = Date.now();
+
+  b.qtyRemaining = b.qtyRemaining - qty;
+  b.returnNote = note;
+  b.returnedAt = Date.now();
+  b._updatedAt = Date.now();
+  if(b.qtyRemaining <= 0) b.status = 'returned';
+
+  if(!b.returnHistory) b.returnHistory = [];
+  b.returnHistory.push({ qty:qty, date:new Date().toLocaleDateString(), note:note, by:DB.currentUser?DB.currentUser.name:'Admin' });
+
+  saveData();
+  document.getElementById('_borrow_return_overlay').remove();
+  logActivity('Borrow returned', b.itemName+' x'+qty+' returned to '+b.source, DB.currentUser?DB.currentUser.name:'Admin');
+  showToast('✅ Returned '+qty+'x '+b.itemName+' to '+b.source+'. Inventory updated.','success');
+  renderApp();
+}
+
+// ── Pay for Borrow Modal ─────────────────────────────────────────────────────
+function showPayBorrowModal(borrowId) {
+  var b = (DB.borrows||[]).find(function(x){ return x.id===borrowId; });
+  if(!b) return;
+  var totalCost = (b.qtyRemaining||0) * (b.unitCost||0);
+  var supOpts = '<option value="">— No supplier (ad-hoc) —</option>' +
+    DB.suppliers.map(function(s){ return '<option value="'+s.id+'">'+esc(s.name)+'</option>'; }).join('');
+
+  var overlay = document.createElement('div');
+  overlay.id = '_borrow_pay_overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML =
+    '<div style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;width:100%;max-width:440px;box-shadow:0 8px 40px rgba(0,0,0,0.2)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+        '<div style="font-size:16px;font-weight:700">💳 Pay for Borrowed Items</div>'+
+        '<button onclick="document.getElementById(\'_borrow_pay_overlay\').remove()" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>'+
+      '</div>'+
+      '<div style="background:#fef3c7;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px">'+
+        '<b>'+esc(b.itemName)+'</b> × '+b.qtyRemaining+' units<br>'+
+        'Borrowed from: <b>'+esc(b.source)+'</b><br>'+
+        'Estimated total: <b style="color:#92400e">'+fmt(totalCost)+'</b>'+
+        '<div style="font-size:11px;color:#92400e;margin-top:4px">ℹ️ Recorded as a purchase. Cost price in inventory will NOT be changed.</div>'+
+      '</div>'+
+      '<div class="form-group"><label>Amount to Pay (₦)</label><input type="number" id="_bp_amt" value="'+totalCost+'" min="0" style="width:100%"></div>'+
+      '<div class="form-group"><label>Payment Mode</label>'+
+        '<select id="_bp_mode" style="width:100%">'+
+          '<option>Cash</option><option>Transfer (Monie point (electrical))</option><option>Transfer (Wema Bank)</option><option>POS</option>'+
+        '</select>'+
+      '</div>'+
+      '<div class="form-group"><label>Link to Supplier (optional)</label><select id="_bp_sup" style="width:100%">'+supOpts+'</select></div>'+
+      '<div class="form-group"><label>Note</label><input type="text" id="_bp_note" value="Payment for borrowed '+esc(b.itemName)+' from '+esc(b.source)+'" style="width:100%"></div>'+
+      '<button onclick="processBorrowPayment(\''+borrowId+'\')" style="width:100%;padding:12px;border-radius:10px;border:none;background:#6366F1;color:#fff;font-size:14px;font-weight:700;cursor:pointer">💳 Pay & Close Borrow</button>'+
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function processBorrowPayment(borrowId) {
+  var b = (DB.borrows||[]).find(function(x){ return x.id===borrowId; });
+  if(!b) return;
+  var amt = parseFloat(document.getElementById('_bp_amt').value)||0;
+  var mode = document.getElementById('_bp_mode').value;
+  var supId = document.getElementById('_bp_sup').value;
+  var note = document.getElementById('_bp_note').value.trim();
+
+  if(amt<=0){ showToast('Enter a valid amount.','error'); return; }
+
+  var date = new Date().toLocaleDateString();
+  var month = (function(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); })();
+
+  // Record as a purchase entry (does NOT change cost price)
+  var invNum = 'BRW-'+Date.now().toString().slice(-6);
+  DB.purchases.push({
+    id: uid(),
+    invoiceNum: invNum,
+    supId: supId||null,
+    supName: b.source,
+    date: date, month: month,
+    grandTotal: amt,
+    payType: 'cash',
+    cashPaid: amt,
+    creditAmt: 0,
+    partAmt: amt,
+    note: note + ' [Borrow payment — item cost price unchanged]',
+    items: [{name:b.itemName, qty:b.qtyRemaining, cost:b.unitCost||0, total:amt}],
+    by: DB.currentUser?DB.currentUser.name:'Admin',
+    isBorrowPayment: true,
+    _updatedAt: Date.now()
+  });
+
+  // Cashflow out
+  DB.cashflow.push({
+    id: uid(), type:'out', cat:'Purchases',
+    desc: 'Borrow payment — '+b.itemName+' from '+b.source+' ('+invNum+')',
+    amount: amt, payMode: mode.toLowerCase().indexOf('transfer')>-1?'transfer':mode.toLowerCase().indexOf('pos')>-1?'pos':'cash',
+    date: date, month: month, _updatedAt: Date.now()
+  });
+
+  // If linked to supplier, update their owed (add then record payment)
+  if(supId) {
+    var sup = DB.suppliers.find(function(s){ return String(s.id)===String(supId); });
+    if(sup) {
+      DB.supplierPayments.push({
+        id:uid(), supId:supId, supName:sup.name,
+        amount:amt, mode:mode, note:note,
+        date:date, month:month,
+        by:DB.currentUser?DB.currentUser.name:'Admin',
+        _updatedAt:Date.now()
+      });
+    }
+  }
+
+  // Close borrow
+  b.status = 'paid';
+  b.paidAt = Date.now();
+  b.paidAmt = amt;
+  b.payNote = note;
+  b.qtyRemaining = 0;
+  b._updatedAt = Date.now();
+
+  saveData();
+  document.getElementById('_borrow_pay_overlay').remove();
+  logActivity('Borrow paid', b.itemName+' x'+b.qty+' — '+fmt(amt)+' paid to '+b.source, DB.currentUser?DB.currentUser.name:'Admin');
+  showToast('✅ Payment of '+fmt(amt)+' recorded. Borrow closed.','success');
+  renderApp();
+}
+// ══ END BORROWS MODULE ═══════════════════════════════════════════════════════
+
 
 window.onload=function(){
   applyDarkMode();
