@@ -667,3 +667,18 @@ body.theme-bento.dark-mode [style*="border:2px solid #fde68a"]{border-color:#4a3
 /* Buttons with white background */
 body.theme-bento.dark-mode button[style*="background:#fff"],
 body.theme-bento.dark-mode button[style*="background:white"]{background:#252837 !important;color:var(--text2) !important;border-color:#2a2d3a !important}
+
+
+/* ── Sync Alert Banner ──────────────────────────────────────────────────────── */
+#_sync_alert_banner {
+  animation: syncBannerIn 0.3s ease-out;
+}
+@keyframes syncBannerIn {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+/* Push main content down when banner is visible */
+body:has(#_sync_alert_banner) .main,
+body:has(#_sync_alert_banner) .shell {
+  padding-top: 54px;
+}
