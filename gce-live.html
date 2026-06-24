@@ -301,6 +301,8 @@
   <div class="tabs">
     <div class="tab active" data-tab="sales">Sales</div>
     <div class="tab" data-tab="expenses">Expenses</div>
+    <div class="tab" data-tab="custpayments">Customer Payments</div>
+    <div class="tab" data-tab="suppayments">Supplier Payments</div>
     <div class="tab" data-tab="closing">Daily Closing</div>
     <div class="tab" data-tab="customers">Customers</div>
     <div class="tab" data-tab="suppliers">Suppliers</div>
@@ -317,6 +319,20 @@
       <div class="metric owed"><div class="label">Total Expenses — Selected Date</div><div class="value" id="mExpenses">—</div></div>
     </div>
     <div class="list-card" id="listExpenses"></div>
+  </div>
+
+  <div class="panel" id="panel-custpayments">
+    <div class="metrics" style="grid-template-columns:1fr;margin-bottom:14px;">
+      <div class="metric cash"><div class="label">Total Received from Customers — Selected Date</div><div class="value" id="mCustPay">—</div></div>
+    </div>
+    <div class="list-card" id="listCustPayments"></div>
+  </div>
+
+  <div class="panel" id="panel-suppayments">
+    <div class="metrics" style="grid-template-columns:1fr;margin-bottom:14px;">
+      <div class="metric owed"><div class="label">Total Paid to Suppliers — Selected Date</div><div class="value" id="mSupPay">—</div></div>
+    </div>
+    <div class="list-card" id="listSupPayments"></div>
   </div>
 
   <div class="panel" id="panel-closing">
@@ -351,6 +367,7 @@ var REST_BASE = "https://firestore.googleapis.com/v1/projects/" + GCE_PROJECT_ID
 var KEY_QS = "?key=" + GCE_API_KEY;
 
 var STATE = { customers: [], suppliers: [], sales: [], inventory: [], cashflow: [], tillSessions: [],
+  creditPayments: [], supplierPayments: [],
   loadedMonths: {}, selectedDate: null, lastLoad: null, loading: false };
 
 function todayISO(){
@@ -636,6 +653,44 @@ function closingRow(k, v, total){
   return '<div class="closing-row' + (total?' total':'') + '"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
 }
 
+function renderCustPayments(){
+  var dayStr = isoToMDY(STATE.selectedDate);
+  var list = STATE.creditPayments.filter(function(p){ return p.date === dayStr; });
+  var total = list.reduce(function(s,p){ return s + (Number(p.amount)||0); }, 0);
+  document.getElementById("mCustPay").textContent = fmt(total);
+
+  var container = document.getElementById("listCustPayments");
+  if (!list.length){
+    container.innerHTML = '<div class="empty"><div class="big">📭</div>No customer payments on this date.</div>';
+    return;
+  }
+  container.innerHTML = list.map(function(p){
+    return '<div class="row"><div class="who">' +
+      '<div class="name">' + escapeHtml(p.custName || "Unknown") + '</div>' +
+      '<div class="meta">' + escapeHtml(p.note || p.payMode || "") + '</div>' +
+      '</div><div class="amt" style="color:#2f7a4f">' + fmt(p.amount) + '</div></div>';
+  }).join("");
+}
+
+function renderSupPayments(){
+  var dayStr = isoToMDY(STATE.selectedDate);
+  var list = STATE.supplierPayments.filter(function(p){ return p.date === dayStr; });
+  var total = list.reduce(function(s,p){ return s + (Number(p.amount)||0); }, 0);
+  document.getElementById("mSupPay").textContent = fmt(total);
+
+  var container = document.getElementById("listSupPayments");
+  if (!list.length){
+    container.innerHTML = '<div class="empty"><div class="big">📭</div>No supplier payments on this date.</div>';
+    return;
+  }
+  container.innerHTML = list.map(function(p){
+    return '<div class="row"><div class="who">' +
+      '<div class="name">' + escapeHtml(p.supName || "Unknown") + '</div>' +
+      '<div class="meta">' + escapeHtml(p.note || p.mode || "") + '</div>' +
+      '</div><div class="amt owed">' + fmt(p.amount) + '</div></div>';
+  }).join("");
+}
+
 function ensureMonthLoaded(iso, cb){
   var mk = isoToMonthKey(iso);
   if (STATE.loadedMonths[mk]) return cb();
@@ -654,6 +709,8 @@ function setDate(iso){
   ensureMonthLoaded(iso, function(){
     renderSales(document.getElementById("searchSales").value);
     renderExpenses();
+    renderCustPayments();
+    renderSupPayments();
     renderClosing();
   });
 }
@@ -730,6 +787,8 @@ function renderAll(){
   renderMetrics();
   renderSales(document.getElementById("searchSales").value);
   renderExpenses();
+  renderCustPayments();
+  renderSupPayments();
   renderClosing();
   renderCustomers(document.getElementById("searchCustomers").value);
   renderSuppliers(document.getElementById("searchSuppliers").value);
@@ -777,7 +836,7 @@ function loadAll(){
   showError(null);
 
   var failures = [];
-  var pending = 4;
+  var pending = 2;
   function done(){
     pending--;
     if (pending > 0) return;
@@ -802,7 +861,13 @@ function loadAll(){
           if (err4) failures.push("expenses"); else STATE.cashflow = arr4;
           getCollectionArray("tillSessions", function(err5, arr5){
             if (err5) failures.push("till sessions"); else STATE.tillSessions = arr5;
-            done();
+            getCollectionArray("creditPayments", function(err6, arr6){
+              if (err6) failures.push("customer payments"); else STATE.creditPayments = arr6;
+              getCollectionArray("supplierPayments", function(err7, arr7){
+                if (err7) failures.push("supplier payments"); else STATE.supplierPayments = arr7;
+                done();
+              });
+            });
           });
         });
       });
