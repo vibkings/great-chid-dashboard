@@ -270,6 +270,7 @@
     <div class="tab active" data-tab="sales">Recent Sales</div>
     <div class="tab" data-tab="customers">Customers</div>
     <div class="tab" data-tab="suppliers">Suppliers</div>
+    <div class="tab" data-tab="stock">Stock Alerts</div>
   </div>
 
   <div class="panel active" id="panel-sales">
@@ -287,6 +288,14 @@
     <div class="list-card" id="listSuppliers"></div>
   </div>
 
+  <div class="panel" id="panel-stock">
+    <div class="search-row"><input type="text" id="searchStock" placeholder="Search items…"></div>
+    <div class="section-title">🔴 Out of Stock</div>
+    <div class="list-card" id="listOutOfStock"></div>
+    <div class="section-title">🟡 Low Stock</div>
+    <div class="list-card" id="listLowStock"></div>
+  </div>
+
   <div class="footer-note">Read-only snapshot from Firestore — viewing this can never change or affect your live data.</div>
 </main>
 
@@ -296,7 +305,7 @@ var GCE_API_KEY = "AIzaSyDtSPRgy3EVf9SdPGUj1fd2xxfOpYjzRvU";
 var REST_BASE = "https://firestore.googleapis.com/v1/projects/" + GCE_PROJECT_ID + "/databases/(default)/documents/gce_business/";
 var KEY_QS = "?key=" + GCE_API_KEY;
 
-var STATE = { customers: [], suppliers: [], sales: [], lastLoad: null, loading: false };
+var STATE = { customers: [], suppliers: [], sales: [], inventory: [], lastLoad: null, loading: false };
 
 function fmt(n){
   n = Number(n) || 0;
@@ -538,15 +547,42 @@ function renderSuppliers(filterText){
   }).join("");
 }
 
+function renderStock(filterText){
+  var outBox = document.getElementById("listOutOfStock");
+  var lowBox = document.getElementById("listLowStock");
+  var items = STATE.inventory;
+  if (filterText){
+    var q = filterText.toLowerCase();
+    items = items.filter(function(i){ return (i.name||"").toLowerCase().indexOf(q) > -1; });
+  }
+  var out = items.filter(function(i){ return (Number(i.qty)||0) <= 0; }).sort(function(a,b){ return (a.name||"").localeCompare(b.name||""); });
+  var low = items.filter(function(i){
+    var qty = Number(i.qty)||0, min = Number(i.minQty)||0;
+    return qty > 0 && min > 0 && qty <= min;
+  }).sort(function(a,b){ return (Number(a.qty)||0) - (Number(b.qty)||0); });
+
+  outBox.innerHTML = out.length ? out.map(function(i){
+    return '<div class="row"><div class="who"><div class="name">' + escapeHtml(i.name) + '</div></div>' +
+      '<div class="amt owed">0 in stock</div></div>';
+  }).join("") : '<div class="empty">✓ Nothing out of stock.</div>';
+
+  lowBox.innerHTML = low.length ? low.map(function(i){
+    return '<div class="row"><div class="who"><div class="name">' + escapeHtml(i.name) + '</div>' +
+      '<div class="meta">Min qty: ' + (Number(i.minQty)||0) + '</div></div>' +
+      '<div class="amt" style="color:#a87a1e">' + (Number(i.qty)||0) + ' left</div></div>';
+  }).join("") : '<div class="empty">✓ Nothing running low.</div>';
+}
+
 function renderAll(){
   renderMetrics();
   renderSales(document.getElementById("searchSales").value);
   renderCustomers(document.getElementById("searchCustomers").value);
   renderSuppliers(document.getElementById("searchSuppliers").value);
+  renderStock(document.getElementById("searchStock").value);
 }
 
 function showSkeleton(){
-  ["listSales","listCustomers","listSuppliers"].forEach(function(id){
+  ["listSales","listCustomers","listSuppliers","listOutOfStock","listLowStock"].forEach(function(id){
     document.getElementById(id).innerHTML = [1,2,3,4,5].map(function(){
       return '<div class="skeleton-row"><div class="skeleton" style="width:60%;margin-bottom:8px;"></div><div class="skeleton" style="width:35%;height:10px;"></div></div>';
     }).join("");
@@ -586,7 +622,7 @@ function loadAll(){
   showError(null);
 
   var failures = [];
-  var pending = 2;
+  var pending = 3;
   function done(){
     pending--;
     if (pending > 0) return;
@@ -605,7 +641,10 @@ function loadAll(){
     if (err) failures.push("customers"); else STATE.customers = arr;
     getCollectionArray("suppliers", function(err2, arr2){
       if (err2) failures.push("suppliers"); else STATE.suppliers = arr2;
-      done();
+      getCollectionArray("inventory", function(err3, arr3){
+        if (err3) failures.push("inventory"); else STATE.inventory = arr3;
+        done();
+      });
     });
   });
 
@@ -627,6 +666,7 @@ document.querySelectorAll(".tab").forEach(function(tab){
 document.getElementById("searchSales").addEventListener("input", function(){ renderSales(this.value); });
 document.getElementById("searchCustomers").addEventListener("input", function(){ renderCustomers(this.value); });
 document.getElementById("searchSuppliers").addEventListener("input", function(){ renderSuppliers(this.value); });
+document.getElementById("searchStock").addEventListener("input", function(){ renderStock(this.value); });
 
 loadAll();
 </script>
