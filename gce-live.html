@@ -307,6 +307,7 @@
     <div class="tab" data-tab="customers">Customers</div>
     <div class="tab" data-tab="suppliers">Suppliers</div>
     <div class="tab" data-tab="stock">Stock Alerts</div>
+    <div class="tab" data-tab="debug">🔧 Debug</div>
   </div>
 
   <div class="panel active" id="panel-sales">
@@ -355,6 +356,17 @@
     <div class="list-card" id="listOutOfStock"></div>
     <div class="section-title">🟡 Low Stock</div>
     <div class="list-card" id="listLowStock"></div>
+  </div>
+
+  <div class="panel" id="panel-debug">
+    <div class="search-row" style="gap:10px;">
+      <button class="today-btn" onclick="runChunkCheck()">🔍 Check sales chunks for a month</button>
+      <input type="month" id="debugMonth">
+    </div>
+    <div class="list-card" id="debugOutput" style="padding:16px;font-family:monospace;font-size:12.5px;white-space:pre-wrap;"></div>
+    <div class="section-title">Raw data (for sending to support)</div>
+    <button class="today-btn" onclick="copyRawData()" style="margin-bottom:10px;">📋 Copy all loaded data as text</button>
+    <div id="copyStatus" style="font-size:12px;color:var(--ink-soft);"></div>
   </div>
 
   <div class="footer-note">Read-only snapshot from Firestore — viewing this can never change or affect your live data.</div>
@@ -893,6 +905,56 @@ document.querySelectorAll(".tab").forEach(function(tab){
     document.getElementById("panel-" + tab.dataset.tab).classList.add("active");
   });
 });
+function runChunkCheck(){
+  var monthVal = document.getElementById("debugMonth").value; // "YYYY-MM"
+  if (!monthVal){ document.getElementById("debugOutput").textContent = "Pick a month first."; return; }
+  var out = document.getElementById("debugOutput");
+  out.textContent = "Checking " + monthVal + "…\n";
+  var idx = 0, totalRecords = 0, lines = [];
+  function checkChunk(){
+    var docName = idx === 0 ? ("sales_" + monthVal.replace("-","_")) : ("sales_" + monthVal.replace("-","_") + "_" + idx);
+    getDoc(docName, function(err, fields){
+      if (err){
+        lines.push(docName + " -> ERROR: " + JSON.stringify(err));
+        out.textContent = lines.join("\n");
+        return;
+      }
+      if (!fields){
+        lines.push(docName + " -> does not exist (404). Stopping here.");
+        lines.push("\nTOTAL across all chunks: " + totalRecords + " records.");
+        out.textContent = lines.join("\n");
+        return;
+      }
+      var data = fields.data !== undefined ? fields.data : fields;
+      var arr = Array.isArray(data) ? data : [];
+      totalRecords += arr.length;
+      var invoices = arr.map(function(r){ return r.invoiceNum; }).filter(Boolean);
+      var dates = arr.map(function(r){ return r.date; }).filter(Boolean);
+      lines.push(docName + " -> EXISTS, " + arr.length + " records. Invoice range: " +
+        (invoices.length ? (invoices[0] + " … " + invoices[invoices.length-1]) : "n/a") +
+        " | Date range: " + (dates.length ? (dates[0] + " … " + dates[dates.length-1]) : "n/a"));
+      out.textContent = lines.join("\n");
+      idx++;
+      checkChunk();
+    }, 10000);
+  }
+  checkChunk();
+}
+
+function copyRawData(){
+  var statusEl = document.getElementById("copyStatus");
+  var text = JSON.stringify(STATE, null, 2);
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){
+      statusEl.textContent = "✅ Copied " + (text.length/1024).toFixed(0) + "KB to clipboard. Paste it into a message.";
+    }, function(){
+      statusEl.textContent = "❌ Clipboard copy failed. Try the chunk check above instead, or screenshot the output.";
+    });
+  } else {
+    statusEl.textContent = "❌ Clipboard not available on this browser. Try the chunk check above instead.";
+  }
+}
+
 document.getElementById("searchSales").addEventListener("input", function(){ renderSales(this.value); });
 document.getElementById("searchCustomers").addEventListener("input", function(){ renderCustomers(this.value); });
 document.getElementById("searchSuppliers").addEventListener("input", function(){ renderSuppliers(this.value); });
@@ -901,6 +963,7 @@ document.getElementById("dateSel").addEventListener("change", function(){ setDat
 
 STATE.selectedDate = todayISO();
 document.getElementById("dateSel").value = STATE.selectedDate;
+document.getElementById("debugMonth").value = todayISO().slice(0,7);
 loadAll();
 </script>
 </body>
