@@ -208,6 +208,32 @@
   }
   @keyframes shimmer{0%{background-position:100% 0;}100%{background-position:0 0;}}
 
+  .date-row{
+    display:flex;align-items:center;gap:10px;margin-bottom:16px;
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:10px 14px;flex-wrap:wrap;
+  }
+  .date-row label{font-size:12.5px;font-weight:700;color:var(--ink-soft);}
+  .date-row input[type="date"]{
+    border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:14px;
+    background:var(--paper);
+  }
+  .today-btn{
+    background:none;border:1px solid var(--gold);color:var(--gold);
+    font-weight:700;font-size:12.5px;padding:7px 12px;border-radius:8px;cursor:pointer;
+  }
+  .today-btn:hover{background:var(--gold-soft);}
+  .closing-row{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:14px 18px;border-bottom:1px solid var(--line);
+  }
+  .closing-row:last-child{border-bottom:none;}
+  .closing-row .k{font-size:13.5px;color:var(--ink-soft);font-weight:600;}
+  .closing-row .v{font-size:16px;font-weight:800;}
+  .closing-row.total{background:var(--paper);}
+  .closing-row.variance.bad .v{color:var(--red);}
+  .closing-row.variance.good .v{color:var(--green);}
+
   .section-title{
     font-size:13px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;
     letter-spacing:.5px;margin:22px 0 10px;
@@ -266,8 +292,16 @@
     </div>
   </div>
 
+  <div class="date-row">
+    <label for="dateSel">Viewing date</label>
+    <input type="date" id="dateSel">
+    <button class="today-btn" id="todayBtn" onclick="setDate(todayISO())">Today</button>
+  </div>
+
   <div class="tabs">
-    <div class="tab active" data-tab="sales">Recent Sales</div>
+    <div class="tab active" data-tab="sales">Sales</div>
+    <div class="tab" data-tab="expenses">Expenses</div>
+    <div class="tab" data-tab="closing">Daily Closing</div>
     <div class="tab" data-tab="customers">Customers</div>
     <div class="tab" data-tab="suppliers">Suppliers</div>
     <div class="tab" data-tab="stock">Stock Alerts</div>
@@ -276,6 +310,17 @@
   <div class="panel active" id="panel-sales">
     <div class="search-row"><input type="text" id="searchSales" placeholder="Search by invoice #, customer, or item…"></div>
     <div class="list-card" id="listSales"></div>
+  </div>
+
+  <div class="panel" id="panel-expenses">
+    <div class="metrics" style="grid-template-columns:1fr;margin-bottom:14px;">
+      <div class="metric owed"><div class="label">Total Expenses — Selected Date</div><div class="value" id="mExpenses">—</div></div>
+    </div>
+    <div class="list-card" id="listExpenses"></div>
+  </div>
+
+  <div class="panel" id="panel-closing">
+    <div class="list-card" id="closingCard" style="padding:4px;"></div>
   </div>
 
   <div class="panel" id="panel-customers">
@@ -305,7 +350,20 @@ var GCE_API_KEY = "AIzaSyDtSPRgy3EVf9SdPGUj1fd2xxfOpYjzRvU";
 var REST_BASE = "https://firestore.googleapis.com/v1/projects/" + GCE_PROJECT_ID + "/databases/(default)/documents/gce_business/";
 var KEY_QS = "?key=" + GCE_API_KEY;
 
-var STATE = { customers: [], suppliers: [], sales: [], inventory: [], lastLoad: null, loading: false };
+var STATE = { customers: [], suppliers: [], sales: [], inventory: [], cashflow: [], tillSessions: [],
+  loadedMonths: {}, selectedDate: null, lastLoad: null, loading: false };
+
+function todayISO(){
+  var d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function isoToMDY(iso){
+  var p = iso.split("-");
+  return parseInt(p[1],10) + "/" + parseInt(p[2],10) + "/" + p[0];
+}
+function isoToMonthKey(iso){
+  return iso.slice(0,7);
+}
 
 function fmt(n){
   n = Number(n) || 0;
@@ -425,6 +483,10 @@ function isToday(d){
   if (parts.length !== 3) return false;
   return parseInt(parts[0],10) === now.getMonth()+1 && parseInt(parts[1],10) === now.getDate() && parseInt(parts[2],10) === now.getFullYear();
 }
+function dateMatches(dateStr, iso){
+  if (!dateStr || !iso) return false;
+  return dateStr === isoToMDY(iso);
+}
 
 // ---------- Rendering ----------
 function escapeHtml(s){
@@ -469,16 +531,18 @@ function paymentBadge(p){
 
 function renderSales(filterText){
   var container = document.getElementById("listSales");
-  // group sale line-items by invoiceNum for a clean per-invoice list
+  var dayStr = isoToMDY(STATE.selectedDate);
+  var daySales = STATE.sales.filter(function(s){ return s.date === dayStr; });
+
   var groups = {};
   var order = [];
-  STATE.sales.forEach(function(s){
+  daySales.forEach(function(s){
     var inv = s.invoiceNum || s.id;
-    if (!groups[inv]){ groups[inv] = {invoiceNum: inv, custName: s.custName, total:0, items:[], payment:s.payment, date:s.date, ts: parseSaleDate(s.date)}; order.push(inv); }
+    if (!groups[inv]){ groups[inv] = {invoiceNum: inv, custName: s.custName, total:0, items:[], payment:s.payment, date:s.date}; order.push(inv); }
     groups[inv].total += Number(s.total)||0;
     groups[inv].items.push(s.name);
   });
-  var list = order.map(function(k){ return groups[k]; }).sort(function(a,b){ return b.ts - a.ts; }).slice(0, 200);
+  var list = order.map(function(k){ return groups[k]; });
 
   if (filterText){
     var q = filterText.toLowerCase();
@@ -490,19 +554,108 @@ function renderSales(filterText){
   }
 
   if (!list.length){
-    container.innerHTML = '<div class="empty"><div class="big">📭</div>No sales found.</div>';
+    container.innerHTML = '<div class="empty"><div class="big">📭</div>No sales on this date.</div>';
     return;
   }
 
   container.innerHTML = list.map(function(g){
     return '<div class="row"><div class="who">' +
       '<div class="name">' + escapeHtml(g.invoiceNum) + ' — ' + escapeHtml(g.custName || "Walk-in") + '</div>' +
-      '<div class="meta">' + escapeHtml(g.date) + ' · ' + escapeHtml(g.items.slice(0,2).join(", ")) + (g.items.length>2 ? " +"+(g.items.length-2)+" more" : "") + '</div>' +
+      '<div class="meta">' + escapeHtml(g.items.slice(0,2).join(", ")) + (g.items.length>2 ? " +"+(g.items.length-2)+" more" : "") + '</div>' +
       '</div><div style="text-align:right">' +
       '<div class="amt">' + fmt(g.total) + '</div>' +
       paymentBadge(g.payment) +
       '</div></div>';
   }).join("");
+}
+
+var EXP_EXCLUDE_CATS = ["Restock","Supplier Payment","Supplier Deposit","Change"];
+
+function renderExpenses(){
+  var dayStr = isoToMDY(STATE.selectedDate);
+  var list = STATE.cashflow.filter(function(e){
+    return e.type === "out" && e.cat && EXP_EXCLUDE_CATS.indexOf(e.cat) === -1 && e.date === dayStr;
+  });
+  var total = list.reduce(function(s,e){ return s + (Number(e.amount)||0); }, 0);
+  document.getElementById("mExpenses").textContent = fmt(total);
+
+  var container = document.getElementById("listExpenses");
+  if (!list.length){
+    container.innerHTML = '<div class="empty"><div class="big">✓</div>No expenses recorded on this date.</div>';
+    return;
+  }
+  container.innerHTML = list.map(function(e){
+    return '<div class="row"><div class="who">' +
+      '<div class="name">' + escapeHtml(e.desc) + '</div>' +
+      '<div class="meta">' + escapeHtml(e.cat) + '</div>' +
+      '</div><div class="amt owed">' + fmt(e.amount) + '</div></div>';
+  }).join("");
+}
+
+function renderClosing(){
+  var dayStr = isoToMDY(STATE.selectedDate);
+  var session = STATE.tillSessions.find(function(t){ return t.date === STATE.selectedDate || t.date === dayStr; });
+  var openFloat = session ? (Number(session.openFloat)||0) : 0;
+  var closingCount = session && session.closingCount != null ? Number(session.closingCount) : null;
+
+  var daySales = STATE.sales.filter(function(s){ return s.date === dayStr; });
+  var invoiceGroups = {};
+  daySales.forEach(function(s){
+    var inv = s.invoiceNum || s.id;
+    if (!invoiceGroups[inv]) invoiceGroups[inv] = {payMode: s.payMode || s.payment, total:0};
+    invoiceGroups[inv].total += Number(s.total)||0;
+  });
+  var cashSales = 0, revenue = 0;
+  for (var k in invoiceGroups){
+    revenue += invoiceGroups[k].total;
+    if (!invoiceGroups[k].payMode || invoiceGroups[k].payMode === "cash") cashSales += invoiceGroups[k].total;
+  }
+
+  var cashExpenses = STATE.cashflow.filter(function(e){
+    return e.type === "out" && e.cat && EXP_EXCLUDE_CATS.indexOf(e.cat) === -1 && e.date === dayStr && (!e.payMode || e.payMode === "cash");
+  }).reduce(function(s,e){ return s + (Number(e.amount)||0); }, 0);
+
+  var expected = openFloat + cashSales - cashExpenses;
+  var html = '';
+  html += closingRow("Opening float", fmt(openFloat));
+  html += closingRow("Total revenue (all payment types)", fmt(revenue));
+  html += closingRow("Cash sales", fmt(cashSales));
+  html += closingRow("Cash expenses", "−" + fmt(cashExpenses));
+  html += closingRow("Expected cash in till", fmt(expected), true);
+  if (closingCount != null){
+    var variance = closingCount - expected;
+    html += closingRow("Actually counted", fmt(closingCount));
+    html += '<div class="closing-row variance ' + (Math.abs(variance) < 1 ? "good" : "bad") + '">' +
+      '<div class="k">Variance</div><div class="v">' + (variance >= 0 ? "+" : "") + fmt(variance) + '</div></div>';
+  } else {
+    html += closingRow("Actually counted", "Not yet counted on this device");
+  }
+  document.getElementById("closingCard").innerHTML = html;
+}
+function closingRow(k, v, total){
+  return '<div class="closing-row' + (total?' total':'') + '"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
+}
+
+function ensureMonthLoaded(iso, cb){
+  var mk = isoToMonthKey(iso);
+  if (STATE.loadedMonths[mk]) return cb();
+  getMonthSales(mk, function(err, recs){
+    STATE.loadedMonths[mk] = true;
+    STATE.sales = STATE.sales.concat(recs);
+    cb();
+  });
+}
+
+function setDate(iso){
+  STATE.selectedDate = iso;
+  document.getElementById("dateSel").value = iso;
+  var loadingNotice = document.getElementById("listSales");
+  loadingNotice.innerHTML = '<div class="skeleton-row"><div class="skeleton" style="width:50%"></div></div>';
+  ensureMonthLoaded(iso, function(){
+    renderSales(document.getElementById("searchSales").value);
+    renderExpenses();
+    renderClosing();
+  });
 }
 
 function renderCustomers(filterText){
@@ -576,13 +729,15 @@ function renderStock(filterText){
 function renderAll(){
   renderMetrics();
   renderSales(document.getElementById("searchSales").value);
+  renderExpenses();
+  renderClosing();
   renderCustomers(document.getElementById("searchCustomers").value);
   renderSuppliers(document.getElementById("searchSuppliers").value);
   renderStock(document.getElementById("searchStock").value);
 }
 
 function showSkeleton(){
-  ["listSales","listCustomers","listSuppliers","listOutOfStock","listLowStock"].forEach(function(id){
+  ["listSales","listExpenses","listCustomers","listSuppliers","listOutOfStock","listLowStock"].forEach(function(id){
     document.getElementById(id).innerHTML = [1,2,3,4,5].map(function(){
       return '<div class="skeleton-row"><div class="skeleton" style="width:60%;margin-bottom:8px;"></div><div class="skeleton" style="width:35%;height:10px;"></div></div>';
     }).join("");
@@ -622,7 +777,7 @@ function loadAll(){
   showError(null);
 
   var failures = [];
-  var pending = 3;
+  var pending = 4;
   function done(){
     pending--;
     if (pending > 0) return;
@@ -643,13 +798,23 @@ function loadAll(){
       if (err2) failures.push("suppliers"); else STATE.suppliers = arr2;
       getCollectionArray("inventory", function(err3, arr3){
         if (err3) failures.push("inventory"); else STATE.inventory = arr3;
-        done();
+        getCollectionArray("cashflow", function(err4, arr4){
+          if (err4) failures.push("expenses"); else STATE.cashflow = arr4;
+          getCollectionArray("tillSessions", function(err5, arr5){
+            if (err5) failures.push("till sessions"); else STATE.tillSessions = arr5;
+            done();
+          });
+        });
       });
     });
   });
 
   getRecentSales(2, function(arr){
     STATE.sales = arr;
+    var now = new Date();
+    STATE.loadedMonths[now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0")] = true;
+    var prev = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    STATE.loadedMonths[prev.getFullYear() + "-" + String(prev.getMonth()+1).padStart(2,"0")] = true;
     done();
   });
 }
@@ -667,7 +832,10 @@ document.getElementById("searchSales").addEventListener("input", function(){ ren
 document.getElementById("searchCustomers").addEventListener("input", function(){ renderCustomers(this.value); });
 document.getElementById("searchSuppliers").addEventListener("input", function(){ renderSuppliers(this.value); });
 document.getElementById("searchStock").addEventListener("input", function(){ renderStock(this.value); });
+document.getElementById("dateSel").addEventListener("change", function(){ setDate(this.value); });
 
+STATE.selectedDate = todayISO();
+document.getElementById("dateSel").value = STATE.selectedDate;
 loadAll();
 </script>
 </body>
