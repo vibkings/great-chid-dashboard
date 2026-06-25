@@ -293,9 +293,17 @@
   </div>
 
   <div class="date-row">
-    <label for="dateSel">Viewing date</label>
-    <input type="date" id="dateSel">
-    <button class="today-btn" id="todayBtn" onclick="setDate(todayISO())">Today</button>
+    <label for="rangeMode">View</label>
+    <select id="rangeMode">
+      <option value="today">Today</option>
+      <option value="week">This Week</option>
+      <option value="month">This Month</option>
+      <option value="custom">Custom</option>
+    </select>
+    <span id="customDateWrap" style="display:none;gap:8px;align-items:center;">
+      <input type="date" id="rangeFrom"> to <input type="date" id="rangeTo">
+    </span>
+    <span id="rangeLabel" style="font-size:12.5px;color:var(--ink-soft);margin-left:6px;"></span>
   </div>
 
   <div class="tabs">
@@ -558,20 +566,26 @@ function paymentBadge(p){
   return '<span class="badge paid">Paid</span>';
 }
 
+function dateInRange(dateStr){
+  if (!dateStr) return false;
+  var t = parseSaleDate(dateStr);
+  if (!t) return false;
+  return t >= STATE.rangeStart && t <= STATE.rangeEnd;
+}
+
 function renderSales(filterText){
   var container = document.getElementById("listSales");
-  var dayStr = isoToMDY(STATE.selectedDate);
-  var daySales = STATE.sales.filter(function(s){ return s.date === dayStr; });
+  var rangeSales = STATE.sales.filter(function(s){ return dateInRange(s.date); });
 
   var groups = {};
   var order = [];
-  daySales.forEach(function(s){
+  rangeSales.forEach(function(s){
     var inv = s.invoiceNum || s.id;
-    if (!groups[inv]){ groups[inv] = {invoiceNum: inv, custName: s.custName, total:0, items:[], payment:s.payment, date:s.date}; order.push(inv); }
+    if (!groups[inv]){ groups[inv] = {invoiceNum: inv, custName: s.custName, total:0, items:[], payment:s.payment, date:s.date, ts: parseSaleDate(s.date)}; order.push(inv); }
     groups[inv].total += Number(s.total)||0;
     groups[inv].items.push(s.name);
   });
-  var list = order.map(function(k){ return groups[k]; });
+  var list = order.map(function(k){ return groups[k]; }).sort(function(a,b){ return b.ts - a.ts; });
 
   if (filterText){
     var q = filterText.toLowerCase();
@@ -583,14 +597,15 @@ function renderSales(filterText){
   }
 
   if (!list.length){
-    container.innerHTML = '<div class="empty"><div class="big">📭</div>No sales on this date.</div>';
+    container.innerHTML = '<div class="empty"><div class="big">📭</div>No sales in this range.</div>';
     return;
   }
 
+  var multiDay = STATE.rangeStart !== STATE.rangeEnd;
   container.innerHTML = list.map(function(g){
     return '<div class="row"><div class="who">' +
       '<div class="name">' + escapeHtml(g.invoiceNum) + ' — ' + escapeHtml(g.custName || "Walk-in") + '</div>' +
-      '<div class="meta">' + escapeHtml(g.items.slice(0,2).join(", ")) + (g.items.length>2 ? " +"+(g.items.length-2)+" more" : "") + '</div>' +
+      '<div class="meta">' + (multiDay ? escapeHtml(g.date) + ' · ' : '') + escapeHtml(g.items.slice(0,2).join(", ")) + (g.items.length>2 ? " +"+(g.items.length-2)+" more" : "") + '</div>' +
       '</div><div style="text-align:right">' +
       '<div class="amt">' + fmt(g.total) + '</div>' +
       paymentBadge(g.payment) +
@@ -601,27 +616,31 @@ function renderSales(filterText){
 var EXP_EXCLUDE_CATS = ["Restock","Supplier Payment","Supplier Deposit","Change"];
 
 function renderExpenses(){
-  var dayStr = isoToMDY(STATE.selectedDate);
   var list = STATE.cashflow.filter(function(e){
-    return e.type === "out" && e.cat && EXP_EXCLUDE_CATS.indexOf(e.cat) === -1 && e.date === dayStr;
+    return e.type === "out" && e.cat && EXP_EXCLUDE_CATS.indexOf(e.cat) === -1 && dateInRange(e.date);
   });
   var total = list.reduce(function(s,e){ return s + (Number(e.amount)||0); }, 0);
   document.getElementById("mExpenses").textContent = fmt(total);
 
   var container = document.getElementById("listExpenses");
   if (!list.length){
-    container.innerHTML = '<div class="empty"><div class="big">✓</div>No expenses recorded on this date.</div>';
+    container.innerHTML = '<div class="empty"><div class="big">✓</div>No expenses recorded in this range.</div>';
     return;
   }
   container.innerHTML = list.map(function(e){
     return '<div class="row"><div class="who">' +
       '<div class="name">' + escapeHtml(e.desc) + '</div>' +
-      '<div class="meta">' + escapeHtml(e.cat) + '</div>' +
+      '<div class="meta">' + escapeHtml(e.cat) + (STATE.rangeStart!==STATE.rangeEnd ? ' · '+escapeHtml(e.date) : '') + '</div>' +
       '</div><div class="amt owed">' + fmt(e.amount) + '</div></div>';
   }).join("");
 }
 
 function renderClosing(){
+  var card = document.getElementById("closingCard");
+  if (STATE.rangeStart !== STATE.rangeEnd){
+    card.innerHTML = '<div class="empty">Daily Closing only applies to a single day — switch the view to "Today" or pick a single Custom date to see opening float, expected till, and variance.</div>';
+    return;
+  }
   var dayStr = isoToMDY(STATE.selectedDate);
   var session = STATE.tillSessions.find(function(t){ return t.date === STATE.selectedDate || t.date === dayStr; });
   var openFloat = session ? (Number(session.openFloat)||0) : 0;
@@ -659,66 +678,115 @@ function renderClosing(){
   } else {
     html += closingRow("Actually counted", "Not yet counted on this device");
   }
-  document.getElementById("closingCard").innerHTML = html;
+  card.innerHTML = html;
 }
 function closingRow(k, v, total){
   return '<div class="closing-row' + (total?' total':'') + '"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
 }
 
 function renderCustPayments(){
-  var dayStr = isoToMDY(STATE.selectedDate);
-  var list = STATE.creditPayments.filter(function(p){ return p.date === dayStr; });
+  var list = STATE.creditPayments.filter(function(p){ return dateInRange(p.date); });
   var total = list.reduce(function(s,p){ return s + (Number(p.amount)||0); }, 0);
   document.getElementById("mCustPay").textContent = fmt(total);
 
   var container = document.getElementById("listCustPayments");
   if (!list.length){
-    container.innerHTML = '<div class="empty"><div class="big">📭</div>No customer payments on this date.</div>';
+    container.innerHTML = '<div class="empty"><div class="big">📭</div>No customer payments in this range.</div>';
     return;
   }
   container.innerHTML = list.map(function(p){
     return '<div class="row"><div class="who">' +
       '<div class="name">' + escapeHtml(p.custName || "Unknown") + '</div>' +
-      '<div class="meta">' + escapeHtml(p.note || p.payMode || "") + '</div>' +
+      '<div class="meta">' + escapeHtml(p.note || p.payMode || "") + (STATE.rangeStart!==STATE.rangeEnd ? ' · '+escapeHtml(p.date) : '') + '</div>' +
       '</div><div class="amt" style="color:#2f7a4f">' + fmt(p.amount) + '</div></div>';
   }).join("");
 }
 
 function renderSupPayments(){
-  var dayStr = isoToMDY(STATE.selectedDate);
-  var list = STATE.supplierPayments.filter(function(p){ return p.date === dayStr; });
+  var list = STATE.supplierPayments.filter(function(p){ return dateInRange(p.date); });
   var total = list.reduce(function(s,p){ return s + (Number(p.amount)||0); }, 0);
   document.getElementById("mSupPay").textContent = fmt(total);
 
   var container = document.getElementById("listSupPayments");
   if (!list.length){
-    container.innerHTML = '<div class="empty"><div class="big">📭</div>No supplier payments on this date.</div>';
+    container.innerHTML = '<div class="empty"><div class="big">📭</div>No supplier payments in this range.</div>';
     return;
   }
   container.innerHTML = list.map(function(p){
     return '<div class="row"><div class="who">' +
       '<div class="name">' + escapeHtml(p.supName || "Unknown") + '</div>' +
-      '<div class="meta">' + escapeHtml(p.note || p.mode || "") + '</div>' +
+      '<div class="meta">' + escapeHtml(p.note || p.mode || "") + (STATE.rangeStart!==STATE.rangeEnd ? ' · '+escapeHtml(p.date) : '') + '</div>' +
       '</div><div class="amt owed">' + fmt(p.amount) + '</div></div>';
   }).join("");
 }
 
-function ensureMonthLoaded(iso, cb){
-  var mk = isoToMonthKey(iso);
-  if (STATE.loadedMonths[mk]) return cb();
-  getMonthSales(mk, function(err, recs){
-    STATE.loadedMonths[mk] = true;
-    STATE.sales = STATE.sales.concat(recs);
-    cb();
-  });
+function monthsBetween(startIso, endIso){
+  var months = [];
+  var d = new Date(startIso + "T00:00:00");
+  var end = new Date(endIso + "T00:00:00");
+  while (d.getFullYear() < end.getFullYear() || (d.getFullYear()===end.getFullYear() && d.getMonth() <= end.getMonth())){
+    months.push(d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"));
+    d.setMonth(d.getMonth()+1);
+  }
+  return months;
 }
 
-function setDate(iso){
-  STATE.selectedDate = iso;
-  document.getElementById("dateSel").value = iso;
-  var loadingNotice = document.getElementById("listSales");
-  loadingNotice.innerHTML = '<div class="skeleton-row"><div class="skeleton" style="width:50%"></div></div>';
-  ensureMonthLoaded(iso, function(){
+function ensureMonthsLoaded(startIso, endIso, cb){
+  var months = monthsBetween(startIso, endIso).filter(function(m){ return !STATE.loadedMonths[m]; });
+  if (!months.length) return cb();
+  var i = 0;
+  function next(){
+    if (i >= months.length) return cb();
+    var m = months[i++];
+    getMonthSales(m, function(err, recs){
+      STATE.loadedMonths[m] = true;
+      STATE.sales = STATE.sales.concat(recs);
+      next();
+    });
+  }
+  next();
+}
+
+function mondayOf(d){
+  var day = d.getDay(); // 0=Sun
+  var diff = day === 0 ? -6 : 1 - day;
+  var m = new Date(d);
+  m.setDate(d.getDate() + diff);
+  return m;
+}
+function isoOf(d){
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+
+function applyRangeMode(){
+  var mode = document.getElementById("rangeMode").value;
+  var now = new Date();
+  var start, end;
+  document.getElementById("customDateWrap").style.display = mode === "custom" ? "inline-flex" : "none";
+
+  if (mode === "today"){
+    start = end = todayISO();
+  } else if (mode === "week"){
+    start = isoOf(mondayOf(now));
+    end = todayISO();
+  } else if (mode === "month"){
+    start = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0") + "-01";
+    end = todayISO();
+  } else {
+    start = document.getElementById("rangeFrom").value || todayISO();
+    end = document.getElementById("rangeTo").value || todayISO();
+    if (end < start){ var t=start; start=end; end=t; }
+  }
+
+  STATE.rangeMode = mode;
+  STATE.selectedDate = end; // used by Daily Closing when start===end
+  STATE.rangeStart = new Date(start + "T00:00:00").getTime();
+  STATE.rangeEnd = new Date(end + "T23:59:59").getTime();
+
+  document.getElementById("rangeLabel").textContent = start === end ? start : (start + " → " + end);
+
+  document.getElementById("listSales").innerHTML = '<div class="skeleton-row"><div class="skeleton" style="width:50%"></div></div>';
+  ensureMonthsLoaded(start, end, function(){
     renderSales(document.getElementById("searchSales").value);
     renderExpenses();
     renderCustPayments();
@@ -959,10 +1027,16 @@ document.getElementById("searchSales").addEventListener("input", function(){ ren
 document.getElementById("searchCustomers").addEventListener("input", function(){ renderCustomers(this.value); });
 document.getElementById("searchSuppliers").addEventListener("input", function(){ renderSuppliers(this.value); });
 document.getElementById("searchStock").addEventListener("input", function(){ renderStock(this.value); });
-document.getElementById("dateSel").addEventListener("change", function(){ setDate(this.value); });
+document.getElementById("rangeMode").addEventListener("change", applyRangeMode);
+document.getElementById("rangeFrom").addEventListener("change", function(){ if (document.getElementById("rangeMode").value === "custom") applyRangeMode(); });
+document.getElementById("rangeTo").addEventListener("change", function(){ if (document.getElementById("rangeMode").value === "custom") applyRangeMode(); });
 
 STATE.selectedDate = todayISO();
-document.getElementById("dateSel").value = STATE.selectedDate;
+STATE.rangeStart = new Date(todayISO() + "T00:00:00").getTime();
+STATE.rangeEnd = new Date(todayISO() + "T23:59:59").getTime();
+document.getElementById("rangeFrom").value = todayISO();
+document.getElementById("rangeTo").value = todayISO();
+document.getElementById("rangeLabel").textContent = todayISO();
 document.getElementById("debugMonth").value = todayISO().slice(0,7);
 loadAll();
 </script>
