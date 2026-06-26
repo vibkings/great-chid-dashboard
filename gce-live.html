@@ -1297,6 +1297,9 @@ function showError(msg){
 function loadAll(){
   if (STATE.loading) return;
   STATE.loading = true;
+  STATE.loadedMonths = {};
+  STATE._pendingGoodsLoaded = false;
+  _archiveLoaded = false;
   var btn = document.getElementById("refreshBtn");
   btn.disabled = true;
   document.getElementById("refreshIcon").innerHTML = '<span class="spin"></span>';
