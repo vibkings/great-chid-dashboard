@@ -178,6 +178,19 @@
     padding:13px 16px;border-bottom:1px solid var(--line);gap:12px;
   }
   .row:last-child{border-bottom:none;}
+  .sales-row{cursor:pointer;}
+  .sales-row:active{background:var(--paper);}
+  .inv-detail{
+    padding:10px 16px 14px 16px;background:var(--paper);border-bottom:1px solid var(--line);
+  }
+  .inv-detail-head{font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:8px;}
+  .inv-item-row{
+    display:flex;justify-content:space-between;font-size:13px;padding:4px 0;
+  }
+  .inv-detail-pay{
+    margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);
+    font-size:12.5px;font-weight:700;color:var(--ink-soft);
+  }
   .row .who{min-width:0;flex:1;}
   .row .name{font-weight:700;font-size:14.5px;}
   .row .meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
@@ -271,14 +284,19 @@
 
   <div class="metrics">
     <div class="metric cash">
-      <div class="label">Today's Revenue</div>
+      <div class="label">Revenue</div>
       <div class="value" id="mRevenue">—</div>
       <div class="sub" id="mRevenueSub">&nbsp;</div>
     </div>
     <div class="metric cash">
-      <div class="label">Today's Profit</div>
+      <div class="label">Profit</div>
       <div class="value" id="mProfit">—</div>
       <div class="sub" id="mProfitSub">&nbsp;</div>
+    </div>
+    <div class="metric cash">
+      <div class="label">Total Paid</div>
+      <div class="value" id="mTotalPaid">—</div>
+      <div class="sub" id="mTotalPaidSub">&nbsp;</div>
     </div>
     <div class="metric owed">
       <div class="label">Owed by Customers</div>
@@ -312,6 +330,7 @@
     <div class="tab" data-tab="custpayments">Customer Payments</div>
     <div class="tab" data-tab="suppayments">Supplier Payments</div>
     <div class="tab" data-tab="closing">Daily Closing</div>
+    <div class="tab" data-tab="financial">Financial</div>
     <div class="tab" data-tab="customers">Customers</div>
     <div class="tab" data-tab="suppliers">Suppliers</div>
     <div class="tab" data-tab="stock">Stock Alerts</div>
@@ -346,6 +365,12 @@
 
   <div class="panel" id="panel-closing">
     <div class="list-card" id="closingCard" style="padding:4px;"></div>
+  </div>
+
+  <div class="panel" id="panel-financial">
+    <div class="metrics" id="finCards" style="margin-bottom:14px;"></div>
+    <div class="section-title">Payment Breakdown, Expenses &amp; Balance</div>
+    <div class="list-card" id="finBreakdown" style="padding:0;"></div>
   </div>
 
   <div class="panel" id="panel-customers">
@@ -532,22 +557,54 @@ function escapeHtml(s){
   });
 }
 
+function invoicePaymentSplit(rep, total){
+  // Returns {cash, transfer, pos, credit, other} amounts for one invoice,
+  // correctly handling split payments (which have their own cash/transfer/pos legs)
+  // instead of just looking at the overall payMode field.
+  var pm = rep.payMode || rep.payment;
+  var out = {cash:0, transfer:0, pos:0, credit:0, other:0};
+  function add(mode, amt){
+    amt = Number(amt)||0;
+    if (mode === "cash") out.cash += amt;
+    else if (mode === "transfer") out.transfer += amt;
+    else if (mode === "pos") out.pos += amt;
+    else out.other += amt;
+  }
+  if (pm === "split" && rep.splitPayment){
+    var sp = rep.splitPayment;
+    add(sp.mode1, sp.amt1);
+    add(sp.mode2, sp.amt2);
+  } else if (pm === "cash") out.cash += total;
+  else if (pm === "transfer") out.transfer += total;
+  else if (pm === "pos") out.pos += total;
+  else if (pm === "credit") out.credit += total;
+  else out.other += total;
+  return out;
+}
+
 function renderMetrics(){
-  var todaySales = STATE.sales.filter(function(s){ return isToday(s.date); });
+  var rangeSales = STATE.sales.filter(function(s){ return dateInRange(s.date); });
   var invoiceGroups = {};
-  todaySales.forEach(function(s){
+  rangeSales.forEach(function(s){
     var inv = s.invoiceNum || s.id;
-    if (!invoiceGroups[inv]) invoiceGroups[inv] = {total:0, profit:0, payment:s.payment};
+    if (!invoiceGroups[inv]) invoiceGroups[inv] = {total:0, profit:0, payMode: s.payMode || s.payment, splitPayment: s.splitPayment};
     invoiceGroups[inv].total += Number(s.total)||0;
     invoiceGroups[inv].profit += Number(s.profit)||0;
   });
-  var revenue = 0, profit = 0, invCount = 0;
-  for (var k in invoiceGroups){ revenue += invoiceGroups[k].total; profit += invoiceGroups[k].profit; invCount++; }
+  var revenue = 0, profit = 0, invCount = 0, paid = 0;
+  for (var k in invoiceGroups){
+    var g = invoiceGroups[k];
+    revenue += g.total; profit += g.profit; invCount++;
+    var bd = invoicePaymentSplit(g, g.total);
+    paid += bd.cash + bd.transfer + bd.pos + bd.other;
+  }
 
   document.getElementById("mRevenue").textContent = fmt(revenue);
-  document.getElementById("mRevenueSub").textContent = invCount + " invoice" + (invCount===1?"":"s") + " today";
+  document.getElementById("mRevenueSub").textContent = invCount + " invoice" + (invCount===1?"":"s") + " in this range";
   document.getElementById("mProfit").textContent = fmt(profit);
   document.getElementById("mProfitSub").textContent = revenue ? Math.round(profit/revenue*100) + "% margin" : "—";
+  document.getElementById("mTotalPaid").textContent = fmt(paid);
+  document.getElementById("mTotalPaidSub").textContent = "Cash received in this range";
 
   var custOwed = STATE.customers.reduce(function(s,c){ return s + (Number(c.creditBalance)||0); }, 0);
   var custCount = STATE.customers.filter(function(c){ return (Number(c.creditBalance)||0) > 0; }).length;
@@ -581,9 +638,16 @@ function renderSales(filterText){
   var order = [];
   rangeSales.forEach(function(s){
     var inv = s.invoiceNum || s.id;
-    if (!groups[inv]){ groups[inv] = {invoiceNum: inv, custName: s.custName, total:0, items:[], payment:s.payment, date:s.date, ts: parseSaleDate(s.date)}; order.push(inv); }
+    if (!groups[inv]){
+      groups[inv] = {
+        invoiceNum: inv, custName: s.custName, custAddr: s.custAddr, seller: s.seller,
+        total:0, items:[], payment:s.payment, payMode: s.payMode, splitPayment: s.splitPayment,
+        date:s.date, ts: parseSaleDate(s.date)
+      };
+      order.push(inv);
+    }
     groups[inv].total += Number(s.total)||0;
-    groups[inv].items.push(s.name);
+    groups[inv].items.push({name:s.name, qty:s.qty, total:s.total});
   });
   var list = order.map(function(k){ return groups[k]; }).sort(function(a,b){ return b.ts - a.ts; });
 
@@ -592,7 +656,7 @@ function renderSales(filterText){
     list = list.filter(function(g){
       return (g.invoiceNum||"").toLowerCase().indexOf(q) > -1 ||
              (g.custName||"").toLowerCase().indexOf(q) > -1 ||
-             g.items.join(" ").toLowerCase().indexOf(q) > -1;
+             g.items.map(function(it){return it.name;}).join(" ").toLowerCase().indexOf(q) > -1;
     });
   }
 
@@ -602,15 +666,39 @@ function renderSales(filterText){
   }
 
   var multiDay = STATE.rangeStart !== STATE.rangeEnd;
-  container.innerHTML = list.map(function(g){
-    return '<div class="row"><div class="who">' +
+  container.innerHTML = list.map(function(g, idx){
+    var itemNames = g.items.map(function(it){ return it.name; });
+    var safeId = "invdet_" + idx;
+    var bd = invoicePaymentSplit(g, g.total);
+    var payParts = [];
+    if (bd.cash) payParts.push("Cash " + fmt(bd.cash));
+    if (bd.transfer) payParts.push("Transfer " + fmt(bd.transfer));
+    if (bd.pos) payParts.push("POS " + fmt(bd.pos));
+    if (bd.credit) payParts.push("Credit " + fmt(bd.credit));
+    if (bd.other) payParts.push("Other " + fmt(bd.other));
+    var detailItems = g.items.map(function(it){
+      return '<div class="inv-item-row"><span>' + escapeHtml(it.name) + ' × ' + (it.qty||1) + '</span><span>' + fmt(it.total) + '</span></div>';
+    }).join("");
+    return '<div class="row sales-row" onclick="toggleInvDetail(\'' + safeId + '\')">' +
+      '<div class="who">' +
       '<div class="name">' + escapeHtml(g.invoiceNum) + ' — ' + escapeHtml(g.custName || "Walk-in") + '</div>' +
-      '<div class="meta">' + (multiDay ? escapeHtml(g.date) + ' · ' : '') + escapeHtml(g.items.slice(0,2).join(", ")) + (g.items.length>2 ? " +"+(g.items.length-2)+" more" : "") + '</div>' +
+      '<div class="meta">' + (multiDay ? escapeHtml(g.date) + ' · ' : '') + escapeHtml(itemNames.slice(0,2).join(", ")) + (itemNames.length>2 ? " +"+(itemNames.length-2)+" more" : "") + '</div>' +
       '</div><div style="text-align:right">' +
       '<div class="amt">' + fmt(g.total) + '</div>' +
       paymentBadge(g.payment) +
-      '</div></div>';
+      '</div></div>' +
+      '<div class="inv-detail" id="' + safeId + '" style="display:none">' +
+      '<div class="inv-detail-head">' + escapeHtml(g.custName || "Walk-in customer") + (g.custAddr ? ' · ' + escapeHtml(g.custAddr) : '') + (g.seller ? ' · Sold by ' + escapeHtml(g.seller) : '') + '</div>' +
+      detailItems +
+      '<div class="inv-detail-pay">' + escapeHtml(g.date) + ' · ' + (payParts.join(" + ") || "—") + '</div>' +
+      '</div>';
   }).join("");
+}
+
+function toggleInvDetail(id){
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = el.style.display === "none" ? "block" : "none";
 }
 
 var EXP_EXCLUDE_CATS = ["Restock","Supplier Payment","Supplier Deposit","Change"];
@@ -650,13 +738,13 @@ function renderClosing(){
   var invoiceGroups = {};
   daySales.forEach(function(s){
     var inv = s.invoiceNum || s.id;
-    if (!invoiceGroups[inv]) invoiceGroups[inv] = {payMode: s.payMode || s.payment, total:0};
+    if (!invoiceGroups[inv]) invoiceGroups[inv] = {payMode: s.payMode || s.payment, splitPayment: s.splitPayment, total:0};
     invoiceGroups[inv].total += Number(s.total)||0;
   });
   var cashSales = 0, revenue = 0;
   for (var k in invoiceGroups){
     revenue += invoiceGroups[k].total;
-    if (!invoiceGroups[k].payMode || invoiceGroups[k].payMode === "cash") cashSales += invoiceGroups[k].total;
+    cashSales += invoicePaymentSplit(invoiceGroups[k], invoiceGroups[k].total).cash;
   }
 
   var cashExpenses = STATE.cashflow.filter(function(e){
@@ -718,6 +806,60 @@ function renderSupPayments(){
       '<div class="meta">' + escapeHtml(p.note || p.mode || "") + (STATE.rangeStart!==STATE.rangeEnd ? ' · '+escapeHtml(p.date) : '') + '</div>' +
       '</div><div class="amt owed">' + fmt(p.amount) + '</div></div>';
   }).join("");
+}
+
+function renderFinancial(){
+  var rangeSales = STATE.sales.filter(function(s){ return dateInRange(s.date); });
+  var invoiceGroups = {};
+  rangeSales.forEach(function(s){
+    var inv = s.invoiceNum || s.id;
+    if (!invoiceGroups[inv]) invoiceGroups[inv] = {total:0, profit:0, payMode: s.payMode || s.payment, splitPayment: s.splitPayment};
+    invoiceGroups[inv].total += Number(s.total)||0;
+    invoiceGroups[inv].profit += Number(s.profit)||0;
+  });
+  var revenue=0, profit=0, salesCash=0, salesTransfer=0, salesPos=0, salesCredit=0;
+  for (var k in invoiceGroups){
+    var g = invoiceGroups[k];
+    revenue += g.total; profit += g.profit;
+    var bd = invoicePaymentSplit(g, g.total);
+    salesCash += bd.cash; salesTransfer += bd.transfer; salesPos += bd.pos; salesCredit += bd.credit + bd.other;
+  }
+
+  var expenseList = STATE.cashflow.filter(function(e){
+    return e.type === "out" && e.cat && EXP_EXCLUDE_CATS.indexOf(e.cat) === -1 && dateInRange(e.date);
+  });
+  var expenses = expenseList.reduce(function(s,e){ return s+(Number(e.amount)||0); }, 0);
+  function expByMode(mode){
+    return expenseList.filter(function(e){ return (e.payMode||"cash")===mode; }).reduce(function(s,e){ return s+(Number(e.amount)||0); }, 0);
+  }
+  var expCash = expByMode("cash"), expTransfer = expByMode("transfer"), expPos = expByMode("pos");
+
+  var supplierPay = STATE.cashflow.filter(function(e){
+    return e.type === "out" && e.cat && EXP_EXCLUDE_CATS.indexOf(e.cat) > -1 && dateInRange(e.date);
+  }).reduce(function(s,e){ return s+(Number(e.amount)||0); }, 0);
+
+  var totalPaid = salesCash + salesTransfer + salesPos;
+  var custOwed = STATE.customers.reduce(function(s,c){ return s + (Number(c.creditBalance)||0); }, 0);
+
+  document.getElementById("finCards").innerHTML =
+    '<div class="metric cash"><div class="label">Revenue</div><div class="value">'+fmt(revenue)+'</div><div class="sub">&nbsp;</div></div>' +
+    '<div class="metric cash"><div class="label">Profit</div><div class="value">'+fmt(profit)+'</div><div class="sub">'+(revenue?Math.round(profit/revenue*100)+"% margin":"—")+'</div></div>' +
+    '<div class="metric owed"><div class="label">Expenses</div><div class="value">'+fmt(expenses)+'</div><div class="sub">&nbsp;</div></div>' +
+    '<div class="metric cash"><div class="label">Total Paid</div><div class="value">'+fmt(totalPaid)+'</div><div class="sub">Cash received in this range</div></div>' +
+    '<div class="metric owed"><div class="label">Outstanding Credit</div><div class="value">'+fmt(custOwed)+'</div><div class="sub">Current balance, not range-bound</div></div>';
+
+  function bdRow(label, income, out){
+    var balance = income - out;
+    return '<div class="row"><div class="who"><div class="name">'+label+'</div>' +
+      '<div class="meta">Income '+fmt(income)+' · Expenses '+fmt(out)+'</div></div>' +
+      '<div class="amt'+(balance<0?' owed':'')+'">'+fmt(balance)+'</div></div>';
+  }
+  document.getElementById("finBreakdown").innerHTML =
+    bdRow("💵 Cash", salesCash, expCash) +
+    bdRow("💳 POS", salesPos, expPos) +
+    bdRow("🏦 Transfer", salesTransfer, expTransfer) +
+    bdRow("📒 Credit / Other (sales)", salesCredit, 0) +
+    bdRow("🚛 Supplier Payments", 0, supplierPay);
 }
 
 function monthsBetween(startIso, endIso){
@@ -788,11 +930,13 @@ function applyRangeMode(){
 
   document.getElementById("listSales").innerHTML = '<div class="skeleton-row"><div class="skeleton" style="width:50%"></div></div>';
   ensureMonthsLoaded(start, end, function(){
+    renderMetrics();
     renderSales(document.getElementById("searchSales").value);
     renderExpenses();
     renderCustPayments();
     renderSupPayments();
     renderClosing();
+    renderFinancial();
   });
 }
 
@@ -871,6 +1015,7 @@ function renderAll(){
   renderCustPayments();
   renderSupPayments();
   renderClosing();
+  renderFinancial();
   renderCustomers(document.getElementById("searchCustomers").value);
   renderSuppliers(document.getElementById("searchSuppliers").value);
   renderStock(document.getElementById("searchStock").value);
