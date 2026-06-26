@@ -630,6 +630,12 @@ function dateInRange(dateStr){
   return t >= STATE.rangeStart && t <= STATE.rangeEnd;
 }
 
+function invNumValue(inv){
+  if (!inv) return 0;
+  var parts = String(inv).split("/");
+  return parseInt(parts[parts.length-1], 10) || 0;
+}
+
 function renderSales(filterText){
   var container = document.getElementById("listSales");
   var rangeSales = STATE.sales.filter(function(s){ return dateInRange(s.date); });
@@ -649,7 +655,7 @@ function renderSales(filterText){
     groups[inv].total += Number(s.total)||0;
     groups[inv].items.push({name:s.name, qty:s.qty, total:s.total});
   });
-  var list = order.map(function(k){ return groups[k]; }).sort(function(a,b){ return b.ts - a.ts; });
+  var list = order.map(function(k){ return groups[k]; }).sort(function(a,b){ return (b.ts - a.ts) || (invNumValue(b.invoiceNum) - invNumValue(a.invoiceNum)); });
 
   if (filterText){
     var q = filterText.toLowerCase();
