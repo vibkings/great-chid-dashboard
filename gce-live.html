@@ -334,6 +334,7 @@
     <div class="tab" data-tab="purchases">Purchases</div>
     <div class="tab" data-tab="pending">Pending Goods</div>
     <div class="tab" data-tab="pendingdel">Pending Deliveries</div>
+    <div class="tab" data-tab="activity">Activity Log</div>
     <div class="tab" data-tab="customers">Customers</div>
     <div class="tab" data-tab="suppliers">Suppliers</div>
     <div class="tab" data-tab="stock">Stock Alerts</div>
@@ -404,6 +405,11 @@
     <div class="list-card" id="listPendingDel"></div>
   </div>
 
+  <div class="panel" id="panel-activity">
+    <div class="search-row"><input type="text" id="searchActivity" placeholder="Search by action, detail, or user…"></div>
+    <div class="list-card" id="listActivity"></div>
+  </div>
+
   <div class="panel" id="panel-customers">
     <div class="search-row"><input type="text" id="searchCustomers" placeholder="Search customers by name or phone…"></div>
     <div class="list-card" id="listCustomers"></div>
@@ -443,7 +449,7 @@ var REST_BASE = "https://firestore.googleapis.com/v1/projects/" + GCE_PROJECT_ID
 var KEY_QS = "?key=" + GCE_API_KEY;
 
 var STATE = { customers: [], suppliers: [], sales: [], inventory: [], cashflow: [], tillSessions: [],
-  creditPayments: [], supplierPayments: [], purchases: [], pendingDeliveries: [],
+  creditPayments: [], supplierPayments: [], purchases: [], pendingDeliveries: [], activityLog: [],
   loadedMonths: {}, selectedDate: null, lastLoad: null, loading: false };
 
 function todayISO(){
@@ -980,6 +986,37 @@ function renderPendingDel(filterText){
   }).join("");
 }
 
+function renderActivity(filterText){
+  var container = document.getElementById("listActivity");
+  var list = STATE.activityLog.slice();
+
+  if (filterText){
+    var q = filterText.toLowerCase();
+    list = list.filter(function(a){
+      return (a.action||"").toLowerCase().indexOf(q) > -1 ||
+             (a.detail||"").toLowerCase().indexOf(q) > -1 ||
+             (a.user||"").toLowerCase().indexOf(q) > -1;
+    });
+  }
+
+  list.sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+
+  if (!list.length){
+    container.innerHTML = '<div class="empty"><div class="big">📭</div>No activity recorded.</div>';
+    return;
+  }
+
+  container.innerHTML = list.map(function(a){
+    return '<div class="row"><div class="who">' +
+      '<div class="name">' + escapeHtml(a.action || "") + '</div>' +
+      '<div class="meta">' + escapeHtml(a.detail || "") + '</div>' +
+      '</div><div style="text-align:right">' +
+      '<div class="amt" style="font-size:12.5px;font-weight:700;">' + escapeHtml(a.user || "System") + '</div>' +
+      '<div class="meta" style="margin-top:2px;">' + escapeHtml(a.date || "") + ' ' + escapeHtml(a.time || "") + '</div>' +
+      '</div></div>';
+  }).join("");
+}
+
 function loadPendingGoods(cb){
   var now = new Date();
   var months = [];
@@ -1218,6 +1255,7 @@ function renderAll(){
   renderFinancial();
   renderPurchases(document.getElementById("searchPurchases").value);
   renderPendingDel(document.getElementById("searchPendingDel").value);
+  renderActivity(document.getElementById("searchActivity").value);
   renderCustomers(document.getElementById("searchCustomers").value);
   renderSuppliers(document.getElementById("searchSuppliers").value);
   renderStock(document.getElementById("searchStock").value);
@@ -1297,7 +1335,10 @@ function loadAll(){
                   if (err8) failures.push("purchases"); else STATE.purchases = arr8;
                   getCollectionArray("pendingDeliveries", function(err9, arr9){
                     if (err9) failures.push("pending deliveries"); else STATE.pendingDeliveries = arr9;
-                    done();
+                    getCollectionArray("activityLog", function(err10, arr10){
+                      if (err10) failures.push("activity log"); else STATE.activityLog = arr10;
+                      done();
+                    });
                   });
                 });
               });
@@ -1386,6 +1427,7 @@ document.getElementById("searchSales").addEventListener("input", function(){ ren
 document.getElementById("searchPurchases").addEventListener("input", function(){ renderPurchases(this.value); });
 document.getElementById("searchPending").addEventListener("input", function(){ renderPending(this.value); });
 document.getElementById("searchPendingDel").addEventListener("input", function(){ renderPendingDel(this.value); });
+document.getElementById("searchActivity").addEventListener("input", function(){ renderActivity(this.value); });
 document.getElementById("searchCustomers").addEventListener("input", function(){ renderCustomers(this.value); });
 document.getElementById("searchSuppliers").addEventListener("input", function(){ renderSuppliers(this.value); });
 document.getElementById("searchStock").addEventListener("input", function(){ renderStock(this.value); });
