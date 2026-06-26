@@ -1036,9 +1036,13 @@ function loadPendingGoods(cb){
     getMonthSales(m, function(err, recs){
       STATE.loadedMonths[m] = true;
       if (recs && recs.length){
-        var ids = {};
-        STATE.sales.forEach(function(s){ if (s.id) ids[s.id] = true; });
-        recs.forEach(function(r){ if (!r.id || !ids[r.id]) STATE.sales.push(r); });
+        var idx = {};
+        STATE.sales.forEach(function(s, i){ if (s.id) idx[s.id] = i; });
+        recs.forEach(function(r){
+          if (!r.id) { STATE.sales.push(r); return; }
+          if (idx[r.id] !== undefined) STATE.sales[idx[r.id]] = r;
+          else STATE.sales.push(r);
+        });
       }
       next();
     });
@@ -1096,9 +1100,13 @@ function ensureArchiveLoaded(cb){
   getCollectionArray("salesArchive", function(err, arr){
     _archiveLoaded = true;
     if (!err && arr && arr.length){
-      var ids = {};
-      STATE.sales.forEach(function(s){ if (s.id) ids[s.id] = true; });
-      arr.forEach(function(r){ if (!r.id || !ids[r.id]) STATE.sales.push(r); });
+      var idx = {};
+      STATE.sales.forEach(function(s, i){ if (s.id) idx[s.id] = i; });
+      arr.forEach(function(r){
+        if (!r.id) { STATE.sales.push(r); return; }
+        if (idx[r.id] !== undefined) STATE.sales[idx[r.id]] = r;
+        else STATE.sales.push(r);
+      });
     }
     cb();
   });
@@ -1121,7 +1129,13 @@ function ensureMonthsLoaded(startIso, endIso, cb){
     var m = months[i++];
     getMonthSales(m, function(err, recs){
       STATE.loadedMonths[m] = true;
-      STATE.sales = STATE.sales.concat(recs);
+      var idx = {};
+      STATE.sales.forEach(function(s, i){ if (s.id) idx[s.id] = i; });
+      recs.forEach(function(r){
+        if (!r.id) { STATE.sales.push(r); return; }
+        if (idx[r.id] !== undefined) STATE.sales[idx[r.id]] = r;
+        else STATE.sales.push(r);
+      });
       next();
     });
   }
