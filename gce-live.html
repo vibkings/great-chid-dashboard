@@ -434,6 +434,9 @@
       <input type="month" id="debugMonth">
     </div>
     <div class="list-card" id="debugOutput" style="padding:16px;font-family:monospace;font-size:12.5px;white-space:pre-wrap;"></div>
+    <div class="section-title">Sync Health</div>
+    <button class="today-btn" onclick="runSyncHealthCheck()" style="margin-bottom:10px;">🩺 Check sync health (record counts per collection in Firestore)</button>
+    <div class="list-card" id="syncHealthOutput" style="padding:16px;font-family:monospace;font-size:12.5px;white-space:pre-wrap;"></div>
     <div class="section-title">Raw data (for sending to support)</div>
     <button class="today-btn" onclick="copyRawData()" style="margin-bottom:10px;">📋 Copy all loaded data as text</button>
     <div id="copyStatus" style="font-size:12px;color:var(--ink-soft);"></div>
@@ -1373,6 +1376,39 @@ document.querySelectorAll(".tab").forEach(function(tab){
     }
   });
 });
+function runSyncHealthCheck(){
+  var COLS = ["inventory","customers","suppliers","purchases","creditPayments",
+    "supplierPayments","cashflow","tillSessions","pendingDeliveries","activityLog",
+    "salesArchive","borrows","recycleBin"];
+  var out = document.getElementById("syncHealthOutput");
+  out.textContent = "Checking…\n";
+  var lines = [];
+  var i = 0;
+  function next(){
+    if (i >= COLS.length){
+      var thisMonth = new Date().getFullYear() + "-" + String(new Date().getMonth()+1).padStart(2,"0");
+      getMonthSales(thisMonth, function(err, recs){
+        lines.push((err ? "⚠️ " : "✓ ") + "sales[" + thisMonth + "]: " + (err ? "error" : recs.length + " records"));
+        out.textContent = lines.join("\n") + "\n\nThese are record counts straight from Firestore. If any number looks wrong compared to what the office device should have, that's worth investigating.";
+      });
+      return;
+    }
+    var name = COLS[i++];
+    getDoc(name, function(err, fields){
+      if (err){ lines.push("⚠️ " + name + ": error (" + (err.code||"?") + ")"); }
+      else if (!fields){ lines.push("⚠️ " + name + ": does not exist (404)"); }
+      else {
+        var data = fields.data !== undefined ? fields.data : fields;
+        var count = Array.isArray(data) ? data.length : 0;
+        lines.push((count===0?"⚠️ ":"✓ ") + name + ": " + count + " records");
+      }
+      out.textContent = lines.join("\n");
+      next();
+    });
+  }
+  next();
+}
+
 function runChunkCheck(){
   var monthVal = document.getElementById("debugMonth").value; // "YYYY-MM"
   if (!monthVal){ document.getElementById("debugOutput").textContent = "Pick a month first."; return; }
