@@ -637,7 +637,7 @@ function renderExpenses(){
 
 function renderClosing(){
   var card = document.getElementById("closingCard");
-  if (STATE.rangeStart !== STATE.rangeEnd){
+  if (!STATE.rangeSingleDay){
     card.innerHTML = '<div class="empty">Daily Closing only applies to a single day — switch the view to "Today" or pick a single Custom date to see opening float, expected till, and variance.</div>';
     return;
   }
@@ -780,6 +780,7 @@ function applyRangeMode(){
 
   STATE.rangeMode = mode;
   STATE.selectedDate = end; // used by Daily Closing when start===end
+  STATE.rangeSingleDay = (start === end);
   STATE.rangeStart = new Date(start + "T00:00:00").getTime();
   STATE.rangeEnd = new Date(end + "T23:59:59").getTime();
 
