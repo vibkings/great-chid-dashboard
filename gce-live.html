@@ -1050,12 +1050,34 @@ function monthsBetween(startIso, endIso){
   return months;
 }
 
+var _archiveLoaded = false;
+function ensureArchiveLoaded(cb){
+  if (_archiveLoaded) return cb();
+  getCollectionArray("salesArchive", function(err, arr){
+    _archiveLoaded = true;
+    if (!err && arr && arr.length){
+      var ids = {};
+      STATE.sales.forEach(function(s){ if (s.id) ids[s.id] = true; });
+      arr.forEach(function(r){ if (!r.id || !ids[r.id]) STATE.sales.push(r); });
+    }
+    cb();
+  });
+}
+
 function ensureMonthsLoaded(startIso, endIso, cb){
   var months = monthsBetween(startIso, endIso).filter(function(m){ return !STATE.loadedMonths[m]; });
-  if (!months.length) return cb();
+  // The main app archives sales older than 30 days into a separate "salesArchive"
+  // collection — load it too whenever the requested range reaches back that far,
+  // otherwise those sales would silently appear missing.
+  var cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 25);
+  var needsArchive = new Date(startIso + "T00:00:00") < cutoff;
+  function afterMonths(){
+    if (needsArchive) ensureArchiveLoaded(cb); else cb();
+  }
+  if (!months.length) return afterMonths();
   var i = 0;
   function next(){
-    if (i >= months.length) return cb();
+    if (i >= months.length) return afterMonths();
     var m = months[i++];
     getMonthSales(m, function(err, recs){
       STATE.loadedMonths[m] = true;
@@ -1306,7 +1328,7 @@ document.querySelectorAll(".tab").forEach(function(tab){
     if (tab.dataset.tab === "pending" && !STATE._pendingGoodsLoaded){
       STATE._pendingGoodsLoaded = true;
       document.getElementById("listPending").innerHTML = '<div class="skeleton-row"><div class="skeleton" style="width:60%"></div></div>';
-      loadPendingGoods(function(){ renderPending(document.getElementById("searchPending").value); });
+      loadPendingGoods(function(){ ensureArchiveLoaded(function(){ renderPending(document.getElementById("searchPending").value); }); });
     }
   });
 });
