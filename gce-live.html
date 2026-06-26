@@ -333,6 +333,7 @@
     <div class="tab" data-tab="financial">Financial</div>
     <div class="tab" data-tab="purchases">Purchases</div>
     <div class="tab" data-tab="pending">Pending Goods</div>
+    <div class="tab" data-tab="pendingdel">Pending Deliveries</div>
     <div class="tab" data-tab="customers">Customers</div>
     <div class="tab" data-tab="suppliers">Suppliers</div>
     <div class="tab" data-tab="stock">Stock Alerts</div>
@@ -384,12 +385,23 @@
   </div>
 
   <div class="panel" id="panel-pending">
+    <div class="footer-note" style="text-align:left;margin:0 0 10px;">Items already sold to customers but not yet handed over to them.</div>
     <div class="metrics" style="margin-bottom:14px;">
       <div class="metric owed"><div class="label">Pending Items</div><div class="value" id="mPendingCount">—</div><div class="sub">&nbsp;</div></div>
       <div class="metric owed"><div class="label">Estimated Value</div><div class="value" id="mPendingValue">—</div><div class="sub">All-time, not range-bound</div></div>
     </div>
     <div class="search-row"><input type="text" id="searchPending" placeholder="Search by invoice #, customer, or item…"></div>
     <div class="list-card" id="listPending"></div>
+  </div>
+
+  <div class="panel" id="panel-pendingdel">
+    <div class="footer-note" style="text-align:left;margin:0 0 10px;">Items ordered/paid for from suppliers but not yet received into stock.</div>
+    <div class="metrics" style="margin-bottom:14px;">
+      <div class="metric owed"><div class="label">Pending Items</div><div class="value" id="mPendingDelCount">—</div><div class="sub">&nbsp;</div></div>
+      <div class="metric owed"><div class="label">Estimated Value</div><div class="value" id="mPendingDelValue">—</div><div class="sub">All-time, not range-bound</div></div>
+    </div>
+    <div class="search-row"><input type="text" id="searchPendingDel" placeholder="Search by invoice #, supplier, or item…"></div>
+    <div class="list-card" id="listPendingDel"></div>
   </div>
 
   <div class="panel" id="panel-customers">
@@ -431,7 +443,7 @@ var REST_BASE = "https://firestore.googleapis.com/v1/projects/" + GCE_PROJECT_ID
 var KEY_QS = "?key=" + GCE_API_KEY;
 
 var STATE = { customers: [], suppliers: [], sales: [], inventory: [], cashflow: [], tillSessions: [],
-  creditPayments: [], supplierPayments: [], purchases: [],
+  creditPayments: [], supplierPayments: [], purchases: [], pendingDeliveries: [],
   loadedMonths: {}, selectedDate: null, lastLoad: null, loading: false };
 
 function todayISO(){
@@ -912,12 +924,59 @@ function renderPurchases(filterText){
   }
 
   var multiDay = STATE.rangeStart !== STATE.rangeEnd;
-  container.innerHTML = list.map(function(p){
+  container.innerHTML = list.map(function(p, idx){
     var itemNames = (p.items||[]).map(function(it){ return it.name; });
-    return '<div class="row"><div class="who">' +
+    var safeId = "purchdet_" + idx;
+    var detailItems = (p.items||[]).map(function(it){
+      return '<div class="inv-item-row"><span>' + escapeHtml(it.name) + ' · ordered ' + (it.qtyOrdered||it.qty||0) + ', received ' + (it.qtyReceived||0) + ' @ ' + fmt(it.cost) + '</span><span>' + fmt(it.total || (it.qtyOrdered||it.qty||0)*(it.cost||0)) + '</span></div>';
+    }).join("");
+    var payBits = [];
+    if (p.cashPaid) payBits.push("Paid " + fmt(p.cashPaid));
+    if (p.creditAmt) payBits.push("Credit " + fmt(p.creditAmt));
+    if (p.depApplied) payBits.push("Deposit applied " + fmt(p.depApplied));
+    return '<div class="row sales-row" onclick="toggleInvDetail(\'' + safeId + '\')">' +
+      '<div class="who">' +
       '<div class="name">' + escapeHtml(p.invoiceNum||"") + ' — ' + escapeHtml(p.supName || "Unknown supplier") + '</div>' +
       '<div class="meta">' + (multiDay ? escapeHtml(p.date) + ' · ' : '') + escapeHtml(itemNames.slice(0,2).join(", ")) + (itemNames.length>2 ? " +"+(itemNames.length-2)+" more" : "") + '</div>' +
-      '</div><div class="amt owed">' + fmt(p.grandTotal) + '</div></div>';
+      '</div><div class="amt owed">' + fmt(p.grandTotal) + '</div></div>' +
+      '<div class="inv-detail" id="' + safeId + '" style="display:none">' +
+      '<div class="inv-detail-head">' + escapeHtml(p.supName || "Unknown supplier") + (p.by ? ' · Recorded by ' + escapeHtml(p.by) : '') + '</div>' +
+      detailItems +
+      '<div class="inv-detail-pay">' + escapeHtml(p.date) + ' · ' + escapeHtml(p.payMode||p.payType||"") + (payBits.length ? ' · ' + payBits.join(" + ") : '') + '</div>' +
+      '</div>';
+  }).join("");
+}
+
+function renderPendingDel(filterText){
+  var container = document.getElementById("listPendingDel");
+  var list = STATE.pendingDeliveries.filter(function(d){ return d.status !== "complete" && (Number(d.qtyPending)||0) > 0; });
+
+  document.getElementById("mPendingDelCount").textContent = list.length;
+  var totalVal = list.reduce(function(s,d){ return s + (Number(d.qtyPending)||0) * (Number(d.cost)||0); }, 0);
+  document.getElementById("mPendingDelValue").textContent = fmt(totalVal);
+
+  if (filterText){
+    var q = filterText.toLowerCase();
+    list = list.filter(function(d){
+      return (d.invoiceNum||"").toLowerCase().indexOf(q) > -1 ||
+             (d.supName||"").toLowerCase().indexOf(q) > -1 ||
+             (d.itemName||"").toLowerCase().indexOf(q) > -1;
+    });
+  }
+
+  list = list.slice().sort(function(a,b){ return parseSaleDate(b.dateOrdered) - parseSaleDate(a.dateOrdered); });
+
+  if (!list.length){
+    container.innerHTML = '<div class="empty"><div class="big">✓</div>No pending deliveries from suppliers.</div>';
+    return;
+  }
+
+  container.innerHTML = list.map(function(d){
+    var val = (Number(d.qtyPending)||0) * (Number(d.cost)||0);
+    return '<div class="row"><div class="who">' +
+      '<div class="name">' + escapeHtml(d.itemName) + ' × ' + d.qtyPending + '</div>' +
+      '<div class="meta">' + escapeHtml(d.invoiceNum||"") + ' — ' + escapeHtml(d.supName || "Unknown supplier") + ' · ' + escapeHtml(d.dateOrdered||"") + (d.status==="partial" ? " · partially received" : "") + '</div>' +
+      '</div><div class="amt owed">' + fmt(val) + '</div></div>';
   }).join("");
 }
 
@@ -1136,6 +1195,7 @@ function renderAll(){
   renderClosing();
   renderFinancial();
   renderPurchases(document.getElementById("searchPurchases").value);
+  renderPendingDel(document.getElementById("searchPendingDel").value);
   renderCustomers(document.getElementById("searchCustomers").value);
   renderSuppliers(document.getElementById("searchSuppliers").value);
   renderStock(document.getElementById("searchStock").value);
@@ -1213,7 +1273,10 @@ function loadAll(){
                 if (err7) failures.push("supplier payments"); else STATE.supplierPayments = arr7;
                 getCollectionArray("purchases", function(err8, arr8){
                   if (err8) failures.push("purchases"); else STATE.purchases = arr8;
-                  done();
+                  getCollectionArray("pendingDeliveries", function(err9, arr9){
+                    if (err9) failures.push("pending deliveries"); else STATE.pendingDeliveries = arr9;
+                    done();
+                  });
                 });
               });
             });
@@ -1300,6 +1363,7 @@ function copyRawData(){
 document.getElementById("searchSales").addEventListener("input", function(){ renderSales(this.value); });
 document.getElementById("searchPurchases").addEventListener("input", function(){ renderPurchases(this.value); });
 document.getElementById("searchPending").addEventListener("input", function(){ renderPending(this.value); });
+document.getElementById("searchPendingDel").addEventListener("input", function(){ renderPendingDel(this.value); });
 document.getElementById("searchCustomers").addEventListener("input", function(){ renderCustomers(this.value); });
 document.getElementById("searchSuppliers").addEventListener("input", function(){ renderSuppliers(this.value); });
 document.getElementById("searchStock").addEventListener("input", function(){ renderStock(this.value); });
