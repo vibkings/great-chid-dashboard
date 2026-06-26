@@ -331,6 +331,8 @@
     <div class="tab" data-tab="suppayments">Supplier Payments</div>
     <div class="tab" data-tab="closing">Daily Closing</div>
     <div class="tab" data-tab="financial">Financial</div>
+    <div class="tab" data-tab="purchases">Purchases</div>
+    <div class="tab" data-tab="pending">Pending Goods</div>
     <div class="tab" data-tab="customers">Customers</div>
     <div class="tab" data-tab="suppliers">Suppliers</div>
     <div class="tab" data-tab="stock">Stock Alerts</div>
@@ -373,6 +375,23 @@
     <div class="list-card" id="finBreakdown" style="padding:0;"></div>
   </div>
 
+  <div class="panel" id="panel-purchases">
+    <div class="metrics" style="grid-template-columns:1fr;margin-bottom:14px;">
+      <div class="metric owed"><div class="label">Total Purchases</div><div class="value" id="mPurchases">—</div><div class="sub" id="mPurchasesSub">&nbsp;</div></div>
+    </div>
+    <div class="search-row"><input type="text" id="searchPurchases" placeholder="Search by invoice #, supplier, or item…"></div>
+    <div class="list-card" id="listPurchases"></div>
+  </div>
+
+  <div class="panel" id="panel-pending">
+    <div class="metrics" style="margin-bottom:14px;">
+      <div class="metric owed"><div class="label">Pending Items</div><div class="value" id="mPendingCount">—</div><div class="sub">&nbsp;</div></div>
+      <div class="metric owed"><div class="label">Estimated Value</div><div class="value" id="mPendingValue">—</div><div class="sub">All-time, not range-bound</div></div>
+    </div>
+    <div class="search-row"><input type="text" id="searchPending" placeholder="Search by invoice #, customer, or item…"></div>
+    <div class="list-card" id="listPending"></div>
+  </div>
+
   <div class="panel" id="panel-customers">
     <div class="search-row"><input type="text" id="searchCustomers" placeholder="Search customers by name or phone…"></div>
     <div class="list-card" id="listCustomers"></div>
@@ -412,7 +431,7 @@ var REST_BASE = "https://firestore.googleapis.com/v1/projects/" + GCE_PROJECT_ID
 var KEY_QS = "?key=" + GCE_API_KEY;
 
 var STATE = { customers: [], suppliers: [], sales: [], inventory: [], cashflow: [], tillSessions: [],
-  creditPayments: [], supplierPayments: [],
+  creditPayments: [], supplierPayments: [], purchases: [],
   loadedMonths: {}, selectedDate: null, lastLoad: null, loading: false };
 
 function todayISO(){
@@ -868,6 +887,99 @@ function renderFinancial(){
     bdRow("🚛 Supplier Payments", 0, supplierPay);
 }
 
+function renderPurchases(filterText){
+  var container = document.getElementById("listPurchases");
+  var list = STATE.purchases.filter(function(p){ return dateInRange(p.date); });
+  var total = list.reduce(function(s,p){ return s + (Number(p.grandTotal)||0); }, 0);
+  document.getElementById("mPurchases").textContent = fmt(total);
+  document.getElementById("mPurchasesSub").textContent = list.length + " purchase" + (list.length===1?"":"s") + " in this range";
+
+  if (filterText){
+    var q = filterText.toLowerCase();
+    list = list.filter(function(p){
+      var itemNames = (p.items||[]).map(function(it){ return it.name; }).join(" ");
+      return (p.invoiceNum||"").toLowerCase().indexOf(q) > -1 ||
+             (p.supName||"").toLowerCase().indexOf(q) > -1 ||
+             itemNames.toLowerCase().indexOf(q) > -1;
+    });
+  }
+
+  list = list.slice().sort(function(a,b){ return parseSaleDate(b.date) - parseSaleDate(a.date); });
+
+  if (!list.length){
+    container.innerHTML = '<div class="empty"><div class="big">📭</div>No purchases in this range.</div>';
+    return;
+  }
+
+  var multiDay = STATE.rangeStart !== STATE.rangeEnd;
+  container.innerHTML = list.map(function(p){
+    var itemNames = (p.items||[]).map(function(it){ return it.name; });
+    return '<div class="row"><div class="who">' +
+      '<div class="name">' + escapeHtml(p.invoiceNum||"") + ' — ' + escapeHtml(p.supName || "Unknown supplier") + '</div>' +
+      '<div class="meta">' + (multiDay ? escapeHtml(p.date) + ' · ' : '') + escapeHtml(itemNames.slice(0,2).join(", ")) + (itemNames.length>2 ? " +"+(itemNames.length-2)+" more" : "") + '</div>' +
+      '</div><div class="amt owed">' + fmt(p.grandTotal) + '</div></div>';
+  }).join("");
+}
+
+function loadPendingGoods(cb){
+  var now = new Date();
+  var months = [];
+  for (var i=0;i<36;i++){
+    var d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    months.push(d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0"));
+  }
+  months = months.filter(function(m){ return !STATE.loadedMonths[m]; });
+  if (!months.length) return cb();
+  var i = 0;
+  function next(){
+    if (i >= months.length) return cb();
+    var m = months[i++];
+    getMonthSales(m, function(err, recs){
+      STATE.loadedMonths[m] = true;
+      if (recs && recs.length){
+        var ids = {};
+        STATE.sales.forEach(function(s){ if (s.id) ids[s.id] = true; });
+        recs.forEach(function(r){ if (!r.id || !ids[r.id]) STATE.sales.push(r); });
+      }
+      next();
+    });
+  }
+  next();
+}
+
+function renderPending(filterText){
+  var container = document.getElementById("listPending");
+  var list = STATE.sales.filter(function(s){ return (Number(s.pendingQty)||0) > 0; });
+
+  document.getElementById("mPendingCount").textContent = list.length;
+  var totalVal = list.reduce(function(s,it){ return s + (Number(it.pendingQty)||0) * (Number(it.salePrice)||0); }, 0);
+  document.getElementById("mPendingValue").textContent = fmt(totalVal);
+
+  if (filterText){
+    var q = filterText.toLowerCase();
+    list = list.filter(function(s){
+      return (s.invoiceNum||"").toLowerCase().indexOf(q) > -1 ||
+             (s.custName||"").toLowerCase().indexOf(q) > -1 ||
+             (s.name||"").toLowerCase().indexOf(q) > -1;
+    });
+  }
+
+  list = list.slice().sort(function(a,b){ return parseSaleDate(b.date) - parseSaleDate(a.date); });
+
+  if (!list.length){
+    container.innerHTML = '<div class="empty"><div class="big">✓</div>No pending or undelivered items.</div>';
+    return;
+  }
+
+  container.innerHTML = list.map(function(s){
+    var val = (Number(s.pendingQty)||0) * (Number(s.salePrice)||0);
+    return '<div class="row"><div class="who">' +
+      '<div class="name">' + escapeHtml(s.name) + ' × ' + s.pendingQty + '</div>' +
+      '<div class="meta">' + escapeHtml(s.invoiceNum||"") + ' — ' + escapeHtml(s.custName || "Walk-in") + ' · ' + escapeHtml(s.date) + '</div>' +
+      '</div><div class="amt owed">' + fmt(val) + '</div></div>';
+  }).join("");
+}
+
 function monthsBetween(startIso, endIso){
   var months = [];
   var d = new Date(startIso + "T00:00:00");
@@ -943,6 +1055,7 @@ function applyRangeMode(){
     renderSupPayments();
     renderClosing();
     renderFinancial();
+    renderPurchases(document.getElementById("searchPurchases").value);
   });
 }
 
@@ -1022,6 +1135,7 @@ function renderAll(){
   renderSupPayments();
   renderClosing();
   renderFinancial();
+  renderPurchases(document.getElementById("searchPurchases").value);
   renderCustomers(document.getElementById("searchCustomers").value);
   renderSuppliers(document.getElementById("searchSuppliers").value);
   renderStock(document.getElementById("searchStock").value);
@@ -1097,7 +1211,10 @@ function loadAll(){
               if (err6) failures.push("customer payments"); else STATE.creditPayments = arr6;
               getCollectionArray("supplierPayments", function(err7, arr7){
                 if (err7) failures.push("supplier payments"); else STATE.supplierPayments = arr7;
-                done();
+                getCollectionArray("purchases", function(err8, arr8){
+                  if (err8) failures.push("purchases"); else STATE.purchases = arr8;
+                  done();
+                });
               });
             });
           });
@@ -1123,6 +1240,11 @@ document.querySelectorAll(".tab").forEach(function(tab){
     document.querySelectorAll(".panel").forEach(function(p){ p.classList.remove("active"); });
     tab.classList.add("active");
     document.getElementById("panel-" + tab.dataset.tab).classList.add("active");
+    if (tab.dataset.tab === "pending" && !STATE._pendingGoodsLoaded){
+      STATE._pendingGoodsLoaded = true;
+      document.getElementById("listPending").innerHTML = '<div class="skeleton-row"><div class="skeleton" style="width:60%"></div></div>';
+      loadPendingGoods(function(){ renderPending(document.getElementById("searchPending").value); });
+    }
   });
 });
 function runChunkCheck(){
@@ -1176,6 +1298,8 @@ function copyRawData(){
 }
 
 document.getElementById("searchSales").addEventListener("input", function(){ renderSales(this.value); });
+document.getElementById("searchPurchases").addEventListener("input", function(){ renderPurchases(this.value); });
+document.getElementById("searchPending").addEventListener("input", function(){ renderPending(this.value); });
 document.getElementById("searchCustomers").addEventListener("input", function(){ renderCustomers(this.value); });
 document.getElementById("searchSuppliers").addEventListener("input", function(){ renderSuppliers(this.value); });
 document.getElementById("searchStock").addEventListener("input", function(){ renderStock(this.value); });
